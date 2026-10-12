@@ -143,24 +143,28 @@ crates behind a command API.
 
 ## 5. Roadmap
 
-Every phase ends with a usable release. Durations assume a core team of
-**4 to 6 engineers plus 1 designer**, and should be read as rough estimates.
+AI-first build: Claude Code sessions do most of the coding, running in
+parallel (one per crate or feature) while a human steers, tests and merges.
+Writing code is no longer the bottleneck. **Verification is**: correct
+quantities, no data loss on real Revu files, and speed on huge drawings. So
+every phase ends with a usable build and is only "done" when its tests pass
+on the real-drawing corpus.
 
-### Phase 0: Foundations (months 0–2)
+### Phase 0: Foundations (days 1–3)
 - Repo, licence, CI (Windows/macOS/Linux), code of conduct, contribution guide
 - Rust workspace + Tauri shell + PDFium bindings
 - Tile renderer with smooth pan/zoom on a 200-page set
 - Performance budget: open a 50 MB drawing in under 2 s, 60 fps pan
 - Collect the test corpus of real-world drawings and Revu-authored PDFs
 
-### Phase 1: Viewer + Markup MVP (months 2–6) → **v0.1**
+### Phase 1: Viewer + Markup MVP (week 1–2) → **v0.1**
 - Tabs, thumbnails, bookmarks, text search, page navigation, split view
 - Core markup tools, the Properties panel, undo/redo, incremental save
 - Markups List with sort, filter, status, author, date, comments/replies
 - Revu-like default layout and shortcuts
 - Read and write PDFs marked up in Revu without data loss
 
-### Phase 2: Takeoff (months 5–10) → **v0.3, the "CyanTakeoff" release**
+### Phase 2: Takeoff (weeks 2–4) → **v0.3, the "CyanTakeoff" release**
 - Calibrate, viewports, and per-viewport scales and precision
 - Length, polylength, area, perimeter, volume, count, angle, radius, diameter
 - Cutouts, snapping to PDF content (endpoints, midpoints, intersections),
@@ -171,7 +175,7 @@ Every phase ends with a usable release. Durations assume a core team of
 - Dynamic Fill (flood-fill areas bounded by drawing lines)
 - Export quantities to CSV/XLSX and a summary PDF
 
-### Phase 3: Document productivity (months 9–14) → **v0.5**
+### Phase 3: Document productivity (weeks 4–6) → **v0.5**
 - Page operations, combine/split, rotate, insert blank pages, page labels
 - Overlay pages and Compare Documents
 - Sets and batch hyperlinking of sheet references
@@ -179,14 +183,14 @@ Every phase ends with a usable release. Durations assume a core team of
 - OCR, form fill, redaction
 - Profiles, a customizable toolbar, and a shortcut editor
 
-### Phase 4: Collaboration (months 12–18) → **v0.8**
+### Phase 4: Collaboration (weeks 6–8) → **v0.8**
 - `ct-server` with OIDC/SSO, Docker/Helm deployment
 - Live Sessions: invite users, real-time markup sync, attendee list, chat,
   per-user record, session report
 - Projects: shared folders with check-in/check-out and version history
 - Offline mode with later reconciliation
 
-### Phase 5: Hardening + 1.0 (months 18–24) → **v1.0**
+### Phase 5: Hardening + 1.0 (weeks 8–12) → **v1.0**
 - Digital signatures (PAdES) and validation, certificate stores
 - Accessibility (keyboard-only use, screen readers), localization
 - Import Revu tool sets and profiles (clean-room)
@@ -249,8 +253,8 @@ CyanTakeoff/
    built in CI from day one? (Recommended.)
 4. **First wedge:** ship takeoff (Phase 2) before compare/sets (Phase 3), as
    the name suggests? (Recommended.)
-5. **Team and timeline:** is the 4–6 engineer assumption right? With 1–2
-   people, expect each phase to take 2–3× longer.
+5. **Real Revu users for testing:** who can try each build and send us
+   Revu-marked drawings? This is what sets the real pace.
 
 ## 10. Immediate next steps
 
