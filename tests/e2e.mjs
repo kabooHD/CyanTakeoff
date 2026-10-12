@@ -53,6 +53,19 @@ await page.waitForTimeout(200);
 let list = await page.locator('.ml-table tbody').innerText();
 assert(list.includes('432.00 sf'), 'area measurement 432.00 sf in Markups List');
 
+// Content snap: click ~5px off each wall corner; snapping must land exactly.
+await page.keyboard.press('Shift+Alt+A');
+for (const [x, y, dx, dy] of [[0, 22, -5, 5], [24, 22, -5, 5], [24, 40, -5, -5], [0, 40, -5, -5]]) {
+  const p = await toScreen(x, y);
+  await page.mouse.move(p.x + dx, p.y + dy);
+  await page.waitForTimeout(150);
+  await page.mouse.click(p.x + dx, p.y + dy);
+}
+await page.keyboard.press('Enter');
+list = await page.locator('.ml-table tbody').innerText();
+assert((list.match(/432\.00 sf/g) ?? []).length === 2, 'content snap gives exact 432.00 sf from imprecise clicks');
+await page.keyboard.press('Control+Z');
+
 // Length of the north wall: 60 ft.
 await page.keyboard.press('Shift+Alt+L');
 let a = await toScreen(0, 40), b = await toScreen(60, 40);

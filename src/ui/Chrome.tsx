@@ -174,7 +174,7 @@ export function DocTabs() {
 const TOGGLES: { key: keyof Toggles; label: string; title: string }[] = [
   { key: 'snap', label: 'Snap', title: 'Snap to points' },
   { key: 'grid', label: 'Grid', title: 'Show grid (snaps when Snap is on)' },
-  { key: 'content', label: 'Content', title: 'Snap to PDF content (coming soon)' },
+  { key: 'content', label: 'Content', title: 'Snap to drawing content (line endpoints and lines)' },
   { key: 'markup', label: 'Markup', title: 'Snap to markups' },
   { key: 'reuse', label: 'Reuse', title: 'Keep the current tool after placing a markup' },
   { key: 'sync', label: 'Sync', title: 'Sync views across documents (coming soon)' },

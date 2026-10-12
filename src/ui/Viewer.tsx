@@ -8,6 +8,7 @@ import { MarkupShape, handlePoints } from './renderMarkup';
 import { hitTest, markupBounds } from './hit';
 import { setCursor } from './cursor';
 import { ContextMenu, type MenuItem } from './ContextMenu';
+import { snapGeometry, snapToContent, type SnapGeometry } from '../pdf/geometry';
 
 const PAD = 40;
 const BASE_MAX_PIXELS = 6e6;
@@ -49,6 +50,7 @@ export function Viewer({ doc }: { doc: DocState }) {
   const spaceDown = useRef(false);
   const countId = useRef<string | null>(null);
   const [, force] = useState(0);
+  const [geom, setGeom] = useState<SnapGeometry | null>(null);
 
   const pw = page.width * zoom, ph = page.height * zoom;
   const innerW = Math.max(size.w, pw + PAD * 2), innerH = Math.max(size.h, ph + PAD * 2);
@@ -72,6 +74,16 @@ export function Viewer({ doc }: { doc: DocState }) {
     setDraft(null);
     return () => { alive = false; };
   }, [doc.loaded.pdf, doc.page]);
+
+  // ----- content geometry for snapping -----
+  const wantGeom = s.toggles.snap && s.toggles.content;
+  useEffect(() => {
+    setGeom(null);
+    if (!pdfPage || !wantGeom) return;
+    let alive = true;
+    snapGeometry(pdfPage, page.viewport).then((g) => alive && setGeom(g)).catch(() => {});
+    return () => { alive = false; };
+  }, [pdfPage, page.viewport, wantGeom]);
 
   // ----- fit / zoom helpers -----
   const fitPage = useCallback(() => {
@@ -224,6 +236,7 @@ export function Viewer({ doc }: { doc: DocState }) {
         }
       }
     }
+    if (!best && geom) best = snapToContent(geom, p, tol)?.p ?? null;
     if (!best && s.toggles.grid) best = { x: Math.round(p.x / GRID) * GRID, y: Math.round(p.y / GRID) * GRID };
     return best ?? p;
   };

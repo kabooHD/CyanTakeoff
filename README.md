@@ -26,7 +26,8 @@ shortcuts, and markups saved as standard PDF annotations.
 - **Tool Chest:** Recent Tools and My Tools (with a sample takeoff set); add
   any markup with right-click → Add to My Tools.
 - **Editing:** select, multi-select (Ctrl+click or drag a box), move, drag
-  vertices, Shift for 45° constraint, snapping to markup points and grid,
+  vertices, Shift for 45° constraint, snapping to drawing content (line
+  endpoints and lines), markup points and grid,
   copy/paste, undo/redo, arrow-key nudge.
 - **Files:** open several PDFs at once (or drag and drop), save back in place
   (Chrome/Edge) or download. Markups are written as standard PDF annotations
