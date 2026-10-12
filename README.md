@@ -39,6 +39,15 @@ shortcuts, and markups saved as standard PDF annotations.
 - Sharp rendering at any zoom on large sheets (tiled detail rendering), mouse
   wheel zooms at the cursor, Space or middle mouse button pans.
 
+## Revu compatibility
+
+Tested against real Revu-authored PDFs (`tests/fixtures/revu`): CyanTakeoff
+opens their length, area, polylength, perimeter, volume and count
+measurements and computes exactly the values Revu displayed, and writes its
+own measurements in the same structure. Radius, diameter and angle
+measurements, stamps and other markups it can't edit yet are kept unchanged.
+Format notes: [docs/formats/revu.md](docs/formats/revu.md).
+
 ## Run it
 
 ```bash

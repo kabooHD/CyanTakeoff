@@ -66,14 +66,11 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
       shape = <><line {...c} x1={P[0].x} y1={P[0].y} x2={P[1].x} y2={P[1].y} />
         <polyline {...c} fill="none" points={arrowHead(P[0], P[1], Math.max(8, st.width * 5))} /></>;
       break;
-    case 'polyline': case 'polylength': case 'pen':
+    case 'polyline': case 'polylength': case 'perimeter': case 'pen':
       shape = <polyline {...c} fill="none" points={pts(P)} />;
       break;
     case 'polygon': case 'area': case 'volume':
       shape = <polygon {...c} points={pts(P)} />;
-      break;
-    case 'perimeter':
-      shape = <polygon {...c} fill="none" points={pts(P)} />;
       break;
     case 'cloud':
       shape = <path {...c} d={cloudPath(P, st.width)} />;

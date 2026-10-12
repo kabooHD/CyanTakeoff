@@ -44,7 +44,7 @@ describe('measure', () => {
   });
   it('area and perimeter', () => {
     expect(measure({ type: 'area', points: square, scale })!.area).toBeCloseTo(100);
-    expect(measure({ type: 'perimeter', points: square, scale })!.length).toBeCloseTo(40);
+    expect(measure({ type: 'perimeter', points: [...square, square[0]], scale })!.length).toBeCloseTo(40);
   });
   it('volume uses depth', () => {
     expect(measure({ type: 'volume', points: square, scale, depth: 0.5 })!.volume).toBeCloseTo(50);

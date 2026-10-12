@@ -256,6 +256,7 @@ export function Viewer({ doc }: { doc: DocState }) {
     let P = points;
     if (type === 'cloud' && points.length === 2) P = rectCorners(points[0], points[1]);
     if (type === 'callout') P = [points[0], points[1], { x: points[1].x + 144, y: points[1].y + 40 }];
+    if (type === 'perimeter') P = [...points, points[0]];
     const m = s.addMarkup({
       type,
       page: doc.page,

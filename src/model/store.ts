@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { LoadedDoc } from '../pdf/document';
-import { openPdf, refKey } from '../pdf/document';
+import { openPdf } from '../pdf/document';
 import { savePdf } from '../pdf/save';
 import { DEFAULT_STYLES, toolById } from '../tools/tools';
 import { MEASURE_TYPES } from './measure';
@@ -147,7 +147,7 @@ export const useApp = create<AppState>((set, get) => {
         const doc: DocState = {
           id: crypto.randomUUID(),
           name, bytes, fileHandle: handle, loaded, markups,
-          importedRefs: new Set(markups.filter((m) => m.source).map((m) => refKey(m.source!))),
+          importedRefs: loaded.importedRefs,
           calibrations: loaded.calibrations,
           dirtyCalibrations: new Set(),
           page: 0, zoom: 0, selection: [], undo: [], redo: [], dirty: false,
@@ -344,7 +344,7 @@ export const useApp = create<AppState>((set, get) => {
         set((s) => ({
           docs: s.docs.map((x) => x.id === d.id ? {
             ...x, name, bytes, fileHandle: handle, loaded, markups,
-            importedRefs: new Set(markups.filter((m) => m.source).map((m) => refKey(m.source!))),
+            importedRefs: loaded.importedRefs,
             calibrations: loaded.calibrations, dirtyCalibrations: new Set(),
             page, zoom, selection: [], undo: [], redo: [], dirty: false,
           } : x),

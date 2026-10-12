@@ -114,11 +114,11 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont) {
         }
       }
       break;
-    case 'polyline': case 'polylength': case 'pen':
+    case 'polyline': case 'polylength': case 'perimeter': case 'pen':
       o.poly(P, false); o.add('S');
       break;
-    case 'polygon': case 'area': case 'perimeter': case 'volume':
-      o.poly(P, true); o.add(m.type === 'perimeter' ? 's' : paint);
+    case 'polygon': case 'area': case 'volume':
+      o.poly(P, true); o.add(paint);
       break;
     case 'cloud': {
       const segs = cloudSegments(P, Math.max(14, st.width * 8));
@@ -184,18 +184,79 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont) {
 
 const SUBTYPE: Record<Markup['type'], string> = {
   line: 'Line', arrow: 'Line', length: 'Line',
-  polyline: 'PolyLine', polylength: 'PolyLine', count: 'PolyLine', pen: 'Ink',
-  polygon: 'Polygon', area: 'Polygon', perimeter: 'Polygon', volume: 'Polygon', cloud: 'Polygon',
+  polyline: 'PolyLine', polylength: 'PolyLine', perimeter: 'PolyLine', pen: 'Ink',
+  polygon: 'Polygon', area: 'Polygon', volume: 'Polygon', cloud: 'Polygon', count: 'Polygon',
   rectangle: 'Square', ellipse: 'Circle', highlight: 'Highlight',
   textbox: 'FreeText', callout: 'FreeText', note: 'Text',
 };
 
-function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo): PDFRef {
+/** Measurement intents, as Revu writes them. */
+const INTENT: Partial<Record<Markup['type'], string>> = {
+  length: 'LineDimension', polylength: 'PolyLineDimension', perimeter: 'PolyLineDimension',
+  area: 'PolygonDimension', volume: 'PolygonVolume', count: 'PolygonCount',
+};
+
+const toPdf = (m: Markup, page: PageInfo) => m.points.map((p) => {
+  const [x, y] = page.viewport.convertToPdfPoint(p.x, p.y);
+  return { x, y };
+});
+
+function ctData(m: Markup, P: Pt[]): CTData {
+  return {
+    v: 1, type: m.type, label: m.label || undefined, status: m.status !== 'None' ? m.status : undefined,
+    depth: m.depth, fillOpacity: m.style.fillOpacity, lineStyle: m.style.lineStyle,
+    points: m.type === 'count' ? P.flatMap((p) => [p.x, p.y]) : undefined,
+    comment: measure(m) && m.comment ? m.comment : undefined,
+  };
+}
+
+/**
+ * A count is written the way Revu writes one: a small /Polygon per item with
+ * /IT /PolygonCount, the items grouped under the first via /IRT + /RT /Group.
+ */
+function buildCount(doc: PDFDocument, m: Markup, page: PageInfo): PDFRef[] {
   const ctx = doc.context;
-  const P = m.points.map((p) => {
-    const [x, y] = page.viewport.convertToPdfPoint(p.x, p.y);
-    return { x, y };
+  const P = toPdf(m, page);
+  const st = m.style;
+  const r = 6;
+  const refs: PDFRef[] = [];
+  P.forEach((p, i) => {
+    const o = new Ops();
+    o.add('q /GS0 gs');
+    o.add(`${hexToRgb(st.fill ?? st.color).map(f).join(' ')} rg ${hexToRgb(st.color).map(f).join(' ')} RG 0.75 w`);
+    o.ellipse({ x: p.x - r, y: p.y - r }, { x: p.x + r, y: p.y + r });
+    o.add('B Q');
+    const bbox = [p.x - r - 1, p.y - r - 1, p.x + r + 1, p.y + r + 1];
+    const gs = ctx.obj({ CA: st.opacity, ca: st.fillOpacity });
+    const ap = ctx.stream(o.out.join('\n'), { Type: 'XObject', Subtype: 'Form', BBox: bbox, Resources: { ExtGState: { GS0: gs } } });
+    const verts: number[] = [];
+    for (let k = 0; k < 24; k++) {
+      const a = (k / 24) * Math.PI * 2;
+      verts.push(p.x + r * Math.cos(a), p.y + r * Math.sin(a));
+    }
+    const entries: Record<string, unknown> = {
+      Type: 'Annot', Subtype: 'Polygon', IT: 'PolygonCount', Rect: bbox, Vertices: verts,
+      NM: PDFString.of(i ? `${m.id}-${i}` : m.id),
+      T: PDFHexString.fromText(m.author), Subj: PDFHexString.fromText(m.subject),
+      Label: PDFHexString.fromText(m.label),
+      Contents: PDFHexString.fromText(m.label ? `${m.label}\r${P.length}` : String(P.length)),
+      M: PDFString.of(pdfDate(new Date(m.modified))), CreationDate: PDFString.of(pdfDate(new Date(m.created))),
+      F: 4, C: hexToRgb(st.color), IC: hexToRgb(st.fill ?? st.color), CA: st.opacity,
+      BS: { Type: 'Border', W: 0, S: 'S' }, CountStyle: 'Circle', NumCounts: P.length, MeasurementTypes: 128,
+      AP: { N: ctx.register(ap) },
+    };
+    if (m.scale) entries.BBMeasure = writeMeasure(doc, m.scale);
+    if (i === 0) entries[CT_KEY] = PDFHexString.fromText(JSON.stringify(ctData(m, P)));
+    else { entries.IRT = refs[0]; entries.RT = 'Group'; }
+    refs.push(ctx.register(ctx.obj(entries as never)));
   });
+  return refs;
+}
+
+function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo): PDFRef[] {
+  if (m.type === 'count') return buildCount(doc, m, page);
+  const ctx = doc.context;
+  const P = toPdf(m, page);
   const { ops, bbox } = buildAppearance(m, P, font);
   const st = m.style;
   const gs = ctx.obj({
@@ -208,11 +269,8 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo):
     Resources: { Font: { Helv: font.ref }, ExtGState: { GS0: gs } },
   });
   const flat = (pts: Pt[]) => pts.flatMap((p) => [p.x, p.y]);
-  const ct: CTData = {
-    v: 1, type: m.type, label: m.label || undefined, status: m.status !== 'None' ? m.status : undefined,
-    depth: m.depth, fillOpacity: st.fillOpacity, lineStyle: st.lineStyle,
-    points: m.type === 'count' ? flat(P) : undefined,
-  };
+  const ct = ctData(m, P);
+  const meas = measure(m);
   const now = pdfDate(new Date(m.modified));
   const entries: Record<string, unknown> = {
     Type: 'Annot',
@@ -221,7 +279,10 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo):
     NM: PDFString.of(m.id),
     T: PDFHexString.fromText(m.author),
     Subj: PDFHexString.fromText(m.subject),
-    Contents: PDFHexString.fromText(m.type === 'textbox' || m.type === 'callout' ? m.text ?? '' : m.comment),
+    // Like Revu, a measurement's /Contents is its displayed value.
+    Contents: PDFHexString.fromText(m.type === 'textbox' || m.type === 'callout' ? m.text ?? '' : meas ? meas.text : m.comment),
+    Label: PDFHexString.fromText(m.label),
+    FillOpacity: st.fillOpacity,
     M: PDFString.of(now),
     CreationDate: PDFString.of(pdfDate(new Date(m.created))),
     F: 4, // print
@@ -237,16 +298,13 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo):
     case 'Line':
       entries.L = flat(P);
       entries.LE = [N('None'), N(m.type === 'arrow' ? 'OpenArrow' : 'None')];
-      if (m.type === 'length') entries.IT = 'LineDimension';
       break;
     case 'PolyLine':
       entries.Vertices = flat(P);
-      if (m.type === 'polylength') entries.IT = 'PolyLineDimension';
       break;
     case 'Polygon':
       entries.Vertices = flat(P);
       if (m.type === 'cloud') entries.BE = { S: 'C', I: 1 };
-      if (m.type === 'area' || m.type === 'perimeter' || m.type === 'volume') entries.IT = 'PolygonDimension';
       break;
     case 'Ink':
       entries.InkList = [flat(P)];
@@ -284,10 +342,9 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo):
       entries.Rect = [P[0].x, P[0].y - 18, P[0].x + 18, P[0].y];
       break;
   }
-  if (scale && (m.type === 'length' || m.type === 'polylength' || m.type === 'area' || m.type === 'perimeter' || m.type === 'volume' || m.type === 'count')) {
-    entries.Measure = writeMeasure(doc, scale);
-  }
-  return ctx.register(ctx.obj(entries as never));
+  if (INTENT[m.type]) entries.IT = INTENT[m.type];
+  if (scale && meas) entries.Measure = writeMeasure(doc, scale);
+  return [ctx.register(ctx.obj(entries as never))];
 }
 
 export interface SaveInput {
@@ -303,7 +360,8 @@ export interface SaveInput {
 export async function savePdf(input: SaveInput): Promise<Uint8Array> {
   const doc = await PDFDocument.load(input.original, { updateMetadata: false });
   const keep = new Set(
-    input.markups.filter((m) => m.source && !m.source.dirty).map((m) => refKey(m.source!)),
+    input.markups.filter((m) => m.source && !m.source.dirty)
+      .flatMap((m) => [m.source!, ...(m.source!.extraRefs ?? [])].map(refKey)),
   );
   const remove = new Set([...input.importedRefs].filter((r) => !keep.has(r)));
   for (let p = 0; p < doc.getPageCount(); p++) removeAnnots(doc, p, remove);
@@ -317,10 +375,11 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
       annots = doc.context.obj([]);
       page.node.set(N('Annots'), annots);
     }
-    const ref = buildAnnot(doc, font, m, input.pages[m.page]);
-    (annots as PDFArray).push(ref);
-    // Markup annotations reference their page.
-    (doc.context.lookup(ref) as PDFDict).set(N('P'), page.ref);
+    for (const ref of buildAnnot(doc, font, m, input.pages[m.page])) {
+      (annots as PDFArray).push(ref);
+      // Markup annotations reference their page.
+      (doc.context.lookup(ref) as PDFDict).set(N('P'), page.ref);
+    }
   }
 
   for (const p of input.dirtyCalibrations) {

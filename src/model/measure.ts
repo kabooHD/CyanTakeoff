@@ -1,4 +1,4 @@
-import type { LengthUnit, Markup, Pt, Scale } from './types';
+import type { LengthUnit, Markup, Pt, Scale, ScaleFormat } from './types';
 
 // ---------- geometry ----------
 
@@ -166,8 +166,14 @@ const round = (v: number, d: number) => Math.round(v * 10 ** d) / 10 ** d;
 
 function gcd(a: number, b: number): number { return b ? gcd(b, a % b) : a; }
 
+/** Format a number with `decimals` places, optionally dropping trailing zeros. */
+export function formatNumber(v: number, decimals: number, trim: boolean): string {
+  const s = round(v, decimals).toFixed(decimals);
+  return trim && s.includes('.') ? s.replace(/\.?0+$/, '') : s;
+}
+
 /** Format a length in `unit` (ft-in expects feet). Fractions to 1/`den` inch. */
-export function formatLength(v: number, unit: LengthUnit, decimals = 2, den = 16): string {
+export function formatLength(v: number, unit: LengthUnit, decimals = 2, den = 16, trim = false): string {
   if (unit === 'ft-in') {
     const sign = v < 0 ? '-' : '';
     let totalEighths = Math.round(Math.abs(v) * 12 * den);
@@ -182,7 +188,7 @@ export function formatLength(v: number, unit: LengthUnit, decimals = 2, den = 16
     }
     return `${sign}${ft}'-${inch}${frac}"`;
   }
-  return `${round(v, decimals).toFixed(decimals)} ${unitLabel(unit)}`;
+  return `${formatNumber(v, decimals, trim)} ${unitLabel(unit)}`;
 }
 
 export function unitLabel(unit: LengthUnit): string {
@@ -202,7 +208,7 @@ export function areaLabel(unit: LengthUnit): string {
 
 export function volumeLabel(unit: LengthUnit): string {
   switch (unit) {
-    case 'ft': case 'ft-in': return 'cf';
+    case 'ft': case 'ft-in': return 'cu ft';
     case 'in': return 'cu in';
     case 'yd': return 'cu yd';
     case 'm': return 'm³';
@@ -224,29 +230,45 @@ export interface Measurement {
   text: string;
 }
 
+/**
+ * Display format for a scale. Defaults follow Revu's (nearest 1/4", two
+ * decimals without trailing zeros, sf / cu ft) unless the file says otherwise.
+ */
+export function resolveFormat(s: Scale): Required<ScaleFormat> {
+  const f = s.format ?? {};
+  return {
+    den: f.den ?? 4,
+    decimals: f.decimals ?? 2,
+    trim: f.trim ?? true,
+    areaLabel: f.areaLabel ?? areaLabel(s.unit),
+    volumeLabel: f.volumeLabel ?? volumeLabel(s.unit),
+  };
+}
+
 export function measure(m: Pick<Markup, 'type' | 'points' | 'scale' | 'depth'>): Measurement | null {
   if (!MEASURE_TYPES.has(m.type)) return null;
   const s = m.scale ?? DEFAULT_SCALE;
   const f = s.factor;
+  const fmt = resolveFormat(s);
+  const len = (v: number) => formatLength(v, s.unit, fmt.decimals, fmt.den, fmt.trim);
   switch (m.type) {
     case 'length':
-    case 'polylength': {
-      const length = pathLength(m.points) * f;
-      return { length, text: formatLength(length, s.unit) };
-    }
+    case 'polylength':
     case 'perimeter': {
-      const length = pathLength(m.points, true) * f;
-      return { length, text: formatLength(length, s.unit) };
+      // Like Revu, a perimeter is the length of its segments as drawn; the
+      // perimeter tool closes the shape by repeating the first point.
+      const length = pathLength(m.points) * f;
+      return { length, text: len(length) };
     }
     case 'area': {
       const area = polygonArea(m.points) * f * f;
       const length = pathLength(m.points, true) * f;
-      return { area, length, text: `${round(area, 2).toFixed(2)} ${areaLabel(s.unit)}` };
+      return { area, length, text: `${formatNumber(area, fmt.decimals, fmt.trim)} ${fmt.areaLabel}` };
     }
     case 'volume': {
       const area = polygonArea(m.points) * f * f;
       const volume = area * (m.depth ?? 0);
-      return { area, volume, text: `${round(volume, 2).toFixed(2)} ${volumeLabel(s.unit)}` };
+      return { area, volume, text: `${formatNumber(volume, fmt.decimals, fmt.trim)} ${fmt.volumeLabel}` };
     }
     case 'count':
       return { count: m.points.length, text: String(m.points.length) };

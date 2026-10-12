@@ -51,7 +51,7 @@ for (const [x, y] of [[0, 22], [24, 22], [24, 40], [0, 40]]) {
 await page.keyboard.press('Enter');
 await page.waitForTimeout(200);
 let list = await page.locator('.ml-table tbody').innerText();
-assert(list.includes('432.00 sf'), 'area measurement 432.00 sf in Markups List');
+assert(list.includes('432 sf'), 'area measurement 432 sf in Markups List');
 
 // Content snap: click ~5px off each wall corner; snapping must land exactly.
 await page.keyboard.press('Shift+Alt+A');
@@ -63,7 +63,7 @@ for (const [x, y, dx, dy] of [[0, 22, -5, 5], [24, 22, -5, 5], [24, 40, -5, -5],
 }
 await page.keyboard.press('Enter');
 list = await page.locator('.ml-table tbody').innerText();
-assert((list.match(/432\.00 sf/g) ?? []).length === 2, 'content snap gives exact 432.00 sf from imprecise clicks');
+assert((list.match(/432 sf\b/g) ?? []).length === 2, 'content snap gives exact 432 sf from imprecise clicks');
 await page.keyboard.press('Control+Z');
 
 // Length of the north wall: 60 ft.
@@ -128,7 +128,7 @@ await chooser.setFiles(saved);
 await page.waitForFunction(() => document.querySelectorAll('.doc-tab').length === 2);
 await page.waitForTimeout(1200);
 list = await page.locator('.ml-table tbody').innerText();
-assert(list.includes('432.00 sf') && list.includes(`60'-0"`) && list.includes('Verify door hardware'), 'markups round-trip after save + reopen');
+assert(list.includes('432 sf') && list.includes(`60'-0"`) && list.includes('Verify door hardware'), 'markups round-trip after save + reopen');
 assert((await page.locator('.sb-scale').innerText()).includes(`1/4"`), 'page scale round-trips');
 await page.screenshot({ path: `${OUT}/04-reopened.png` });
 
@@ -139,6 +139,21 @@ for (let i = 0; i < 6; i++) { await page.mouse.wheel(0, -300); await page.waitFo
 await page.waitForTimeout(1200);
 await page.screenshot({ path: `${OUT}/05-zoomed.png` });
 assert(parseInt(await page.locator('.statusbar').innerText().then((t) => t.match(/(\d+)%/)[1])) > 100, 'wheel zoom');
+
+// Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
+for (const [file, expected] of [
+  ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft']],
+  ['markup-space.pdf', ['15']],
+]) {
+  const tabs = await page.locator('.doc-tab').count();
+  const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('Control+O')]);
+  await fc.setFiles(`tests/fixtures/revu/${file}`);
+  await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs);
+  await page.waitForTimeout(1200);
+  const text = await page.locator('.ml-table tbody').innerText();
+  for (const v of expected) assert(text.includes(v), `Revu ${file}: shows ${v}`);
+  await page.screenshot({ path: `${OUT}/revu-${file.replace('.pdf', '')}.png` });
+}
 
 assert(errors.length === 0, `no page errors (${errors.join(' | ')})`);
 await browser.close();

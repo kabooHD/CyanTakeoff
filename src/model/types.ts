@@ -35,6 +35,19 @@ export interface Scale {
   unit: LengthUnit;
   /** Human-readable ratio, e.g. 1/8" = 1'-0" */
   label: string;
+  /** Display format, read from (and written to) the PDF number formats. */
+  format?: ScaleFormat;
+}
+
+export interface ScaleFormat {
+  /** Feet-inch fraction denominator (4 = nearest 1/4"). */
+  den?: number;
+  /** Decimal places for decimal units, areas and volumes. */
+  decimals?: number;
+  /** Drop trailing zeros (PDF /FD). */
+  trim?: boolean;
+  areaLabel?: string;
+  volumeLabel?: string;
 }
 
 export type MarkupStatus = 'None' | 'Accepted' | 'Rejected' | 'Cancelled' | 'Completed';
@@ -71,7 +84,13 @@ export interface Markup {
   /** Depth for volume, in scale units (ft or m). */
   depth?: number;
   /** Original PDF annotation reference when imported from the file. */
-  source?: { objectNumber: number; generation: number; dirty: boolean };
+  source?: {
+    objectNumber: number;
+    generation: number;
+    dirty: boolean;
+    /** Further annotations this markup was read from (e.g. items of a Revu count group). */
+    extraRefs?: { objectNumber: number; generation: number }[];
+  };
 }
 
 export interface ToolPreset {

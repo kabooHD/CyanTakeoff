@@ -11,7 +11,7 @@ export function outline(m: Markup): { pts: Pt[]; closed: boolean } {
       return { pts: P.length > 2 ? rectCorners(P[1], P[2]) : P, closed: true };
     case 'note':
       return { pts: rectCorners(P[0], { x: P[0].x + 18, y: P[0].y + 18 }), closed: true };
-    case 'polygon': case 'area': case 'perimeter': case 'volume': case 'cloud':
+    case 'polygon': case 'area': case 'volume': case 'cloud':
       return { pts: P, closed: true };
     default:
       return { pts: P, closed: false };
