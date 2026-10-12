@@ -1,0 +1,101 @@
+import { activeDoc, useApp, type DocState } from '../model/store';
+import { areaLabel, measure, unitLabel, volumeLabel } from '../model/measure';
+import type { Markup } from '../model/types';
+
+type Picker = (o: unknown) => Promise<FileSystemFileHandle[]>;
+
+/** File > Open. Uses the File System Access API when available so Save writes back in place. */
+export async function openFile() {
+  const w = window as unknown as { showOpenFilePicker?: Picker };
+  if (w.showOpenFilePicker) {
+    let handles: FileSystemFileHandle[];
+    try {
+      handles = await w.showOpenFilePicker({
+        multiple: true,
+        types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }],
+      });
+    } catch { return; }
+    for (const h of handles) {
+      const f = await h.getFile();
+      await useApp.getState().openBytes(new Uint8Array(await f.arrayBuffer()), f.name, h);
+    }
+    return;
+  }
+  const input = Object.assign(document.createElement('input'), { type: 'file', accept: '.pdf,application/pdf', multiple: true });
+  input.onchange = async () => {
+    for (const f of Array.from(input.files ?? [])) await openFileObject(f);
+  };
+  input.click();
+}
+
+export async function openFileObject(f: File) {
+  await useApp.getState().openBytes(new Uint8Array(await f.arrayBuffer()), f.name);
+}
+
+export async function openSample() {
+  const res = await fetch(`${import.meta.env.BASE_URL}sample-floorplan.pdf`);
+  await useApp.getState().openBytes(new Uint8Array(await res.arrayBuffer()), 'Sample Floor Plan.pdf');
+}
+
+// ---------- Markups List summary ----------
+
+export interface SummaryColumn {
+  key: string;
+  label: string;
+  value: (m: Markup, d: DocState) => string | number;
+  numeric?: boolean;
+}
+
+const meas = (m: Markup) => measure(m);
+
+export const SUMMARY_COLUMNS: SummaryColumn[] = [
+  { key: 'subject', label: 'Subject', value: (m) => m.subject },
+  { key: 'page', label: 'Page Label', value: (m, d) => d.loaded.pages[m.page]?.label ?? m.page + 1 },
+  { key: 'label', label: 'Label', value: (m) => m.label },
+  { key: 'comment', label: 'Comments', value: (m) => m.comment || m.text || '' },
+  { key: 'author', label: 'Author', value: (m) => m.author },
+  { key: 'date', label: 'Date', value: (m) => new Date(m.modified).toLocaleString() },
+  { key: 'status', label: 'Status', value: (m) => m.status },
+  { key: 'color', label: 'Color', value: (m) => m.style.color },
+  { key: 'measurement', label: 'Measurement', value: (m) => meas(m)?.text ?? '' },
+  { key: 'length', label: 'Length', value: (m) => round(meas(m)?.length), numeric: true },
+  { key: 'area', label: 'Area', value: (m) => round(meas(m)?.area), numeric: true },
+  { key: 'volume', label: 'Volume', value: (m) => round(meas(m)?.volume), numeric: true },
+  { key: 'count', label: 'Count', value: (m) => meas(m)?.count ?? '', numeric: true },
+  { key: 'depth', label: 'Depth', value: (m) => (m.type === 'volume' ? m.depth ?? '' : ''), numeric: true },
+  { key: 'units', label: 'Units', value: (m) => unitsOf(m) },
+];
+
+function round(v: number | undefined) {
+  return v === undefined ? '' : Math.round(v * 100) / 100;
+}
+
+function unitsOf(m: Markup) {
+  const u = m.scale?.unit;
+  if (!u) return '';
+  switch (m.type) {
+    case 'area': return areaLabel(u);
+    case 'volume': return volumeLabel(u);
+    case 'count': return 'ea';
+    case 'length': case 'polylength': case 'perimeter': return unitLabel(u);
+    default: return '';
+  }
+}
+
+export function exportSummaryCsv(markups?: Markup[]) {
+  const d = activeDoc();
+  if (!d) return;
+  const rows = markups ?? d.markups;
+  const esc = (v: string | number) => {
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = [
+    SUMMARY_COLUMNS.map((c) => c.label).join(','),
+    ...rows.map((m) => SUMMARY_COLUMNS.map((c) => esc(c.value(m, d))).join(',')),
+  ].join('\r\n');
+  const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: d.name.replace(/\.pdf$/i, '') + ' - Markups Summary.csv' });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}

@@ -1,0 +1,57 @@
+import type { ReactNode } from 'react';
+
+// Original line icons drawn for CyanTakeoff (20×20, currentColor).
+const P: Record<string, ReactNode> = {
+  open: <path d="M2 6h6l2 2h8v8H2zM2 6V4h6l2 2" />,
+  save: <><path d="M3 3h11l3 3v11H3z" /><path d="M6 3v5h7V3M6 17v-5h8v5" /></>,
+  undo: <path d="M7 5L3 9l4 4M3 9h9a5 5 0 010 10H9" transform="translate(0 -2)" />,
+  redo: <path d="M13 5l4 4-4 4M17 9H8a5 5 0 000 10h3" transform="translate(0 -2)" />,
+  select: <path d="M5 3l10 7-5 1 3 6-2 1-3-6-3 4z" />,
+  pan: <path d="M7 10V4.5a1.2 1.2 0 012.4 0V9M9.4 9V3.5a1.2 1.2 0 012.4 0V9M11.8 9V4.5a1.2 1.2 0 012.4 0V11c0 4-2 6-5 6s-4-1-6-4l-1-3c-.4-1 1-1.6 1.8-.6L7 12" />,
+  zoom: <><circle cx="8.5" cy="8.5" r="5" /><path d="M12.5 12.5L17 17M6.5 8.5h4M8.5 6.5v4" /></>,
+  textbox: <><rect x="2.5" y="4.5" width="15" height="11" /><path d="M6 8h8M10 8v5" /></>,
+  callout: <><rect x="8.5" y="2.5" width="9" height="7" /><path d="M8.5 7L3 16M3 16l.5-3.5M3 16l3-1.5" /></>,
+  note: <><path d="M3 3h14v10l-4 4H3z" /><path d="M13 17v-4h4M6 7h8M6 10h5" /></>,
+  pen: <path d="M3 16c2-4 4-1 6-4s2-6 4-6 2 3 4 1M13 3l3 3" />,
+  highlight: <><path d="M5 13l7-9 4 3-7 9H5z" /><path d="M2 18h16" strokeWidth="3" opacity=".5" /></>,
+  line: <path d="M3 17L17 3" />,
+  arrow: <path d="M3 17L17 3M17 3h-6M17 3v6" />,
+  polyline: <path d="M2 15l5-9 5 7 6-9" />,
+  rectangle: <rect x="3" y="5" width="14" height="10" />,
+  ellipse: <ellipse cx="10" cy="10" rx="7.5" ry="5.5" />,
+  polygon: <path d="M10 2.5l7.5 5.5-3 9h-9l-3-9z" />,
+  cloud: <path d="M4 8a2 2 0 013-2 2 2 0 013-1 2 2 0 013 1 2 2 0 013 2 2 2 0 010 4 2 2 0 01-3 2 2 2 0 01-3 1 2 2 0 01-3-1 2 2 0 01-3-2 2 2 0 010-4z" />,
+  calibrate: <><path d="M2 14h16M2 11v6M18 11v6M6 14v-2M10 14v-3M14 14v-2" /><path d="M7 5h6M7 5l2-2M7 5l2 2" /></>,
+  length: <path d="M2 10h16M2 6v8M18 6v8M5 10l2-2M5 10l2 2M15 10l-2-2M15 10l-2 2" />,
+  polylength: <><path d="M2 16l5-8 5 5 6-9" /><circle cx="2" cy="16" r="1" /><circle cx="18" cy="4" r="1" /></>,
+  area: <><path d="M3 4h10l4 5v7H3z" /><path d="M6 13l4-4M9 13l4-4M3 10l3-3" opacity=".6" /></>,
+  perimeter: <path d="M3 4h10l4 5v7H3z" strokeDasharray="2 2" />,
+  volume: <><path d="M3 7l7-4 7 4v7l-7 4-7-4z" /><path d="M3 7l7 4 7-4M10 11v7" /></>,
+  count: <><circle cx="5" cy="6" r="2" /><circle cx="14" cy="5" r="2" /><circle cx="8" cy="14" r="2" /><path d="M15 12v5M12.5 14.5h5" /></>,
+  fitpage: <><rect x="4" y="2.5" width="12" height="15" /><path d="M2 7V2h5M18 13v5h-5" /></>,
+  fitwidth: <><rect x="4" y="4.5" width="12" height="11" /><path d="M1 10h5M19 10h-5M3 8l-2 2 2 2M17 8l2 2-2 2" /></>,
+  zoomin: <><circle cx="8.5" cy="8.5" r="5" /><path d="M12.5 12.5L17 17M6.5 8.5h4M8.5 6.5v4" /></>,
+  zoomout: <><circle cx="8.5" cy="8.5" r="5" /><path d="M12.5 12.5L17 17M6.5 8.5h4" /></>,
+  first: <path d="M5 4v12M15 4l-6 6 6 6" />,
+  prev: <path d="M13 4l-6 6 6 6" />,
+  next: <path d="M7 4l6 6-6 6" />,
+  last: <path d="M15 4v12M5 4l6 6-6 6" />,
+  thumbnails: <><rect x="3" y="2.5" width="6" height="7" /><rect x="11" y="2.5" width="6" height="7" /><rect x="3" y="11.5" width="6" height="7" /><rect x="11" y="11.5" width="6" height="7" /></>,
+  bookmarks: <path d="M5 2.5h10v15l-5-4-5 4z" />,
+  properties: <><path d="M3 5h14M3 10h14M3 15h14" /><circle cx="7" cy="5" r="1.5" /><circle cx="13" cy="10" r="1.5" /><circle cx="9" cy="15" r="1.5" /></>,
+  toolchest: <><rect x="2.5" y="7.5" width="15" height="9" /><path d="M7 7.5V5h6v2.5M2.5 11h15" /></>,
+  measurements: <><path d="M2 14L14 2l4 4L6 18z" /><path d="M5 11l2 2M8 8l2 2M11 5l2 2" /></>,
+  close: <path d="M5 5l10 10M15 5L5 15" />,
+  plus: <path d="M10 4v12M4 10h12" />,
+  trash: <path d="M4 6h12M8 6V3.5h4V6M5.5 6l1 11h7l1-11" />,
+  export: <path d="M10 3v10M6 7l4-4 4 4M3 13v4h14v-4" />,
+};
+
+export function Icon({ name, size = 20 }: { name: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor"
+      strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {P[name] ?? <circle cx="10" cy="10" r="6" />}
+    </svg>
+  );
+}
