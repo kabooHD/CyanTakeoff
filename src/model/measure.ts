@@ -22,6 +22,14 @@ export function signedArea(pts: Pt[]): number {
   return s / 2;
 }
 
+/** Angle in degrees at vertex `v` between rays to `a` and `b` (0..180). */
+export function angleAt(a: Pt, v: Pt, b: Pt): number {
+  const ax = a.x - v.x, ay = a.y - v.y, bx = b.x - v.x, by = b.y - v.y;
+  const d = Math.hypot(ax, ay) * Math.hypot(bx, by);
+  if (!d) return 0;
+  return (Math.acos(Math.max(-1, Math.min(1, (ax * bx + ay * by) / d))) * 180) / Math.PI;
+}
+
 export const polygonArea = (pts: Pt[]) => Math.abs(signedArea(pts));
 
 export function centroid(pts: Pt[]): Pt {
@@ -219,10 +227,12 @@ export function volumeLabel(unit: LengthUnit): string {
 
 // ---------- markup measurements ----------
 
-export const MEASURE_TYPES = new Set(['length', 'polylength', 'area', 'perimeter', 'volume', 'count']);
+export const MEASURE_TYPES = new Set(['length', 'polylength', 'area', 'perimeter', 'volume', 'count', 'angle', 'radius', 'diameter']);
 
 export interface Measurement {
   length?: number;
+  /** Degrees. */
+  angle?: number;
   area?: number;
   volume?: number;
   count?: number;
@@ -269,6 +279,19 @@ export function measure(m: Pick<Markup, 'type' | 'points' | 'scale' | 'depth'>):
       const area = polygonArea(m.points) * f * f;
       const volume = area * (m.depth ?? 0);
       return { area, volume, text: `${formatNumber(volume, fmt.decimals, fmt.trim)} ${fmt.volumeLabel}` };
+    }
+    case 'radius':
+    case 'diameter': {
+      // radius: [center, point on circle]; diameter: [end, end]
+      const length = (m.points.length > 1 ? dist(m.points[0], m.points[1]) : 0) * f;
+      return { length, text: len(length) };
+    }
+    case 'angle': {
+      // angle at the middle vertex between the two arms (Revu's PolyLineAngle)
+      const [a, v, b] = m.points;
+      if (!a || !v || !b) return { angle: 0, text: '0°' };
+      const ang = angleAt(a, v, b);
+      return { angle: ang, text: `${formatNumber(ang, fmt.decimals, fmt.trim)}°` };
     }
     case 'count':
       return { count: m.points.length, text: String(m.points.length) };

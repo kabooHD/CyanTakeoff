@@ -10,6 +10,14 @@ import { N, hexToRgb, pdfDate, writeMeasure } from './pdfutil';
 const f = (n: number) => String(+n.toFixed(3));
 const CT_KEY = 'CTData';
 
+/** Circle of a radius ([center, edge]) or diameter ([end, end]) measurement. */
+function circleOf(type: Markup['type'], P: Pt[]) {
+  const d = Math.hypot(P[1].x - P[0].x, P[1].y - P[0].y);
+  return type === 'radius'
+    ? { x: P[0].x, y: P[0].y, r: d }
+    : { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2, r: d / 2 };
+}
+
 /** Point on the callout box (corners a, c) where the leader line attaches. */
 export function calloutAttach(tip: Pt, a: Pt, c: Pt): Pt {
   const x0 = Math.min(a.x, c.x), x1 = Math.max(a.x, c.x);
@@ -114,9 +122,15 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont) {
         }
       }
       break;
-    case 'polyline': case 'polylength': case 'perimeter': case 'pen':
+    case 'polyline': case 'polylength': case 'perimeter': case 'pen': case 'angle':
       o.poly(P, false); o.add('S');
       break;
+    case 'radius': case 'diameter': {
+      const c = circleOf(m.type, P);
+      o.ellipse({ x: c.x - c.r, y: c.y - c.r }, { x: c.x + c.r, y: c.y + c.r }); o.add('S');
+      o.moveTo(P[0]); o.lineTo(P[1]); o.add('S');
+      break;
+    }
     case 'polygon': case 'area': case 'volume':
       o.poly(P, true); o.add(paint);
       break;
@@ -170,9 +184,10 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont) {
   }
 
   if (meas && m.type !== 'count') {
-    const at = m.type === 'length' || m.type === 'polylength'
+    const at = m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter'
       ? { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 + 3 }
-      : centroid(P);
+      : m.type === 'angle' ? { x: P[1].x + 8, y: P[1].y + 8 }
+        : centroid(P);
     const size = st.fontSize;
     const t = safeText(font, meas.text);
     const w = font.widthOfTextAtSize(t, size);
@@ -188,12 +203,14 @@ const SUBTYPE: Record<Markup['type'], string> = {
   polygon: 'Polygon', area: 'Polygon', volume: 'Polygon', cloud: 'Polygon', count: 'Polygon',
   rectangle: 'Square', ellipse: 'Circle', highlight: 'Highlight',
   textbox: 'FreeText', callout: 'FreeText', note: 'Text',
+  angle: 'PolyLine', radius: 'Polygon', diameter: 'Circle',
 };
 
 /** Measurement intents, as Revu writes them. */
 const INTENT: Partial<Record<Markup['type'], string>> = {
   length: 'LineDimension', polylength: 'PolyLineDimension', perimeter: 'PolyLineDimension',
   area: 'PolygonDimension', volume: 'PolygonVolume', count: 'PolygonCount',
+  angle: 'PolyLineAngle', radius: 'PolygonRadius', diameter: 'CircleDimension',
 };
 
 const toPdf = (m: Markup, page: PageInfo) => m.points.map((p) => {
@@ -303,7 +320,8 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo):
       entries.Vertices = flat(P);
       break;
     case 'Polygon':
-      entries.Vertices = flat(P);
+      // Revu writes a full-circle radius as [center, edge, center].
+      entries.Vertices = flat(m.type === 'radius' ? [P[0], P[1], P[0]] : P);
       if (m.type === 'cloud') entries.BE = { S: 'C', I: 1 };
       break;
     case 'Ink':
@@ -330,7 +348,9 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo):
       break;
     }
     case 'Square': case 'Circle': {
-      const xs = P.map((p) => p.x), ys = P.map((p) => p.y);
+      const c = m.type === 'diameter' ? circleOf('diameter', P) : null;
+      const box = c ? [{ x: c.x - c.r, y: c.y - c.r }, { x: c.x + c.r, y: c.y + c.r }] : P;
+      const xs = box.map((p) => p.x), ys = box.map((p) => p.y);
       entries.RD = [
         Math.min(...xs) - bbox[0], Math.min(...ys) - bbox[1],
         bbox[2] - Math.max(...xs), bbox[3] - Math.max(...ys),

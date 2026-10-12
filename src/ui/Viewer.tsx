@@ -285,6 +285,12 @@ export function Viewer({ doc }: { doc: DocState }) {
   // ----- pointer handlers -----
   const onPointerDown = (e: React.PointerEvent) => {
     setMenu(null);
+    // No text selection or native drag on the drawing surface: a native drag
+    // would swallow the pointer-up and leave a markup half-drawn.
+    window.getSelection()?.removeAllRanges();
+    e.preventDefault();
+    // preventDefault also stops the focus change, so close an open editor here.
+    if (document.activeElement instanceof HTMLElement && document.activeElement !== document.body) document.activeElement.blur();
     const el = scrollRef.current!;
     if (e.button === 1 || (e.button === 0 && tool === 'pan')) {
       setDrag({ kind: 'pan', sx: e.clientX, sy: e.clientY, left: el.scrollLeft, top: el.scrollTop });
@@ -333,9 +339,12 @@ export function Viewer({ doc }: { doc: DocState }) {
         if (!draft) setDraft({ tool: s.tool, points: [p], cursor: p, dragFrom: { x: e.clientX, y: e.clientY } });
         else completeTwoPoint(p);
         break;
-      case 'poly':
-        setDraft(draft ? { ...draft, points: [...draft.points, p] } : { tool: s.tool, points: [p], cursor: p });
+      case 'poly': {
+        const pts = draft ? [...draft.points, p] : [p];
+        if (def.maxPoints && pts.length >= def.maxPoints) finish(s.tool as MarkupType, pts.slice(0, def.maxPoints));
+        else setDraft({ tool: s.tool, points: pts, cursor: p });
         break;
+      }
       case 'freehand':
         setDraft({ tool: s.tool, points: [raw], cursor: raw });
         (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -532,7 +541,7 @@ export function Viewer({ doc }: { doc: DocState }) {
               </>
             )}
             {markups.map((m) => <MarkupShape key={m.id} m={m} />)}
-            {preview && <MarkupShape m={preview} ghost />}
+            {preview && <g pointerEvents="none"><MarkupShape m={preview} ghost /></g>}
             {markups.filter((m) => selected.has(m.id)).map((m) => {
               const b = markupBounds(m);
               const pad = 3 / zoom + m.style.width / 2;

@@ -13,6 +13,7 @@
 import { PDFArray, PDFDict, PDFRef, type PDFDocument } from 'pdf-lib';
 import type { Markup, MarkupStatus, MarkupStyle, MarkupType, Pt, Scale } from '../model/types';
 import { DEFAULT_STYLES, toolById } from '../tools/tools';
+import { MEASURE_TYPES } from '../model/measure';
 import {
   N, colorToHex, getArray, getDict, getName, getNumber, getText, lookup, numbers,
   parsePdfDate, readMeasure,
@@ -54,6 +55,9 @@ const MEASURE_INTENTS: Record<string, MarkupType> = {
   PolygonDimension: 'area',
   PolygonVolume: 'volume',
   PolygonCount: 'count',
+  PolyLineAngle: 'angle',
+  PolygonRadius: 'radius',
+  CircleDimension: 'diameter',
 };
 
 export function pageAnnots(doc: PDFDocument, pageIndex: number) {
@@ -128,7 +132,7 @@ function baseMarkup(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number, 
   const created = parsePdfDate(getText(doc, dict, 'CreationDate'))
     ?? parsePdfDate(getText(doc, dict, 'M')) ?? new Date().toISOString();
   const measureDict = getDict(doc, dict, 'Measure') ?? getDict(doc, dict, 'BBMeasure');
-  const isMeasure = type in { length: 1, polylength: 1, area: 1, perimeter: 1, volume: 1, count: 1 };
+  const isMeasure = MEASURE_TYPES.has(type);
   const contents = getText(doc, dict, 'Contents') ?? '';
   return {
     id: crypto.randomUUID(),
@@ -181,10 +185,22 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
     }
     case 'PolyLine':
       pts = pairs(numbers(doc, getArray(doc, dict, 'Vertices')));
+      if (intent === 'PolyLineAngle') {
+        if (pts.length !== 3) return null;
+        type = 'angle';
+        break;
+      }
       type = intent === 'PolyLineDimension' ? (/perimeter/i.test(subj) ? 'perimeter' : 'polylength') : 'polyline';
       break;
     case 'Polygon':
       pts = pairs(numbers(doc, getArray(doc, dict, 'Vertices')));
+      if (intent === 'PolygonRadius') {
+        // [center, edge, arc end]; only full circles (arc end back at the center) are editable
+        if (pts.length !== 3 || Math.hypot(pts[2].x - pts[0].x, pts[2].y - pts[0].y) > 1) return null;
+        pts = [pts[0], pts[1]];
+        type = 'radius';
+        break;
+      }
       type = intent === 'PolygonDimension' ? (/perimeter/i.test(subj) ? 'perimeter' : 'area')
         : intent === 'PolygonVolume' ? 'volume'
           : cloudy ? 'cloud' : 'polygon';
@@ -197,6 +213,12 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
       break;
     case 'Circle':
       if (!inner) return null;
+      if (intent === 'CircleDimension') {
+        const cy = (inner[1] + inner[3]) / 2;
+        pts = [{ x: inner[0], y: cy }, { x: inner[2], y: cy }];
+        type = 'diameter';
+        break;
+      }
       pts = rectPts(inner);
       type = 'ellipse';
       break;

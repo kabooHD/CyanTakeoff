@@ -30,12 +30,14 @@ describe('Revu 20 measure.pdf', async () => {
     expect(byType('count')).toHaveLength(1);
   });
 
-  it('leaves radius, diameter and angle measurements untouched in the file', () => {
-    // 10 annotations; radius x2, diameter and angle are preserved, not imported
-    expect(imported[0].size).toBe(6);
+  it('imports angle, diameter and the full-circle radius; keeps the partial-arc radius as-is', () => {
+    expect(byType('angle')).toHaveLength(1);
+    expect(byType('diameter')).toHaveLength(1);
+    expect(byType('radius')).toHaveLength(1);
+    expect(imported[0].size).toBe(9); // of 10: one radius drawn as a partial arc is preserved untouched
   });
 
-  for (const type of ['length', 'area', 'polylength', 'perimeter', 'volume']) {
+  for (const type of ['length', 'area', 'polylength', 'perimeter', 'volume', 'angle', 'radius', 'diameter']) {
     it(`computes the same ${type} value Revu displayed`, () => {
       for (const r of byType(type)) {
         const m = measure({ ...r.markup, points: r.pdfPoints });
@@ -88,7 +90,7 @@ describe('round trip: Revu file -> CyanTakeoff save -> reopen', () => {
     const second = importAnnotations(again);
     const values = (r: typeof second.raws) => r.map((x) => `${x.markup.type}:${x.displayed}`).sort();
     expect(values(second.raws)).toEqual(values(first.raws));
-    // radius x2, diameter and angle: still in the file, untouched
+    // the partial-arc radius is preserved; the rest are rewritten with Revu's intents
     const intents = again.getPage(0).node.lookup(N('Annots'), PDFArray).asArray()
       .map((r) => (again.context.lookup(r) as PDFDict).get(N('IT'))?.toString());
     expect(intents.filter((i) => i === '/PolygonRadius')).toHaveLength(2);

@@ -115,6 +115,7 @@ function ToolButton({ id }: { id: ToolId }) {
   const active = s.tool === id && !s.preset;
   return (
     <button className={`tb-btn ${active ? 'active' : ''} ${active && s.toolLocked ? 'locked' : ''}`}
+      onMouseDown={(e) => e.preventDefault()}
       title={`${t.name}${t.shortcut ? ` (${t.shortcut})` : ''}\nDouble-click to lock`}
       onClick={() => s.setTool(id)}
       onDoubleClick={() => s.setTool(id, { locked: true })}>
@@ -220,7 +221,8 @@ export function StatusBar() {
       {doc && <div className="sb-section sb-pos">{pos ?? ''}</div>}
       <div className="sb-toggles">
         {TOGGLES.map((t) => (
-          <button key={t.key} className={s.toggles[t.key] ? 'on' : ''} title={t.title} onClick={() => s.toggle(t.key)}>{t.label}</button>
+          <button key={t.key} className={s.toggles[t.key] ? 'on' : ''} title={t.title}
+            onMouseDown={(e) => e.preventDefault()} onClick={() => s.toggle(t.key)}>{t.label}</button>
         ))}
       </div>
     </div>

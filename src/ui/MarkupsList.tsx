@@ -31,7 +31,7 @@ export function MarkupsList() {
 
   if (!s.markupsList) return null;
   const sel = new Set(doc?.selection ?? []);
-  const totals = SUMMARY_COLUMNS.map((c, i) => c.numeric && c.key !== 'depth'
+  const totals = SUMMARY_COLUMNS.map((c, i) => c.numeric && c.key !== 'depth' && c.key !== 'angle'
     ? rows.reduce((t, r) => t + (Number(r.v[i]) || 0), 0)
     : null);
 

@@ -61,6 +61,7 @@ export const SUMMARY_COLUMNS: SummaryColumn[] = [
   { key: 'length', label: 'Length', value: (m) => round(meas(m)?.length), numeric: true },
   { key: 'area', label: 'Area', value: (m) => round(meas(m)?.area), numeric: true },
   { key: 'volume', label: 'Volume', value: (m) => round(meas(m)?.volume), numeric: true },
+  { key: 'angle', label: 'Angle', value: (m) => round(meas(m)?.angle), numeric: true },
   { key: 'count', label: 'Count', value: (m) => meas(m)?.count ?? '', numeric: true },
   { key: 'depth', label: 'Depth', value: (m) => (m.type === 'volume' ? m.depth ?? '' : ''), numeric: true },
   { key: 'units', label: 'Units', value: (m) => unitsOf(m) },
@@ -77,7 +78,8 @@ function unitsOf(m: Markup) {
     case 'area': return areaLabel(u);
     case 'volume': return volumeLabel(u);
     case 'count': return 'ea';
-    case 'length': case 'polylength': case 'perimeter': return unitLabel(u);
+    case 'length': case 'polylength': case 'perimeter': case 'radius': case 'diameter': return unitLabel(u);
+    case 'angle': return '°';
     default: return '';
   }
 }

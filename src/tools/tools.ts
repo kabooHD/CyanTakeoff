@@ -24,6 +24,8 @@ export interface ToolDef {
   interaction: Interaction;
   subject: string;
   closed?: boolean;
+  /** Poly tools that finish automatically after this many points (Angle: 3). */
+  maxPoints?: number;
 }
 
 export const TOOLS: ToolDef[] = [
@@ -50,6 +52,9 @@ export const TOOLS: ToolDef[] = [
   { id: 'area', name: 'Area', group: 'measure', shortcut: 'Shift+Alt+A', interaction: 'poly', subject: 'Area Measurement', closed: true },
   { id: 'perimeter', name: 'Perimeter', group: 'measure', shortcut: 'Shift+Alt+M', interaction: 'poly', subject: 'Perimeter Measurement', closed: true },
   { id: 'volume', name: 'Volume', group: 'measure', shortcut: 'Shift+Alt+V', interaction: 'poly', subject: 'Volume Measurement', closed: true },
+  { id: 'diameter', name: 'Diameter', group: 'measure', interaction: 'two-point', subject: 'Diameter Measurement' },
+  { id: 'radius', name: 'Radius', group: 'measure', interaction: 'two-point', subject: 'Radius Measurement' },
+  { id: 'angle', name: 'Angle', group: 'measure', interaction: 'poly', subject: 'Angle Measurement', maxPoints: 3 },
   { id: 'count', name: 'Count', group: 'measure', shortcut: 'Shift+Alt+C', interaction: 'count', subject: 'Count Measurement' },
 ];
 
@@ -86,6 +91,9 @@ export const DEFAULT_STYLES: Record<MarkupType, MarkupStyle> = {
   perimeter: { ...base, color: '#0066ff' },
   volume: { ...base, color: '#7a00cc', fill: '#7a00cc', fillOpacity: 0.25 },
   count: { ...base, color: '#ff6600', fill: '#ff6600', fillOpacity: 0.6 },
+  angle: { ...base, color: '#0066ff' },
+  radius: { ...base, color: '#0066ff' },
+  diameter: { ...base, color: '#0066ff' },
 };
 
 /** Normalised combo string for a keyboard event, e.g. "Ctrl+Shift+S". */

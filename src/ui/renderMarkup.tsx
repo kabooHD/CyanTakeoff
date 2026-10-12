@@ -44,9 +44,10 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
   const meas = measure(m);
   let label: { at: Pt; text: string } | null = null;
   if (meas && m.type !== 'count' && P.length > 1) {
-    const at = m.type === 'length' || m.type === 'polylength'
+    const at = m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter'
       ? { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 - 3 }
-      : centroid(P);
+      : m.type === 'angle' && P[1] ? { x: P[1].x + 8, y: P[1].y - 8 }
+        : centroid(P);
     label = { at, text: meas.text };
   }
 
@@ -89,6 +90,17 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
       shape = <ellipse {...c} cx={b.minX + b.w / 2} cy={b.minY + b.h / 2} rx={b.w / 2} ry={b.h / 2} />;
       break;
     }
+    case 'radius': case 'diameter': {
+      if (P.length < 2) break;
+      const r = Math.hypot(P[1].x - P[0].x, P[1].y - P[0].y);
+      const c0 = m.type === 'radius' ? P[0] : { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 };
+      shape = <><circle {...c} fill="none" cx={c0.x} cy={c0.y} r={m.type === 'radius' ? r : r / 2} />
+        <line {...c} x1={P[0].x} y1={P[0].y} x2={P[1].x} y2={P[1].y} /></>;
+      break;
+    }
+    case 'angle':
+      shape = <polyline {...c} fill="none" points={pts(P)} />;
+      break;
     case 'count':
       shape = <>{P.map((p, i) => <circle key={i} {...c} cx={p.x} cy={p.y} r={5} />)}</>;
       break;

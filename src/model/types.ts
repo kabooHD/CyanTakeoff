@@ -22,7 +22,10 @@ export type MarkupType =
   | 'area'
   | 'perimeter'
   | 'volume'
-  | 'count';
+  | 'count'
+  | 'angle'
+  | 'radius'
+  | 'diameter';
 
 export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom';
 

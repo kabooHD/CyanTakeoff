@@ -145,7 +145,7 @@ function StyleEditor({ style, type, onChange }: { style: MarkupStyle; type: Mark
           <option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option>
         </select>
       </Row>
-      {(textual || ['length', 'polylength', 'area', 'perimeter', 'volume'].includes(type)) && (
+      {(textual || ['length', 'polylength', 'area', 'perimeter', 'volume', 'angle', 'radius', 'diameter'].includes(type)) && (
         <Row label="Font Size"><input type="number" min={4} max={144} value={style.fontSize} onChange={(e) => onChange({ fontSize: Math.max(4, +e.target.value) })} /></Row>
       )}
     </>
