@@ -172,7 +172,7 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
   const be = getDict(doc, dict, 'BE');
   const cloudy = !!be && getName(doc, be, 'S') === 'C';
 
-  // Unknown measurement intents (radius, diameter, angle, ...) are left as-is.
+  // Unknown measurement intents are left as-is.
   if (intent && /Dimension|Volume|Count|Radius|Angle|Arc/.test(intent) && !MEASURE_INTENTS[intent] && !ct) return null;
 
   let type: MarkupType | null = null;
@@ -198,9 +198,10 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
     case 'Polygon':
       pts = pairs(numbers(doc, getArray(doc, dict, 'Vertices')));
       if (intent === 'PolygonRadius') {
-        // [center, edge, arc end]; only full circles (arc end back at the center) are editable
-        if (pts.length !== 3 || Math.hypot(pts[2].x - pts[0].x, pts[2].y - pts[0].y) > 1) return null;
-        pts = [pts[0], pts[1]];
+        // Revu: [arc start (on the circle), center, arc end]; a full circle ends where it starts.
+        if (pts.length !== 3) return null;
+        const [start, center, end] = pts;
+        pts = Math.hypot(end.x - start.x, end.y - start.y) <= 1 ? [center, start] : [center, start, end];
         type = 'radius';
         break;
       }

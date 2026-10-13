@@ -27,7 +27,7 @@ export type MarkupType =
   | 'radius'
   | 'diameter';
 
-export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cutout' | 'ellipse-cutout' | 'viewport';
+export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cutout' | 'ellipse-cutout' | 'viewport' | 'radius-3pt';
 
 /** A hole subtracted from an Area or Volume measurement. Ellipse: two opposite corners. */
 export interface Cutout { kind: 'polygon' | 'ellipse'; points: Pt[] }
@@ -43,6 +43,10 @@ export interface Scale {
   label: string;
   /** Display format, read from (and written to) the PDF number formats. */
   format?: ScaleFormat;
+  /** Separate Y scale: `unit`s per point along the page's vertical axis. */
+  yFactor?: number;
+  /** Label of the Y scale when separate. */
+  yLabel?: string;
 }
 
 export interface ScaleFormat {

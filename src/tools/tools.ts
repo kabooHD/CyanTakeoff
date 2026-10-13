@@ -56,6 +56,7 @@ export const TOOLS: ToolDef[] = [
   { id: 'perimeter', name: 'Perimeter', group: 'measure', shortcut: 'Shift+Alt+P', interaction: 'poly', subject: 'Perimeter Measurement', closed: true },
   { id: 'volume', name: 'Volume', group: 'measure', shortcut: 'Shift+Alt+V', interaction: 'poly', subject: 'Volume Measurement', closed: true },
   { id: 'diameter', name: 'Diameter', group: 'measure', shortcut: 'Shift+Alt+D', interaction: 'two-point', subject: 'Diameter Measurement' },
+  { id: 'radius-3pt', name: '3-Point Radius', group: 'measure', interaction: 'poly', subject: 'Radius Measurement', maxPoints: 3 },
   { id: 'radius', name: 'Radius', group: 'measure', shortcut: 'Shift+Alt+U', interaction: 'two-point', subject: 'Radius Measurement' },
   { id: 'angle', name: 'Angle', group: 'measure', shortcut: 'Shift+Alt+G', interaction: 'poly', subject: 'Angle Measurement', maxPoints: 3 },
   { id: 'cutout', name: 'Polygon Cutout', group: 'measure', interaction: 'cutout', subject: '' },

@@ -95,6 +95,15 @@ await page.mouse.click(a.x, a.y); await page.mouse.click(b.x, b.y);
 list = await page.locator('.ml-table tbody').innerText();
 assert(list.includes('90°'), 'angle measures 90°');
 assert(list.includes(`5'-0"`), `radius measures 5'-0" (3-4-5 triangle)`);
+// 3-Point Radius: three points on a 5 ft circle.
+await page.locator('.tb-btn[title^="3-Point Radius"]').click();
+for (const [x, y] of [[15, 10], [20, 15], [25, 10]]) { const p = await toScreen(x, y); await page.mouse.click(p.x, p.y); }
+list = await page.locator('.ml-table tbody').innerText();
+assert(list.split(`5'-0"`).length === 3, '3-Point Radius through three points measures 5\'-0"');
+await page.keyboard.press('Shift+Alt+U');
+assert(await page.locator('.tb-btn.active[title^="3-Point Radius"]').count() === 1, 'Shift+Alt+U recalls the radius tool used last');
+await page.keyboard.press('Escape');
+await page.keyboard.press('Control+Z');
 assert(list.includes(`10'-0"`), `diameter measures 10'-0" (6-8-10 triangle)`);
 await toggleSnaps();
 
@@ -195,6 +204,20 @@ await page.keyboard.press('Escape');
 list = await page.locator('.ml-table tbody').innerText();
 assert(list.includes('403.43 sf'), 'two cutouts reduce 432 sf to 403.43 sf');
 await page.screenshot({ path: `${OUT}/07-cutouts.png` });
+// Revu rules: a polygon cutout across the edge trims the area (2x4 ft outside -> 8 sf off).
+await page.locator('.tb-btn[title^="Polygon Cutout"]').click();
+{ const a = await toScreen(20, 38), b = await toScreen(28, 42); await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up(); }
+await page.keyboard.press('Escape');
+list = await page.locator('.ml-table tbody').innerText();
+assert(list.includes('395.43 sf'), 'a cutout crossing the edge trims the area (395.43 sf)');
+await page.keyboard.press('Control+Z');
+// Area tool over a cutout converts it into its own measurement.
+await page.keyboard.press('Shift+Alt+A');
+{ const p = await toScreen(12, 32); await page.mouse.click(p.x, p.y); }
+await page.keyboard.press('Escape');
+list = await page.locator('.ml-table tbody').innerText();
+assert(list.includes('12.57 sf') && list.includes('403.43 sf'), 'clicking a cutout with the Area tool converts it (12.57 sf)');
+await page.keyboard.press('Control+Z');
 { const p = await toScreen(4, 27); await page.mouse.click(p.x, p.y, { button: 'right' }); }
 await page.getByRole('menuitem', { name: 'Delete Cutout' }).click();
 list = await page.locator('.ml-table tbody').innerText();
@@ -294,6 +317,20 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const vp = doc.getPage(1).node.lookup(PDFName.of('VP'), PDFArray).asArray().map((r) => doc.context.lookup(r, PDFDict));
   assert(vp.length === 2 && vp.some((d) => d.get(PDFName.of('Name'))?.decodeText?.() === 'Detail A'), 'page scale and named viewport written to /VP');
   assert(await page.locator('.viewport-list input[aria-label="Viewport name"]').inputValue() === 'Detail A', 'viewport survives save and reload');
+}
+
+// Separate Y Scale in the Apply Scale to Pages dialog.
+{
+  await page.locator('.sb-scale').click();
+  const dlg = page.getByRole('dialog', { name: 'Apply Scale to Pages' });
+  await dlg.locator('select').nth(1).selectOption(`1" = 10'`);
+  await dlg.getByLabel('Separate Y Scale').check();
+  await dlg.locator('.y-scale select').first().selectOption(`1" = 20'`);
+  await dlg.getByRole('button', { name: 'Apply Scale' }).click();
+  const label = await page.locator('.sb-scale').innerText();
+  assert(label.includes(`X 1" = 10'`) && label.includes(`Y 1" = 20'`), `separate X/Y scales applied (${label})`);
+  await page.keyboard.press('Control+Z');
+  assert((await page.locator('.sb-scale').innerText()).startsWith('1" = 20'), 'undo restores the previous page scale');
 }
 
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.

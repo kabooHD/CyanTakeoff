@@ -3,7 +3,7 @@ import {
   type PDFFont, type PDFObject, type PDFRef,
 } from 'pdf-lib';
 import type { Cutout, Markup, Pt, Scale, Viewport } from '../model/types';
-import { centroid, cloudSegments, measure } from '../model/measure';
+import { arcPoints, centroid, cloudSegments, measure } from '../model/measure';
 import { refKey, removeAnnots, type CTData, type PageInfo } from './document';
 import { isRulerViewport } from './importAnnots';
 import { N, hexToRgb, pdfDate, writeMeasure } from './pdfutil';
@@ -86,15 +86,33 @@ function safeText(font: PDFFont, s: string) {
   return [...s].map((ch) => { try { font.encodeText(ch); return ch; } catch { return '?'; } }).join('');
 }
 
-function textAt(o: Ops, font: PDFFont, s: string, size: number, x: number, y: number, rgb: string) {
+/**
+ * Reading direction of a page shown with /Rotate `rot`: text drawn along
+ * `right` (with `up` as its up) reads upright on screen.
+ */
+export function textFrame(rot = 0) {
+  const a = ((((rot % 360) + 360) % 360) * Math.PI) / 180;
+  const c = Math.round(Math.cos(a)), s = Math.round(Math.sin(a));
+  return { right: { x: c, y: s }, up: { x: -s, y: c } };
+}
+type Frame = ReturnType<typeof textFrame>;
+const at = (fr: Frame, u: number, v: number): Pt => ({ x: u * fr.right.x + v * fr.up.x, y: u * fr.right.y + v * fr.up.y });
+/** Coordinates of PDF point `p` along the frame's axes. */
+const proj = (fr: Frame, p: Pt) => ({ u: p.x * fr.right.x + p.y * fr.right.y, v: p.x * fr.up.x + p.y * fr.up.y });
+
+/** Draw text with its baseline origin at frame coordinates (u, v). */
+function textAt(o: Ops, font: PDFFont, s: string, size: number, u: number, v: number, rgb: string, fr: Frame = textFrame(0)) {
   const t = safeText(font, s);
   const w = font.widthOfTextAtSize(t, size);
-  o.grow({ x, y: y - size * 0.25 }); o.grow({ x: x + w, y: y + size });
-  o.add(`BT ${rgb} rg /Helv ${f(size)} Tf ${f(x)} ${f(y)} Td ${font.encodeText(t).toString()} Tj ET`);
+  for (const [du, dv] of [[0, -size * 0.25], [w, -size * 0.25], [0, size], [w, size]]) o.grow(at(fr, u + du, v + dv));
+  const p = at(fr, u, v);
+  const m = `${fr.right.x} ${fr.right.y} ${fr.up.x} ${fr.up.y} ${f(p.x)} ${f(p.y)}`;
+  o.add(`BT ${rgb} rg /Helv ${f(size)} Tf ${m} Tm ${font.encodeText(t).toString()} Tj ET`);
   return w;
 }
 
-function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[]) {
+function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], rot = 0) {
+  const fr = textFrame(rot);
   const o = new Ops();
   const st = m.style;
   const [r, g, b] = hexToRgb(st.color).map(f);
@@ -126,7 +144,14 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[]) 
     case 'polyline': case 'polylength': case 'perimeter': case 'pen': case 'angle':
       o.poly(P, false); o.add('S');
       break;
-    case 'radius': case 'diameter': {
+    case 'radius':
+      if (P.length > 2) {
+        // Partial arc: radius line, then the arc counterclockwise (PDF space) to the end direction.
+        o.poly([P[0], ...arcPoints(P[0], P[1], P[2], 1)], false); o.add('S');
+        break;
+      }
+    // falls through
+    case 'diameter': {
       const c = circleOf(m.type, P);
       o.ellipse({ x: c.x - c.r, y: c.y - c.r }, { x: c.x + c.r, y: c.y + c.r }); o.add('S');
       o.moveTo(P[0]); o.lineTo(P[1]); o.add('S');
@@ -181,26 +206,32 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[]) 
       }
       o.poly([{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], true);
       o.add(paint);
+      // Lay the text out in the page's reading direction (rotated pages).
+      const cs = [{ x: x0, y: y0 }, { x: x1, y: y1 }].map((q) => proj(fr, q));
+      const u0 = Math.min(cs[0].u, cs[1].u), u1 = Math.max(cs[0].u, cs[1].u);
+      const v0 = Math.min(cs[0].v, cs[1].v), v1 = Math.max(cs[0].v, cs[1].v);
       const size = st.fontSize;
-      let y = y1 - size - 2;
-      for (const line of wrap(font, m.text ?? '', size, x1 - x0 - 6)) {
-        if (y < y0) break;
-        textAt(o, font, line, size, x0 + 3, y, rgb);
-        y -= size * 1.2;
+      let v = v1 - size - 2;
+      for (const line of wrap(font, m.text ?? '', size, u1 - u0 - 6)) {
+        if (v < v0) break;
+        textAt(o, font, line, size, u0 + 3, v, rgb, fr);
+        v -= size * 1.2;
       }
       break;
     }
   }
 
   if (meas && m.type !== 'count') {
-    const at = m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter'
-      ? { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 + 3 }
-      : m.type === 'angle' ? { x: P[1].x + 8, y: P[1].y + 8 }
+    const pos = m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter'
+      ? { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 }
+      : m.type === 'angle' ? P[1]
         : centroid(P);
     const size = st.fontSize;
     const t = safeText(font, meas.text);
     const w = font.widthOfTextAtSize(t, size);
-    textAt(o, font, t, size, at.x - w / 2, at.y, rgb);
+    const q = proj(fr, pos);
+    const lift = m.type === 'angle' ? 8 : m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter' ? 3 : 0;
+    textAt(o, font, t, size, q.u - w / 2 + (m.type === 'angle' ? 8 + w / 2 : 0), q.v + lift, rgb, fr);
   }
   o.add('Q');
   return { ops: o.out.join('\n'), bbox: [o.minX - pad - 2, o.minY - pad - 2, o.maxX + pad + 2, o.maxY + pad + 2] };
@@ -286,7 +317,7 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo):
   const P = toPdf(m, page);
   const ct = ctData(m, P);
   const cutouts = m.cutouts?.map((c) => ({ ...c, points: c.points.map((q) => toPdfPt(q, page)) }));
-  const { ops, bbox } = buildAppearance(m, P, font, cutouts);
+  const { ops, bbox } = buildAppearance(m, P, font, cutouts, (page.viewport as { rotation?: number }).rotation ?? 0);
   if (cutouts?.length) ct.cutouts = cutouts.map((c) => ({ kind: c.kind, points: c.points.flatMap((q) => [q.x, q.y]) }));
   const st = m.style;
   const gs = ctx.obj({
@@ -332,8 +363,8 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo):
       entries.Vertices = flat(P);
       break;
     case 'Polygon':
-      // Revu writes a full-circle radius as [center, edge, center].
-      entries.Vertices = flat(m.type === 'radius' ? [P[0], P[1], P[0]] : P);
+      // Revu writes a radius as [arc start, center, arc end]; a full circle ends at its start.
+      entries.Vertices = flat(m.type === 'radius' ? [P[1], P[0], P[2] ?? P[1]] : P);
       if (m.type === 'cloud') entries.BE = { S: 'C', I: 1 };
       break;
     case 'Ink':

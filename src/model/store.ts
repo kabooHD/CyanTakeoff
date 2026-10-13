@@ -49,6 +49,9 @@ export interface ScaleDialogState {
   then?: ToolId;
   reuse?: boolean;
   viewport?: { rect: [Pt, Pt]; id?: string; name?: string };
+  /** Calibrating the Y scale (Separate Y Scale); `xScale` is the X scale chosen before. */
+  calibrateY?: boolean;
+  xScale?: Scale;
 }
 
 interface AppState {
@@ -72,6 +75,8 @@ interface AppState {
   scaleDialog: ScaleDialogState | null;
   /** The dialog to reopen once the Calibrate tool has picked two points. */
   calibrateFor: ScaleDialogState | null;
+  /** Shift+Alt+U picks the radius tool used last (Revu). */
+  radiusTool: 'radius' | 'radius-3pt';
   /** Viewport highlighted from the Measurements panel. */
   activeViewport: string | null;
   /** Scales saved with "+ Add Preset", listed first among presets. */
@@ -213,6 +218,7 @@ export const useApp = create<AppState>((set, get) => {
     recentTools: prefs.recentTools ?? [],
     scaleDialog: null,
     calibrateFor: null,
+    radiusTool: 'radius',
     activeViewport: null,
     savedScales: prefs.savedScales ?? [],
     status: 'Ready',
@@ -260,6 +266,7 @@ export const useApp = create<AppState>((set, get) => {
 
     setTool(tool, opts = {}) {
       set({ tool, toolLocked: opts.locked ?? false, preset: opts.preset ?? null, calibrateFor: null });
+      if (tool === 'radius' || tool === 'radius-3pt') set({ radiusTool: tool });
       if (tool !== 'select') withDoc(() => ({ selection: [] }));
     },
 

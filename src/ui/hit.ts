@@ -1,4 +1,4 @@
-import { bounds, distToSegment, pointInPolygon, rectCorners } from '../model/measure';
+import { arcPoints, bounds, distToSegment, pointInPolygon, rectCorners } from '../model/measure';
 import type { Markup, Pt } from '../model/types';
 
 /** Outline used for hit-testing and rubber-band selection. */
@@ -11,6 +11,7 @@ export function outline(m: Markup): { pts: Pt[]; closed: boolean } {
       return { pts: P.length > 2 ? rectCorners(P[1], P[2]) : P, closed: true };
     case 'radius': case 'diameter': {
       if (P.length < 2) return { pts: P, closed: false };
+      if (m.type === 'radius' && P.length > 2) return { pts: [P[0], ...arcPoints(P[0], P[1], P[2], -1)], closed: false };
       const r = Math.hypot(P[1].x - P[0].x, P[1].y - P[0].y) / (m.type === 'radius' ? 1 : 2);
       const c = m.type === 'radius' ? P[0] : { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 };
       const ring = Array.from({ length: 32 }, (_, i) => ({ x: c.x + r * Math.cos((i / 32) * 2 * Math.PI), y: c.y + r * Math.sin((i / 32) * 2 * Math.PI) }));

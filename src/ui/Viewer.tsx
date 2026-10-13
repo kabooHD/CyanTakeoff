@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PDFPageProxy, RenderTask } from 'pdfjs-dist';
 import { useApp, type DocState } from '../model/store';
-import { MEASURE_TYPES, dist, distToSegment, pointInPolygon, formatLength, formatNumber, measure, ortho, rectCorners, resolveFormat, scaleAt } from '../model/measure';
+import { MEASURE_TYPES, dist, distToSegment, pointInPolygon, formatLength, formatNumber, measure, ortho, rectCorners, resolveFormat, scaleAt, stretchY, circleFrom3 } from '../model/measure';
 import { Icon } from './icons';
 import { translated } from '../model/markup';
+import { applyCutout, ellipsePolygon } from '../model/cutouts';
 import type { Markup, MarkupType, Pt, ToolId, Viewport } from '../model/types';
 import { toolById } from '../tools/tools';
 import { MarkupShape, handlePoints } from './renderMarkup';
@@ -302,7 +303,11 @@ export function Viewer({ doc }: { doc: DocState }) {
     setDraft(null);
     if (!id) return;
     // The cutout tool stays active for further cutouts until Esc (Revu).
-    s.updateMarkups([id], (m) => ({ cutouts: [...(m.cutouts ?? []), { kind, points: pts }] }));
+    const m = doc.markups.find((x) => x.id === id);
+    if (!m) return;
+    const r = applyCutout(m, { kind, points: pts });
+    if ('error' in r) { s.setStatus(r.error); return; }
+    s.updateMarkups([id], () => r);
   };
 
   const finishPoly = () => {
@@ -401,8 +406,25 @@ export function Viewer({ doc }: { doc: DocState }) {
       return;
     }
 
+    // Area/Volume tool over a cutout: convert it into its own measurement (Shift: all of them).
+    if (!draft && (s.tool === 'area' || s.tool === 'volume')) {
+      const host = [...markups].reverse().find((m) => (m.type === 'area' || m.type === 'volume') && cutoutAt(m, raw) >= 0);
+      if (host) {
+        const list = e.shiftKey ? host.cutouts! : [host.cutouts![cutoutAt(host, raw)]];
+        for (const c of list) {
+          s.addMarkup({
+            type: s.tool, page: doc.page,
+            points: c.kind === 'ellipse' ? ellipsePolygon(c.points[0], c.points[1], 256) : c.points,
+            style: s.preset?.style ?? s.toolDefaults[s.tool], subject: s.preset?.subject ?? def.subject,
+            depth: s.tool === 'volume' ? s.preset?.depth ?? 1 : undefined,
+          });
+        }
+        s.setStatus(`Converted ${list.length} cutout${list.length === 1 ? '' : 's'} to ${def.name}`);
+        return;
+      }
+    }
     // Like Revu, ask for a page scale before the first measurement on an unscaled page.
-    if (!draft && MEASURE_TYPES.has(s.tool) && s.tool !== 'count' && !scaleFor(raw)) {
+    if (!draft && isMeasureTool(s.tool) && s.tool !== 'count' && !scaleFor(raw)) {
       s.openScaleDialog({ page: doc.page, then: s.tool });
       return;
     }
@@ -416,7 +438,11 @@ export function Viewer({ doc }: { doc: DocState }) {
         break;
       case 'poly': {
         const pts = draft ? [...draft.points, p] : [p];
-        if (def.maxPoints && pts.length >= def.maxPoints) finish(s.tool as MarkupType, pts.slice(0, def.maxPoints));
+        if (s.tool === 'radius-3pt' && pts.length >= 3) {
+          const c = circleFrom3(pts[0], pts[1], pts[2]);
+          if (c) finish('radius', [c.center, pts[0]]);
+          else s.setStatus('3-Point Radius: the three points are in a line; pick a point off the line.');
+        } else if (def.maxPoints && pts.length >= def.maxPoints) finish(s.tool as MarkupType, pts.slice(0, def.maxPoints));
         else setDraft({ tool: s.tool, points: pts, cursor: p });
         break;
       }
@@ -659,8 +685,13 @@ export function Viewer({ doc }: { doc: DocState }) {
     };
   } else if (draft && draft.cursor) {
     const pts = def.interaction === 'freehand' ? draft.points : [...draft.points, draft.cursor];
-    const type = (draft.tool === 'calibrate' ? 'length' : draft.tool === 'viewport' ? 'rectangle' : draft.tool) as MarkupType;
+    let type = (draft.tool === 'calibrate' ? 'length' : draft.tool === 'viewport' ? 'rectangle' : draft.tool) as MarkupType;
     let P = pts;
+    if (draft.tool === 'radius-3pt') {
+      const c = pts.length === 3 ? circleFrom3(pts[0], pts[1], pts[2]) : null;
+      type = c ? 'radius' : 'polyline';
+      if (c) P = [c.center, pts[0]];
+    }
     if (type === 'cloud' && pts.length === 2) P = rectCorners(pts[0], pts[1]);
     if (type === 'callout') P = [pts[0], pts[1], { x: pts[1].x + 144, y: pts[1].y + 40 }];
     preview = {
@@ -701,10 +732,10 @@ export function Viewer({ doc }: { doc: DocState }) {
                 <rect width={page.width} height={page.height} fill="url(#grid)" pointerEvents="none" />
               </>
             )}
-            {(MEASURE_TYPES.has(s.tool) || s.tool === 'viewport' || s.tool === 'calibrate') && viewports.map((v) => (
+            {(isMeasureTool(s.tool) || s.tool === 'viewport' || s.tool === 'calibrate') && viewports.map((v) => (
               <ViewportBox key={v.id} v={v} zoom={zoom} />
             ))}
-            {s.activeViewport && !MEASURE_TYPES.has(s.tool) && viewports.filter((v) => v.id === s.activeViewport).map((v) => (
+            {s.activeViewport && !isMeasureTool(s.tool) && viewports.filter((v) => v.id === s.activeViewport).map((v) => (
               <ViewportBox key={v.id} v={drag?.kind === 'viewport' && drag.id === v.id ? { ...v, rect: drag.rect } : v}
                 zoom={zoom} active handles={s.tool === 'select'} />
             ))}
@@ -754,6 +785,8 @@ export function Viewer({ doc }: { doc: DocState }) {
   );
 }
 
+const isMeasureTool = (t: ToolId) => MEASURE_TYPES.has(t) || t === 'radius-3pt';
+
 /** Corners of a viewport rectangle: top-left, top-right, bottom-right, bottom-left. */
 const viewportCorners = ([a, b]: [Pt, Pt]): Pt[] => [a, { x: b.x, y: a.y }, b, { x: a.x, y: b.y }];
 
@@ -799,7 +832,8 @@ function MeasurePreview({ markup }: { markup: Markup | null }) {
   if (v.volume !== undefined) rows.push(['Volume', `${formatNumber(v.volume, f.decimals, f.trim)} ${f.volumeLabel}`]);
   if (v.angle !== undefined) rows.push(['Angle', v.text]);
   if (v.count !== undefined) rows.push(['Count', v.text]);
-  if (P.length > 2 && markup.type !== 'angle') rows.push(['Segment', len(dist(P[P.length - 2], P[P.length - 1]) * s.factor)]);
+  const Q = stretchY(P, s);
+  if (P.length > 2 && markup.type !== 'angle') rows.push(['Segment', len(dist(Q[Q.length - 2], Q[Q.length - 1]) * s.factor)]);
   return (
     <div className="measure-preview">
       <button className="measure-preview-close" title="Hide" onClick={() => setHidden(true)}><Icon name="close" size={10} /></button>

@@ -1,5 +1,5 @@
 import { calloutAttach } from '../pdf/save';
-import { bounds, centroid, cloudSegments, measure } from '../model/measure';
+import { arcPoints, bounds, centroid, cloudSegments, measure } from '../model/measure';
 import type { Cutout, Markup, Pt } from '../model/types';
 
 const pts = (p: Pt[]) => p.map((q) => `${q.x},${q.y}`).join(' ');
@@ -105,6 +105,10 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     }
     case 'radius': case 'diameter': {
       if (P.length < 2) break;
+      if (m.type === 'radius' && P.length > 2) {
+        shape = <polyline {...c} fill="none" points={pts([P[0], ...arcPoints(P[0], P[1], P[2], -1)])} />;
+        break;
+      }
       const r = Math.hypot(P[1].x - P[0].x, P[1].y - P[0].y);
       const c0 = m.type === 'radius' ? P[0] : { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 };
       shape = <><circle {...c} fill="none" cx={c0.x} cy={c0.y} r={m.type === 'radius' ? r : r / 2} />

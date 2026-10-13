@@ -123,7 +123,17 @@ export function readMeasure(doc: PDFDocument, measure: PDFDict): Scale | undefin
     areaLabel: area ? getText(doc, area, 'U') : undefined,
     volumeLabel: vol ? getText(doc, vol, 'U') : undefined,
   };
-  return { factor: c, unit, label, format };
+  // Separate Y scale (ISO 32000 /Y): only its conversion factor is used.
+  const y = fmtAt('Y');
+  const yc = y && getNumber(doc, y, 'C');
+  const yUnit = y ? UNIT_STRINGS[(getText(doc, y, 'U') ?? '').trim().toLowerCase()] : undefined;
+  const scale: Scale = { factor: c, unit, label, format };
+  if (yc && Math.abs(yc - c) > 1e-9 && (!yUnit || yUnit === unit || (yUnit === 'ft' && unit === 'ft-in'))) {
+    scale.yFactor = yc;
+    const m = /^X (.*), Y (.*)$/.exec(label);
+    if (m) scale.yLabel = m[2];
+  }
+  return scale;
 }
 
 /**
@@ -147,6 +157,7 @@ export function writeMeasure(doc: PDFDocument, s: Scale): PDFDict {
     Subtype: 'RL',
     R: PDFString.of(s.label),
     X: [fmt(base, s.factor, s.unit === 'ft-in' ? { F: 'F', D: f.den } : {})],
+    ...(s.yFactor ? { Y: [fmt(base, s.yFactor, s.unit === 'ft-in' ? { F: 'F', D: f.den } : {})] } : {}),
     D: d,
     A: [fmt(f.areaLabel, 1)],
     T: [fmt('\u00b0', 1)],

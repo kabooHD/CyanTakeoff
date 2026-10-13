@@ -81,6 +81,5 @@ Next (from `docs/PLAN.md`):
    with a display name), live collaboration, self-hostable
 3. Compare versions, Sets, slip sheets, Spaces, Legends, Dynamic Fill, XLSX
 
-Known gaps: Revu cutout storage unknown (ours in CTData); overlapping
-cutouts not merged; separate X/Y scales (pages and viewports); 3-point radius; partial-arc radius
-preserved but not editable; text in saved markups ignores page rotation.
+Known gaps: Revu cutout storage unknown (ours in CTData); curved segments
+on polygons/cutouts (Ctrl+drag) not supported.

@@ -30,6 +30,39 @@ export function angleAt(a: Pt, v: Pt, b: Pt): number {
   return (Math.acos(Math.max(-1, Math.min(1, (ax * bx + ay * by) / d))) * 180) / Math.PI;
 }
 
+/** Circle through three points, or null when they are (nearly) collinear. */
+export function circleFrom3(a: Pt, b: Pt, c: Pt): { center: Pt; r: number } | null {
+  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+  if (Math.abs(d) < 1e-9) return null;
+  const a2 = a.x * a.x + a.y * a.y, b2 = b.x * b.x + b.y * b.y, c2 = c.x * c.x + c.y * c.y;
+  const center = {
+    x: (a2 * (b.y - c.y) + b2 * (c.y - a.y) + c2 * (a.y - b.y)) / d,
+    y: (a2 * (c.x - b.x) + b2 * (a.x - c.x) + c2 * (b.x - a.x)) / d,
+  };
+  return { center, r: dist(center, a) };
+}
+
+/**
+ * Points along a radius measurement's arc: from `start` around `center` to
+ * the direction of `end`. Revu sweeps counterclockwise in PDF space, which
+ * is `dir` -1 in page space (y down). A full circle when `end` is missing.
+ */
+export function arcPoints(center: Pt, start: Pt, end: Pt | undefined, dir: 1 | -1, n = 64): Pt[] {
+  const r = dist(center, start);
+  const a0 = Math.atan2(start.y - center.y, start.x - center.x);
+  let sweep = 2 * Math.PI * dir;
+  if (end && dist(end, center) > 1e-6) {
+    const a1 = Math.atan2(end.y - center.y, end.x - center.x);
+    const d = ((dir * (a1 - a0)) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+    if (d > 1e-6) sweep = d * dir;
+  }
+  const k = Math.max(4, Math.ceil((n * Math.abs(sweep)) / (2 * Math.PI)));
+  return Array.from({ length: k + 1 }, (_, i) => {
+    const a = a0 + (sweep * i) / k;
+    return { x: center.x + r * Math.cos(a), y: center.y + r * Math.sin(a) };
+  });
+}
+
 export const polygonArea = (pts: Pt[]) => Math.abs(signedArea(pts));
 
 export function centroid(pts: Pt[]): Pt {
@@ -166,6 +199,32 @@ export function calibrate(pagePts: number, realValue: number, unit: LengthUnit):
     ? `1" = ${formatLength(ratio / 12, 'ft-in')}`
     : `1:${round(ratio, 2)}`;
   return { factor, unit, label };
+}
+
+/** `s` with a separate Y scale `y` (converted to `s`'s unit), as Revu's "Separate Y Scale". */
+export function withYScale(s: Scale, y: Scale): Scale {
+  const x = stripY(s);
+  const yFactor = y.factor * TO_INCHES[y.unit] / TO_INCHES[x.unit];
+  if (Math.abs(yFactor - x.factor) < 1e-12) return x;
+  return { ...x, yFactor, yLabel: y.label, label: `X ${x.label}, Y ${y.label}` };
+}
+
+/** The X scale alone. */
+export function stripY(s: Scale): Scale {
+  if (!s.yFactor) return s;
+  const { yFactor: _y, yLabel: _l, ...x } = s;
+  return { ...x, label: x.label.replace(/^X (.*), Y .*$/, '$1') };
+}
+
+/** The Y scale of a scale with separate X/Y scales. */
+export function yOf(s: Scale): Scale {
+  return { factor: s.yFactor ?? s.factor, unit: s.unit, label: s.yLabel ?? s.label, format: s.format };
+}
+
+/** Points stretched so one factor applies to both axes (separate Y scale). */
+export function stretchY<T extends { x: number; y: number }>(pts: T[], s: Scale): Pt[] {
+  const ry = s.yFactor ? s.yFactor / s.factor : 1;
+  return ry === 1 ? pts : pts.map((p) => ({ x: p.x, y: p.y * ry }));
 }
 
 export type PaperUnit = 'in' | 'mm' | 'cm';
@@ -310,6 +369,10 @@ export function netArea(m: Pick<Markup, 'points' | 'cutouts'>): number {
 export function measure(m: Pick<Markup, 'type' | 'points' | 'scale' | 'depth' | 'cutouts'>): Measurement | null {
   if (!MEASURE_TYPES.has(m.type)) return null;
   const s = m.scale ?? DEFAULT_SCALE;
+  if (s.yFactor) {
+    // Separate X/Y scales: stretch the geometry, then measure with the X factor.
+    m = { ...m, points: stretchY(m.points, s), cutouts: m.cutouts?.map((c) => ({ ...c, points: stretchY(c.points, s) })), scale: { ...s, yFactor: undefined } };
+  }
   const f = s.factor;
   const fmt = resolveFormat(s);
   const len = (v: number) => formatLength(v, s.unit, fmt.decimals, fmt.den, fmt.trim);

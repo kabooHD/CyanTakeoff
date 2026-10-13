@@ -81,7 +81,8 @@ export function App() {
         return run(() => s.updateMarkups(d.selection, (m) => translated(m, dx * k, dy * k)));
       }
       const tool = TOOLS.find((t) => t.shortcut === combo);
-      if (tool && d) run(() => s.setTool(tool.id));
+      // The radius shortcut calls the most recently used radius tool (Revu).
+      if (tool && d) run(() => s.setTool(tool.id === 'radius' ? s.radiusTool : tool.id));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

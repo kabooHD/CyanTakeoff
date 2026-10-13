@@ -52,6 +52,12 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - A measurement uses the scale of the viewport it is placed in.
 - Revu also allows a separate Y scale per viewport (not built yet).
 
+## Radius
+- Radius (center, then a point on the circle) and 3-Point Radius (three
+  points on the circle) share Shift+Alt+U, which calls the variant used last.
+- Separate Y Scale (Apply Scale dialogs): X and Y scales set independently
+  by any method; precision follows the X scale.
+
 ## Cutouts
 - Polygon Cutout and Ellipse Cutout subtract from an existing Area or
   Volume; hovering the target measurement highlights it.
@@ -65,6 +71,12 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - A cutout can be converted to its own Area/Volume (select the tool, click
   the cutout; Shift-click converts all).
 - Delete: right-click a cutout line > Delete Cutout.
+
+- Overlapping polygon cutouts fuse into one; a polygon cutout crossing the
+  markup's edge trims the markup instead. Curved (ellipse) cutouts may not
+  overlap other cutouts or the edge.
+- With the Area or Volume tool, clicking a cutout converts it into its own
+  measurement (Shift: all cutouts of that markup); the cutout stays.
 
 ## Status bar
 - Left: help for the current tool and the toggles Show Grid, Snap to

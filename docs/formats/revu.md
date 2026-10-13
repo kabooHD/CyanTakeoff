@@ -13,6 +13,8 @@ Clean-room notes from inspecting Revu-authored PDFs
   entries overlap the last one in the array wins, so the page scale goes
   first. CyanTakeoff writes the same layout and keeps non-ruler entries
   (e.g. geospatial) untouched.
+- Separate X/Y scales: ISO 32000 `/Y` number format array next to `/X`
+  (CyanTakeoff writes and reads it; no Revu sample yet).
 - `/Measure /R` is the ratio label, e.g. `(0.25 in = 1 ft' in")`.
 - `/X[0] /C` converts PDF points to the base unit (0.05555556 ft/pt for
   1/4" = 1'-0"). Feet are written as `'`, inches as `"`.
@@ -32,7 +34,7 @@ Clean-room notes from inspecting Revu-authored PDFs
 | Perimeter | PolyLine | PolyLineDimension | open as drawn (not auto-closed); told apart by `/Subj` |
 | Volume | Polygon | PolygonVolume | |
 | Diameter | Circle | CircleDimension | |
-| Radius | Polygon | PolygonRadius | 3 vertices |
+| Radius | Polygon | PolygonRadius | 3 vertices: arc start (on the circle), center, arc end; full circle when end = start. The arc runs counterclockwise (PDF space) from start towards the end direction |
 | Angle | PolyLine | PolyLineAngle | 3 vertices |
 | Count | Polygon (per item) | PolygonCount | `/BBMeasure` instead of `/Measure`, `/NumCounts`, `/CountStyle` |
 

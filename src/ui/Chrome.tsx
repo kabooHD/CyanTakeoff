@@ -204,7 +204,7 @@ export function StatusBar() {
   const n = doc?.loaded.pages.length ?? 0;
   const scale = doc?.calibrations[doc.page];
   const pos = cursor.p && (scale
-    ? `${formatLength(cursor.p.x * scale.factor, scale.unit)}, ${formatLength(cursor.p.y * scale.factor, scale.unit)}`
+    ? `${formatLength(cursor.p.x * scale.factor, scale.unit)}, ${formatLength(cursor.p.y * (scale.yFactor ?? scale.factor), scale.unit)}`
     : `${(cursor.p.x / 72).toFixed(2)}", ${(cursor.p.y / 72).toFixed(2)}"`);
   const page = doc?.loaded.pages[doc.page];
   const t = toolById(s.tool);

@@ -30,6 +30,7 @@ const P: Record<string, ReactNode> = {
   volume: <><path d="M3 7l7-4 7 4v7l-7 4-7-4z" /><path d="M3 7l7 4 7-4M10 11v7" /></>,
   angle: <path d="M4 3l2 14h11M6 11a6 6 0 016 6" />,
   radius: <><circle cx="10" cy="10" r="7" /><path d="M10 10l5-5" /><circle cx="10" cy="10" r="0.8" /></>,
+  'radius-3pt': <><circle cx="10" cy="10" r="7" /><circle cx="3" cy="10" r="1.2" /><circle cx="15" cy="5" r="1.2" /><circle cx="15" cy="15" r="1.2" /></>,
   diameter: <><circle cx="10" cy="10" r="7" /><path d="M5 15L15 5" /></>,
   cutout: <><path d="M2.5 3.5h15v13h-15z" /><path d="M7 7h6v6H7z" strokeDasharray="2 1.5" /></>,
   'ellipse-cutout': <><path d="M2.5 3.5h15v13h-15z" /><ellipse cx="10" cy="10" rx="3.5" ry="3" strokeDasharray="2 1.5" /></>,

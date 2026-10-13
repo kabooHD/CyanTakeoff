@@ -30,11 +30,30 @@ describe('Revu 20 measure.pdf', async () => {
     expect(byType('count')).toHaveLength(1);
   });
 
-  it('imports angle, diameter and the full-circle radius; keeps the partial-arc radius as-is', () => {
+  it('imports angle, diameter and both radius measurements (full circle and partial arc)', () => {
     expect(byType('angle')).toHaveLength(1);
     expect(byType('diameter')).toHaveLength(1);
-    expect(byType('radius')).toHaveLength(1);
-    expect(imported[0].size).toBe(9); // of 10: one radius drawn as a partial arc is preserved untouched
+    expect(imported[0].size).toBe(10);
+    const radii = byType('radius').map((r) => r.pdfPoints);
+    expect(radii).toHaveLength(2);
+    // Revu stores [arc start, center, arc end]; the center is the second vertex.
+    const full = radii.find((p) => p.length === 2)!;
+    expect(full[0].x).toBeCloseTo(230.0505, 3);
+    const arc = radii.find((p) => p.length === 3)!;
+    expect(arc[0]).toMatchObject({ x: 394.8127, y: 419.5397 });
+  });
+
+  it("draws the partial arc counterclockwise from the start, like Revu's appearance", async () => {
+    const { arcPoints, distToSegment } = await import('../src/model/measure');
+    const [c, start, end] = byType('radius').find((r) => r.pdfPoints.length === 3)!.pdfPoints;
+    const pts = arcPoints(c, start, end, 1);
+    // Revu's own path passes near (352.8, 418.1) just after the start, and (436.7, 423.2) mid-way.
+    const near = (q: { x: number; y: number }) => Math.min(...pts.slice(1).map((p, i) => distToSegment(q, pts[i], p)));
+    expect(near({ x: 352.7883, y: 418.0503 })).toBeLessThan(1.5);
+    expect(near({ x: 436.7042, y: 423.1963 })).toBeLessThan(1.5);
+    // ends in the direction of the third vertex
+    const last = pts[pts.length - 1];
+    expect(Math.atan2(last.y - c.y, last.x - c.x)).toBeCloseTo(Math.atan2(end.y - c.y, end.x - c.x), 6);
   });
 
   for (const type of ['length', 'area', 'polylength', 'perimeter', 'volume', 'angle', 'radius', 'diameter']) {
@@ -90,7 +109,7 @@ describe('round trip: Revu file -> CyanTakeoff save -> reopen', () => {
     const second = importAnnotations(again);
     const values = (r: typeof second.raws) => r.map((x) => `${x.markup.type}:${x.displayed}`).sort();
     expect(values(second.raws)).toEqual(values(first.raws));
-    // the partial-arc radius is preserved; the rest are rewritten with Revu's intents
+    // every measurement is rewritten with Revu's intents
     const intents = again.getPage(0).node.lookup(N('Annots'), PDFArray).asArray()
       .map((r) => (again.context.lookup(r) as PDFDict).get(N('IT'))?.toString());
     expect(intents.filter((i) => i === '/PolygonRadius')).toHaveLength(2);
@@ -133,5 +152,43 @@ describe('viewports (regions with their own scale)', () => {
     expect(v.scale.unit).toBe('ft-in');
     // Existing annotations were not touched.
     expect(second.raws.map((r) => r.displayed).sort()).toEqual(first.raws.map((r) => r.displayed).sort());
+  });
+});
+
+describe('/Measure with a separate Y scale', () => {
+  it('writes /Y and reads both factors back', async () => {
+    const { writeMeasure, readMeasure } = await import('../src/pdf/pdfutil');
+    const { withYScale, customScale } = await import('../src/model/measure');
+    const doc = await PDFDocument.create();
+    const s = withYScale(customScale(1, 'in', 10, 'ft-in'), customScale(1, 'in', 20, 'ft-in'));
+    const back = readMeasure(doc, writeMeasure(doc, s))!;
+    expect(back.factor).toBeCloseTo(s.factor, 9);
+    expect(back.yFactor).toBeCloseTo(s.yFactor!, 9);
+    expect(back.unit).toBe('ft-in');
+    expect(back.yLabel).toBe(s.yLabel);
+  });
+});
+
+describe('text on rotated pages', () => {
+  it('saved text boxes read upright on a page with /Rotate 90', async () => {
+    const { savePdf, textFrame } = await import('../src/pdf/save');
+    const { decodePDFRawStream } = await import('pdf-lib');
+    const bytes = readFileSync('tests/fixtures/revu/markup-deep-spaces.pdf');
+    const identity = { convertToPdfPoint: (x: number, y: number) => [x, y], rotation: 90 };
+    const pages = [0, 1].map((index) => ({ index, label: '', width: 0, height: 0, viewport: identity })) as never;
+    const m = {
+      id: 't', type: 'textbox', page: 0, points: [{ x: 100, y: 100 }, { x: 200, y: 300 }], text: 'Hello',
+      style: { color: '#000000', fill: null, width: 1, opacity: 1, fillOpacity: 1, fontSize: 12, lineStyle: 'solid' },
+      subject: 'Text Box', label: '', comment: '', author: 'a', created: new Date().toISOString(), modified: new Date().toISOString(), status: 'None',
+    } as never;
+    const out = await savePdf({ original: bytes, pages, markups: [m], importedRefs: new Set(), calibrations: [null, null], dirtyCalibrations: new Set() });
+    const doc = await PDFDocument.load(out);
+    const annots = doc.getPage(0).node.lookup(N('Annots'), PDFArray).asArray().map((r) => doc.context.lookup(r) as PDFDict);
+    const ft = annots.find((d) => d.get(N('Subtype'))?.toString() === '/FreeText' && d.get(N('CTData')))!;
+    const ap = (ft.lookup(N('AP')) as PDFDict).lookup(N('N')) as never;
+    const ops = new TextDecoder().decode(decodePDFRawStream(ap).decode());
+    expect(ops).toMatch(/0 1 -1 0 [\d.]+ [\d.]+ Tm \S+ Tj/);
+    expect(textFrame(90).right).toEqual({ x: 0, y: 1 });
+    expect(textFrame(0).right).toEqual({ x: 1, y: 0 });
   });
 });

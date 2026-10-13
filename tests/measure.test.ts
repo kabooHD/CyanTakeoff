@@ -127,3 +127,56 @@ describe('viewports', async () => {
     expect(viewportAt(vps, { x: 75, y: 75 })?.id).toBe('b');
   });
 });
+
+describe('separate X/Y scales', async () => {
+  const { withYScale, stripY, yOf, customScale } = await import('../src/model/measure');
+  const x = customScale(1, 'in', 10, 'ft'); // 1 in = 10 ft
+  const y = customScale(1, 'in', 20, 'ft'); // 1 in = 20 ft
+  const s = withYScale(x, y);
+  it('keeps both factors and labels', () => {
+    expect(s.yFactor).toBeCloseTo(20 / 72, 9);
+    expect(s.label).toBe('X 1 in = 10 ft, Y 1 in = 20 ft');
+    expect(stripY(s).label).toBe('1 in = 10 ft');
+    expect(yOf(s).factor).toBeCloseTo(20 / 72, 9);
+  });
+  it('converts a Y scale in other units', () => {
+    const ym = customScale(1, 'in', 3.048, 'm'); // 10 ft
+    expect(withYScale(x, ym).yFactor).toBeUndefined(); // same as X -> no separate Y
+  });
+  it('measures lengths and areas along each axis', () => {
+    const h = measure({ type: 'length', points: [{ x: 0, y: 0 }, { x: 72, y: 0 }], scale: s })!;
+    const v = measure({ type: 'length', points: [{ x: 0, y: 0 }, { x: 0, y: 72 }], scale: s })!;
+    expect(h.length).toBeCloseTo(10, 6);
+    expect(v.length).toBeCloseTo(20, 6);
+    const a = measure({ type: 'area', points: [{ x: 0, y: 0 }, { x: 72, y: 0 }, { x: 72, y: 72 }, { x: 0, y: 72 }], scale: s })!;
+    expect(a.area).toBeCloseTo(200, 6);
+  });
+});
+
+describe('cutout rules (Revu)', async () => {
+  const { applyCutout } = await import('../src/model/cutouts');
+  const sq = (x: number, y: number, w: number, h = w): Pt[] => [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
+  const area = { points: sq(0, 0, 100) };
+  it('fuses overlapping polygon cutouts into one', () => {
+    const a = applyCutout(area, { kind: 'polygon', points: sq(10, 10, 20) });
+    if ('error' in a) throw new Error(a.error);
+    const b = applyCutout(a, { kind: 'polygon', points: sq(20, 20, 20) });
+    if ('error' in b) throw new Error(b.error);
+    expect(b.cutouts).toHaveLength(1);
+    expect(polygonArea(b.cutouts[0].points)).toBeCloseTo(400 + 400 - 100, 6);
+  });
+  it('a polygon cutout across the edge trims the markup instead', () => {
+    const r = applyCutout(area, { kind: 'polygon', points: sq(80, 40, 40, 20) });
+    if ('error' in r) throw new Error(r.error);
+    expect(r.cutouts).toHaveLength(0);
+    expect(polygonArea(r.points)).toBeCloseTo(10000 - 20 * 20, 6);
+  });
+  it('rejects ellipse cutouts that overlap the edge or another cutout', () => {
+    expect('error' in applyCutout(area, { kind: 'ellipse', points: [{ x: 90, y: 40 }, { x: 110, y: 60 }] })).toBe(true);
+    const a = applyCutout(area, { kind: 'polygon', points: sq(10, 10, 20) });
+    if ('error' in a) throw new Error(a.error);
+    expect('error' in applyCutout(a, { kind: 'ellipse', points: [{ x: 25, y: 25 }, { x: 45, y: 45 }] })).toBe(true);
+    const ok = applyCutout(a, { kind: 'ellipse', points: [{ x: 50, y: 50 }, { x: 70, y: 70 }] });
+    expect('cutouts' in ok && ok.cutouts.length).toBe(2);
+  });
+});
