@@ -139,6 +139,18 @@ and reopen; tested against real Revu files (values match Revu's own).
 - Area/volume cutouts (polygon and ellipse)
 - Viewports (different scales on one sheet), saved in Revu's `/VP` layout
 
+### Done: Revu feature parity pass (before the public test)
+Measurement gaps closed (separate X/Y scales, 3-point radius, partial-arc
+radius, rotated text, Revu cutout rules), Dynamic Fill, the full Revu markup
+tool set and arrangement commands, Spaces (Revu /BSISpaces), Legends,
+slope / rise-drop / wall area, custom columns with formulas, Excel and PDF
+summaries, replies and checkmarks, Search, split view, page operations,
+Flatten, Compare and Overlay, page labels, Batch Link, Sets, Slip Sheet,
+tool sets with Drawing mode, keyboard shortcut editor, Profiles, form
+filling, image signatures, redaction and OCR. Remaining gaps are listed in
+CLAUDE.md (e.g. continuous view, alignment points for Compare, certificate
+signatures, form creation, Revu .btx import).
+
 ### Next 2: public test build in local mode (days)
 - Host on a VPS (static site + HTTPS), with a feedback link
 - Post to Revu user communities; collect real Revu files and bug reports
@@ -153,14 +165,14 @@ and reopen; tested against real Revu files (values match Revu's own).
 - We cannot join Revu's Studio sessions (closed service); the pitch is
   "anyone can join with a link, on any device"
 
-### Next 4: document productivity
-Compare versions and overlay revisions (natural once versions exist), Sets
-and sheet links, slip sheets, page operations, then Spaces, Legends,
-Dynamic Fill, custom columns and Excel export, touch support.
+### Next 4: after the public test
+Compare against earlier versions of a cloud document, continuous and side
+by side view modes, Rotate View, Compare alignment points and vector
+comparison, touch support.
 
 ### Later
-Signatures, OCR, forms, redaction, profiles and shortcut editor, Revu tool
-set (.btx) import, accessibility, localisation.
+Certificate digital signatures, form field creation, Revu tool set (.btx)
+import once its format is documented, accessibility, localisation.
 
 ## 6. File fidelity is the headline
 

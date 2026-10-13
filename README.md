@@ -10,35 +10,28 @@ shortcuts, and markups saved as standard PDF annotations.
 
 ## What works today
 
-- **Revu-style workspace:** menu bar, toolbars, left/right panel tab strips
-  (Thumbnails, Bookmarks, Properties, Tool Chest, Measurements), a document
-  tab per file, the Markups List docked at the bottom, and a status bar with
-  page navigation, scale, cursor position and Snap/Grid/Content/Markup/Reuse/Sync
-  toggles.
-- **Markup tools:** Text Box, Callout, Note, Pen, Highlight, Line, Arrow,
-  Polyline, Rectangle, Ellipse, Polygon, Cloud. Double-click a tool to lock it.
-- **Takeoff:** Calibrate (two points + known distance) or pick a preset scale
-  (architectural, engineering, metric); Length, Polylength, Area, Perimeter,
-  Volume (area × depth) and Count. Feet-inches display with fractions.
-  Re-calibrating updates existing measurements on the page. Viewports give
-  part of a sheet (a detail) its own scale.
-- **Markups List:** sortable, filterable, editable status, totals, and
-  Summary export to CSV (opens in Excel).
-- **Tool Chest:** Recent Tools and My Tools (with a sample takeoff set); add
-  any markup with right-click → Add to My Tools.
-- **Editing:** select, multi-select (Ctrl+click or drag a box), move, drag
-  vertices, Shift for 45° constraint, snapping to drawing content (line
-  endpoints and lines), markup points and grid,
-  copy/paste, undo/redo, arrow-key nudge.
-- **Files:** open several PDFs at once (or drag and drop), save back in place
-  (Chrome/Edge) or download. Markups are written as standard PDF annotations
-  with appearance streams, and measurements carry ISO 32000 `/Measure`
-  dictionaries plus a page viewport scale, so other PDF tools can display them.
-  Annotations already in a file, including measurements from other tools, are
-  imported; annotation types CyanTakeoff doesn't edit yet (stamps, images,
-  form fields) are left untouched and still displayed.
-- Sharp rendering at any zoom on large sheets (tiled detail rendering), mouse
-  wheel zooms at the cursor, Space or middle mouse button pans.
+- **Revu-style workspace:** menu bar (incl. CyanTakeoff and Batch menus),
+  toolbars, side panel tabs (Thumbnails, Bookmarks, Spaces, Search, Sets;
+  Properties, Tool Chest, Measurements), Markups List, status bar with
+  Snap/Grid/Content/Markup/Reuse/Sync, split view, and Revu's default
+  keyboard shortcuts (editable, with Profiles).
+- **Markup tools:** Text Box, Typewriter, Callout, Note, Flag, Pen, Eraser,
+  Highlight (text-aware), Strikethrough, Underline, Squiggly, Line, Arrow,
+  Dimension, Arc, Polyline, Rectangle, Ellipse, Polygon, Cloud, Cloud+,
+  Stamp, Image, Snapshot, Hyperlink, File Attachment, Legend; Group,
+  Arrange, Lock, Align, Flip, Format Painter, Lasso.
+- **Takeoff:** page scales (preset, custom, calibrate, separate X/Y),
+  viewports; Length, Polylength, Area, Perimeter, Volume, Count, Angle,
+  Radius (incl. 3-point), Diameter; cutouts with Revu's rules; Dynamic Fill;
+  slope, rise/drop and wall area; Spaces; Legends.
+- **Markups List:** sort, filter, search, columns (incl. custom columns
+  with formulas), replies, checkmarks, totals; Summary to Excel, PDF or CSV.
+- **Documents:** search, page operations (insert, delete, extract, replace,
+  rotate, reorder), combine, split, flatten, Compare and Overlay, page
+  labels from sheet numbers, Batch Link, Slip Sheet, form filling,
+  signatures, redaction and OCR.
+- **Files:** everything is saved as standard PDF annotations the way Revu
+  writes them; files are opened and saved in the browser, nothing uploaded.
 
 ## Revu compatibility
 
