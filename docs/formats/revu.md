@@ -86,5 +86,12 @@ Verified with pyHanko: intact, valid, modification level "form filling"
 for a later signature (markups added after signing show as "other" there:
 pyHanko has no rule for annotation changes yet; the signature stays valid).
 
+Other Revu annotation keys known from pymkup (MIT): `/BSIColumnData`
+(custom column values), `/GroupNesting`, `/SlopeType`, `/PitchRun`,
+`/DepthUnit`, `/Depth`, `/RiseDrop`, `/CountStyle`, `/NumCounts`,
+`/CountScale`, `/BBMeasure`, `/MeasurementTypes`, `/BSIBatchQuery`. When a
+user edits an imported markup we rewrite it, but keep every key we do not
+generate ourselves (custom column data, layer `/OC`, other apps' keys).
+
 CyanTakeoff reads all of the above that it supports, preserves the rest
 byte-for-byte, and writes its own measurements with the same structure.

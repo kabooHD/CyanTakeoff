@@ -108,7 +108,10 @@ Next (from `docs/PLAN.md`):
    with a display name), live collaboration, self-hostable
 3. Compare versions, Sets, slip sheets, Spaces, Legends, Dynamic Fill, XLSX
 
-Known gaps: Revu cutout storage unknown (ours in CTData); curved segments
+Known gaps: need Revu-made samples (none public; wanted list in
+tests/fixtures/revu/README.md): cutout storage (ours in CTData), custom
+column values (/BSIColumnData kept on edit but not read), .btx tool sets;
+curved segments
 on polygons/cutouts (Ctrl+drag) not supported; vector Compare ignores
 colour/lineweight-only changes; signatures are not checked against a
 trust list and have no timestamps; OCR languages limited to Latin scripts

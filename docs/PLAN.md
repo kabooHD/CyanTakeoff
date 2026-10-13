@@ -158,8 +158,10 @@ filling, image signatures, redaction and OCR.
 - [x] Certificate digital signatures (sign with a .pfx/.p12, verify)
 - [x] OCR in more languages; redaction that removes content without
   rasterising the page
-- [ ] Revu tool sets (.btx), custom-column and cutout storage: only if
-  public Revu-made samples exist, else from testers' files
+- [x] Searched for public Revu tool sets (.btx), custom-column and cutout
+  samples: none exist. Edited Revu markups now keep keys we do not write
+  (e.g. /BSIColumnData). The formats wait for testers' files (wanted list in
+  tests/fixtures/revu/README.md)
 
 ### Next 2: public test build in local mode (days)
 - Host on a VPS (static site + HTTPS), with a feedback link

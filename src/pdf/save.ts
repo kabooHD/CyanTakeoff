@@ -638,6 +638,25 @@ export interface SaveInput {
 /** A Revu-style /NM: 16 random capital letters. */
 const randomNM = () => Array.from({ length: 16 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
 
+/**
+ * Keys of an edited annotation that are derived from its geometry, style or
+ * measurement and are written afresh; anything else the original carried
+ * (Revu's /BSIColumnData custom column values, /OC layer, /GroupNesting,
+ * other apps' private keys...) is kept when the markup is rewritten.
+ */
+const REGENERATED = new Set(['Type', 'Subtype', 'AP', 'AS', 'Rect', 'RD', 'Vertices', 'L', 'LL', 'LLE', 'LLO', 'CL', 'QuadPoints', 'InkList',
+  'Path', 'Popup', 'Parent', 'IRT', 'RT', 'P', 'Measure', 'BBMeasure', 'Depth', 'DepthUnit', 'SlopeType', 'PitchRun', 'RiseDrop',
+  'NumCounts', 'CountScale', 'CountStyle', 'MeasurementTypes', 'Contents', 'C', 'IC', 'CA', 'ca', 'BS', 'BE', 'Border', 'DS', 'RC', 'LE',
+  'IT', 'M', 'Cap', 'CP', 'Q', 'MK', 'F', COLUMNS_KEY, 'CTData']);
+
+function carryOver(doc: PDFDocument, from: PDFRef, to: PDFRef) {
+  const old = doc.context.lookup(from), fresh = doc.context.lookup(to);
+  if (!(old instanceof PDFDict) || !(fresh instanceof PDFDict)) return;
+  for (const [k, v] of old.entries()) {
+    if (!fresh.has(k) && !REGENERATED.has(k.toString().slice(1))) fresh.set(k, v);
+  }
+}
+
 export async function savePdf(input: SaveInput): Promise<Uint8Array> {
   const doc = await loadForUpdate(input.original);
   // Legends summarise other markups, so they are always rewritten with current totals.
@@ -683,6 +702,7 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
     }
     const rows = m.type === 'legend' && m.legend ? legendRows(m.legend, input.markups, m.page) : [];
     const built = buildAnnot(doc, font, m, input.pages[m.page], image, pageRefs, rows);
+    if (m.source) carryOver(doc, PDFRef.of(m.source.objectNumber, m.source.generation), built[0]);
     if (m.groupId) {
       if (!groupHead.has(m.groupId)) groupHead.set(m.groupId, built[0]);
       else pendingMembers.push({ ref: built[0], group: m.groupId });

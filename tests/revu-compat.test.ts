@@ -3,7 +3,7 @@
 // as an independent answer key for CyanTakeoff's own calculations.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { PDFArray, PDFDict, PDFDocument, PDFName } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRef, PDFString } from 'pdf-lib';
 
 const N = (s: string) => PDFName.of(s);
 import { importAnnotations } from '../src/pdf/importAnnots';
@@ -115,6 +115,31 @@ describe('round trip: Revu file -> CyanTakeoff save -> reopen', () => {
     expect(intents.filter((i) => i === '/PolygonRadius')).toHaveLength(2);
     expect(intents).toContain('/CircleDimension');
     expect(intents).toContain('/PolyLineAngle');
+  });
+});
+
+describe('fidelity of edited Revu markups', () => {
+  it('keeps keys we do not write (custom column data, layer) when a markup is rewritten', async () => {
+    const { savePdf } = await import('../src/pdf/save');
+    const src0 = await PDFDocument.load(readFileSync('tests/fixtures/revu/measure.pdf'), { updateMetadata: false });
+    const ref = src0.getPage(0).node.lookup(N('Annots'), PDFArray).get(0) as PDFRef;
+    const dict = src0.context.lookup(ref) as PDFDict;
+    dict.set(N('BSIColumnData'), src0.context.obj([PDFString.of('Cost Code'), PDFString.of('03-300')]));
+    dict.set(N('XYZPrivate'), PDFString.of('kept'));
+    const bytes = await src0.save({ useObjectStreams: false });
+    const src = await PDFDocument.load(bytes, { updateMetadata: false });
+    const first = importAnnotations(src);
+    const identity = { convertToPdfPoint: (x: number, y: number) => [x, y] };
+    const pages = src.getPages().map((_, index) => ({ index, label: '', width: 0, height: 0, viewport: identity })) as never;
+    const target = first.raws.find((r) => r.markup.source?.objectNumber === ref.objectNumber)!;
+    const markups = first.raws.map((r) => (r === target ? { ...r.markup, points: r.pdfPoints, comment: 'edited', source: { ...r.markup.source!, dirty: true } } : { ...r.markup, points: r.pdfPoints }));
+    const out = await savePdf({ original: bytes, pages, markups, importedRefs: new Set(first.imported.flatMap((x) => [...x])), calibrations: first.pageScales, dirtyCalibrations: new Set() });
+    const again = await PDFDocument.load(out, { updateMetadata: false });
+    const annots = again.getPage(0).node.lookup(N('Annots'), PDFArray).asArray().map((r) => again.context.lookup(r) as PDFDict);
+    const edited = annots[annots.length - 1]; // rewritten markups are appended
+    expect(annots.filter((a) => a.get(N('XYZPrivate')))).toHaveLength(1);
+    expect(String(edited.lookup(N('BSIColumnData')))).toContain('03-300');
+    expect((edited.lookup(N('XYZPrivate')) as PDFString).decodeText()).toBe('kept');
   });
 });
 

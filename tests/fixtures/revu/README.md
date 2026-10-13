@@ -16,5 +16,14 @@ file dates are consistent with it.
 Source: the test files of [pymkup](https://github.com/psolin/pymkup) by
 Paul Solin, MIT licensed (see `LICENSE-pymkup.txt`).
 
-Still needed: files from Revu 21.x (the current release line, 21.11 as of
-September 2026). Add any you can get here with the same table row.
+Still needed (searched npm, PyPI and the Bluebeam help in October 2026;
+no public Revu-made samples exist). Add any you can get here with a table
+row:
+
+- files from Revu 21.x (the current release line, 21.11 as of September 2026);
+- a file with custom column values (Revu stores them per markup in
+  `/BSIColumnData`, per pymkup; the structure is unknown to us, so we keep
+  the key when a markup is edited but do not read it yet);
+- an Area or Volume measurement with cutouts (storage unknown; ours goes in
+  `/CTData`);
+- a Tool Chest tool set exported from Revu (`.btx`), to import Revu tool sets.
