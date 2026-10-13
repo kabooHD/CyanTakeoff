@@ -80,6 +80,17 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - Replace Pages keeps the old page's markups, page scale and Spaces (the
   basis of slip sheeting). Flatten keeps hyperlinks and form fields.
 
+## Sets, Batch Link, Slip Sheet
+- Sets (Alt+2): several PDFs browsed as one set of sheets. CyanTakeoff:
+  the open documents, listed by page label, with a filter.
+- Page labels: sheet numbers such as A-101; can be generated from the
+  title block. Saved as the PDF's /PageLabels.
+- Batch Link: turns sheet references in the drawings into hyperlinks to
+  those sheets (same file: page destination; another file: GoToR).
+- Slip Sheet: new revisions replace sheets matched by sheet number; the
+  markups (and scale, Spaces) carry forward; links and bookmarks to the
+  replaced page follow it.
+
 ## Compare
 - Compare Documents: pick the original and revised document/page; the
   differences are clouded (subject "Compare", label Added/Removed/Changed)

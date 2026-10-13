@@ -230,6 +230,18 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
       if (rect.length !== 4) return null;
       const a = getDict(doc, dict, 'A');
       const uri = a && getName(doc, a, 'S') === 'URI' ? getText(doc, a, 'URI') : undefined;
+      // Link to a page of another file (Revu Batch Link across a set).
+      if (a && getName(doc, a, 'S') === 'GoToR') {
+        const fs = lookup(doc, a.get(N('F')));
+        const file = fs instanceof PDFDict ? getText(doc, fs, 'UF') ?? getText(doc, fs, 'F') : getText(doc, a, 'F');
+        const d = lookup(doc, a.get(N('D')));
+        const pg = d instanceof PDFArray ? lookup(doc, d.get(0)) : undefined;
+        if (!file || rect.length !== 4) return null;
+        pts = rectPts(rect);
+        type = 'link';
+        extra = { link: { file, page: typeof (pg as { asNumber?: () => number })?.asNumber === 'function' ? (pg as unknown as { asNumber: () => number }).asNumber() : 0 } };
+        break;
+      }
       const dest = lookup(doc, dict.get(N('Dest')) ?? (a && getName(doc, a, 'S') === 'GoTo' ? a.get(N('D')) : undefined));
       const pageRef = dest instanceof PDFArray ? dest.get(0) : undefined;
       const target = pageRef instanceof PDFRef ? doc.getPages().findIndex((pg) => pg.ref === pageRef) : -1;

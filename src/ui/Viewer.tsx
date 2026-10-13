@@ -815,7 +815,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
 
   const followLink = (m: Markup) => {
     if (m.link?.uri) window.open(m.link.uri, '_blank', 'noopener');
-    else if (m.link?.page !== undefined) s.setViewPage(pane, m.link.page);
+    else if (m.link?.file) {
+      const target = s.docs.find((x) => x.name === m.link!.file);
+      if (!target) { s.setStatus(`Open ${m.link.file} (or its Set) to follow this link`); return; }
+      s.setActive(target.id);
+      s.setPage(m.link.page ?? 0);
+    } else if (m.link?.page !== undefined) s.setViewPage(pane, m.link.page);
   };
 
   // The browser's own menu is suppressed; the right button is handled on pointer-up.

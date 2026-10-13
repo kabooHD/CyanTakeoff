@@ -159,8 +159,8 @@ export interface Markup {
   image?: string;
   /** File attachment: name, MIME type and base64 contents. */
   file?: { name: string; mime: string; data: string };
-  /** Hyperlink target: a web address or a page (0-based). */
-  link?: { uri?: string; page?: number };
+  /** Hyperlink target: a web address, or a page (0-based) here or in another file of the set. */
+  link?: { uri?: string; page?: number; file?: string };
   /** Markups sharing a group id move and select together (Revu Group). */
   groupId?: string;
   /** Locked markups cannot be moved, resized or deleted (Revu Lock). */

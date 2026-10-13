@@ -9,6 +9,7 @@ import { exportSummaryCsv, openFile, openSample } from './actions';
 import { viewerApi } from './Viewer';
 import { combineFiles, openPagesDialog } from './PagesDialog';
 import { useCompareDialog } from './Compare';
+import { useSheetsDialog } from './Sheets';
 import { arrangeItems } from './arrangeMenu';
 import { useCursor } from './cursor';
 
@@ -80,6 +81,9 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Replace Pages…', shortcut: 'Ctrl+Shift+Y', disabled: noDoc, action: () => openPagesDialog('replace') },
       { label: 'Rotate Pages…', shortcut: 'Ctrl+Shift+R', disabled: noDoc, action: () => openPagesDialog('rotate') },
       { label: 'Split Document…', disabled: noDoc, action: () => openPagesDialog('split') },
+      { label: 'Slip Sheet…', disabled: noDoc, action: () => openPagesDialog('slip-sheet') },
+      { label: 'Page Labels…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'labels' }) },
+      { label: 'Batch Link…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'batch-link' }) },
       { sep: true },
       { label: 'Flatten Markups…', shortcut: 'Ctrl+Shift+M', disabled: noDoc, action: () => openPagesDialog('flatten') },
       { sep: true },

@@ -662,6 +662,41 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.screenshot({ path: `${OUT}/15-overlay.png` });
 }
 
+// Sheets: page labels from title blocks, Batch Link, Sets panel and Slip Sheet (on the clean sample).
+{
+  await page.locator('.doc-tab', { hasText: 'Sample Floor Plan.pdf' }).click();
+  await page.waitForTimeout(800);
+  const openMenu = async (menu, item) => { await page.getByRole('button', { name: menu, exact: true }).click(); await page.getByRole('menuitem', { name: item }).click(); };
+  await openMenu('Document', 'Page Labels…');
+  const pl = page.getByRole('dialog', { name: 'Page Labels' });
+  await pl.getByRole('button', { name: 'Use Sheet Numbers' }).click();
+  await page.waitForFunction(() => document.querySelector('[aria-label="Label of page 2"]')?.value === 'C-101');
+  await pl.getByRole('button', { name: 'OK' }).click();
+  await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Page labels updated'));
+  assert((await page.locator('.statusbar input').first().inputValue()) === 'A-101', 'page labels from title-block sheet numbers (A-101)');
+  await openMenu('Document', 'Batch Link…');
+  const bl = page.getByRole('dialog', { name: 'Batch Link' });
+  await bl.getByLabel('Batch link scope').selectOption('doc');
+  await bl.getByRole('button', { name: 'Run' }).click();
+  await page.waitForFunction(() => /Batch Link created \d+/.test(document.querySelector('.statusbar')?.textContent ?? ''));
+  const made = Number((await page.locator('.statusbar').innerText()).match(/Batch Link created (\d+)/)[1]);
+  assert(made === 2, `Batch Link links the two sheet references (${made})`);
+  await page.keyboard.press('Alt+2');
+  await page.locator('.set-sheet', { hasText: 'C-101' }).first().click();
+  assert((await page.locator('.statusbar input').first().inputValue()) === 'C-101', 'Sets panel jumps to sheet C-101');
+  await page.keyboard.press('Alt+2');
+  // Slip sheet a new revision (the original sample) over this one: matched by sheet number, links carried forward.
+  await openMenu('Document', 'Slip Sheet…');
+  const ss = page.getByRole('dialog', { name: 'Slip Sheet' });
+  const [fc] = await Promise.all([page.waitForEvent('filechooser'), ss.getByRole('button', { name: 'Choose PDF…' }).click()]);
+  await fc.setFiles('public/sample-floorplan.pdf');
+  await ss.getByText('(2 pages)').waitFor();
+  await ss.getByRole('button', { name: 'OK' }).click();
+  await page.waitForFunction(() => /Slip Sheet: 2 sheet/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 30000 });
+  const links = (await page.locator('.ml-table tbody').innerText()).split('Hyperlink').length - 1;
+  assert(links === 2, `Slip Sheet replaces both sheets and keeps their markups (${links} links)`);
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],

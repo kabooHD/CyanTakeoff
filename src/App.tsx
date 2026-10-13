@@ -16,6 +16,7 @@ import { nextHit, useSearch } from './ui/Search';
 import { PagesDialog, openPagesDialog } from './ui/PagesDialog';
 import { rotatePages } from './pdf/pages';
 import { CompareDialog } from './ui/Compare';
+import { SheetsDialog } from './ui/Sheets';
 
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
@@ -37,7 +38,7 @@ export function App() {
       // Revu 20/21 default shortcuts (support.bluebeam.com, "Keyboard shortcuts
       // and mouse navigation"). Browser-reserved keys (Ctrl+F4, Ctrl+Tab, Ctrl+N,
       // Ctrl+T) cannot be intercepted on the web; Ctrl+W/PgUp/PgDn are kept as extras.
-      const left = (p: 'thumbnails' | 'bookmarks' | 'spaces' | 'search') => run(() => s.setPanels({ left: s.left === p ? null : p }));
+      const left = (p: 'thumbnails' | 'bookmarks' | 'spaces' | 'search' | 'sets') => run(() => s.setPanels({ left: s.left === p ? null : p }));
       const right = (p: 'properties' | 'toolchest' | 'measurements') => run(() => s.setPanels({ right: s.right === p ? null : p }));
       switch (combo) {
         // File
@@ -98,6 +99,7 @@ export function App() {
         case 'Alt+B': return left('bookmarks');
         case 'Alt+S': return left('spaces');
         case 'Alt+1': return left('search');
+        case 'Alt+2': return left('sets');
         case 'Ctrl+F': return run(() => { s.setPanels({ left: 'search' }); useSearch.setState((x) => ({ focusTick: x.focusTick + 1 })); });
         case 'F3': return run(() => nextHit(1));
         case 'Ctrl+Shift+I': return run(() => d && openPagesDialog('insert'));
@@ -178,6 +180,7 @@ export function App() {
       <SpaceDialog />
       <PagesDialog />
       <CompareDialog />
+      <SheetsDialog />
       {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
       {dialog === 'about' && <AboutDialog onClose={() => setDialog(null)} />}
     </div>

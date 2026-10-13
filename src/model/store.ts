@@ -12,7 +12,7 @@ import type {
   CustomColumn, Markup, MarkupStyle, MarkupType, Pt, Scale, Space, ToolId, ToolPreset, Toggles, Viewport,
 } from './types';
 
-export type LeftPanel = 'thumbnails' | 'bookmarks' | 'spaces' | 'search' | null;
+export type LeftPanel = 'thumbnails' | 'bookmarks' | 'spaces' | 'search' | 'sets' | null;
 export type RightPanel = 'properties' | 'toolchest' | 'measurements' | null;
 
 /** Page scales and viewports, for undoing scale changes. */

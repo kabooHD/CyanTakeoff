@@ -9,14 +9,17 @@ import {
   deletePages, extractPages, flattenPage, insertBlankPage, insertPages, replacePage, rotatePages, splitDocument,
 } from '../pdf/pages';
 import { pickFile } from './toolActions';
+import { openPdf } from '../pdf/document';
+import { detectSheetNumbers } from './Sheets';
+import type { DocState } from '../model/store';
 
-export type PagesOp = 'insert' | 'insert-blank' | 'delete' | 'extract' | 'rotate' | 'replace' | 'flatten' | 'split';
+export type PagesOp = 'insert' | 'insert-blank' | 'delete' | 'extract' | 'rotate' | 'replace' | 'flatten' | 'split' | 'slip-sheet';
 export const usePagesDialog = create<{ op: PagesOp | null }>(() => ({ op: null }));
 export const openPagesDialog = (op: PagesOp) => usePagesDialog.setState({ op });
 
 const TITLES: Record<PagesOp, string> = {
   insert: 'Insert Pages', 'insert-blank': 'Insert Blank Page', delete: 'Delete Pages', extract: 'Extract Pages',
-  rotate: 'Rotate Pages', replace: 'Replace Pages', flatten: 'Flatten Markups', split: 'Split Document',
+  rotate: 'Rotate Pages', replace: 'Replace Pages', flatten: 'Flatten Markups', split: 'Split Document', 'slip-sheet': 'Slip Sheet',
 };
 
 function download(bytes: Uint8Array, name: string) {
@@ -46,7 +49,8 @@ function PagesForm({ op }: { op: PagesOp }) {
   const [delAfter, setDelAfter] = useState(false);
   const [keep, setKeep] = useState(true);
   const [every, setEvery] = useState('1');
-  const [file, setFile] = useState<{ name: string; doc: PDFDocument } | null>(null);
+  const [file, setFile] = useState<{ name: string; doc: PDFDocument; bytes: Uint8Array } | null>(null);
+  const [appendNew, setAppendNew] = useState(true);
   if (!doc) return null;
   const close = () => usePagesDialog.setState({ op: null });
   const pages = scope === 'current' ? [doc.page] : scope === 'all' ? doc.loaded.pages.map((p) => p.index) : parsePageRange(range, n);
@@ -55,7 +59,7 @@ function PagesForm({ op }: { op: PagesOp }) {
   const choose = async () => {
     const f = await pickFile('.pdf,application/pdf');
     if (!f) return;
-    try { setFile({ name: f.name, doc: await PDFDocument.load(new Uint8Array(await f.arrayBuffer()), { updateMetadata: false }) }); }
+    try { const bytes = new Uint8Array(await f.arrayBuffer()); setFile({ name: f.name, bytes, doc: await PDFDocument.load(bytes.slice(), { updateMetadata: false }) }); }
     catch { s.setStatus(`${f.name} could not be read as a PDF`); }
   };
 
@@ -92,6 +96,24 @@ function PagesForm({ op }: { op: PagesOp }) {
       case 'flatten':
         await s.transformDoc((lib) => { for (const p of pages) flattenPage(lib, lib.getPage(p)); }, `Flattened markups on ${pages.length} page(s)`);
         break;
+      case 'slip-sheet': {
+        if (!file) return;
+        // Match the new revision's sheets to this document's by page label (sheet number).
+        s.setStatus('Slip Sheet: reading sheet numbers…');
+        const rev = await openPdf(file.bytes.slice());
+        const tmp = { ...doc, loaded: rev } as DocState;
+        const found = await detectSheetNumbers(tmp);
+        const newLabels = rev.pages.map((p, i) => (/^\d+$/.test(p.label) && found[i] ? found[i]! : p.label));
+        rev.pdf.loadingTask.destroy();
+        const oldLabels = doc.loaded.pages.map((p) => p.label);
+        const pairs = newLabels.map((l, i) => ({ src: i, at: oldLabels.indexOf(l) }));
+        const matched = pairs.filter((x) => x.at >= 0), extra = pairs.filter((x) => x.at < 0);
+        await s.transformDoc(async (lib) => {
+          for (const { src, at: i } of matched) await replacePage(lib, i, file.doc, src, true);
+          if (appendNew && extra.length) await insertPages(lib, file.doc, lib.getPageCount(), extra.map((x) => x.src));
+        }, `Slip Sheet: ${matched.length} sheet(s) replaced with markups carried forward${appendNew && extra.length ? `, ${extra.length} new sheet(s) added` : ''}`);
+        break;
+      }
       case 'split': {
         const lib = await PDFDocument.load(await serialize(doc), { updateMetadata: false });
         const parts = await splitDocument(lib, Math.max(1, Number(every) || 1));
@@ -123,7 +145,7 @@ function PagesForm({ op }: { op: PagesOp }) {
   const fileRow = (
     <div className="form-row"><span>File</span><button onClick={choose}>Choose PDF…</button> <span className="muted">{file ? `${file.name} (${file.doc.getPageCount()} pages)` : 'none'}</span></div>
   );
-  const ready = (op !== 'insert' && op !== 'replace') || !!file;
+  const ready = (op !== 'insert' && op !== 'replace' && op !== 'slip-sheet') || !!file;
   return (
     <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>
       <div className="modal" role="dialog" aria-label={TITLES[op]} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') close(); }}>
@@ -143,10 +165,12 @@ function PagesForm({ op }: { op: PagesOp }) {
           {op === 'replace' && <>{range_}{fileRow}<div className="form-row"><label><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} /> Keep markups, page scale and Spaces</label></div>
             <p className="muted small">Replaces the chosen pages, in order, with the new file's pages from page 1.</p></>}
           {op === 'flatten' && <p className="muted small">Markups become part of the page content and can no longer be edited.</p>}
+          {op === 'slip-sheet' && <>{fileRow}<div className="form-row"><label><input type="checkbox" checked={appendNew} onChange={(e) => setAppendNew(e.target.checked)} /> Add sheets that are not in this document</label></div>
+            <p className="muted small">Each sheet of the new revision replaces the sheet with the same number (page label), keeping its markups, scale and Spaces.</p></>}
           {op === 'split' && <div className="form-row"><span>Every</span><input aria-label="Pages per file" type="number" min={1} value={every} onChange={(e) => setEvery(e.target.value)} style={{ width: 60 }} /> page(s) per file</div>}
           <div className="modal-actions">
             <span className="spacer" />
-            <button className="primary" disabled={!ready || (op !== 'insert' && op !== 'insert-blank' && op !== 'split' && !pages.length)} onClick={ok}>OK</button>
+            <button className="primary" disabled={!ready || (op !== 'insert' && op !== 'insert-blank' && op !== 'split' && op !== 'slip-sheet' && !pages.length)} onClick={ok}>OK</button>
             <button onClick={close}>Cancel</button>
           </div>
         </div>

@@ -6,6 +6,7 @@ import { toolById } from '../tools/tools';
 import { Icon } from './icons';
 import { SpacesPanel } from './SpacesPanel';
 import { SearchPanel } from './Search';
+import { SetsPanel } from './Sheets';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { openPagesDialog } from './PagesDialog';
 import { deletePages, movePage, rotatePages } from '../pdf/pages';
@@ -16,7 +17,7 @@ import { legendKey } from '../model/legend';
 export function SideTabs({ side }: { side: 'left' | 'right' }) {
   const s = useApp();
   const tabs = side === 'left'
-    ? [{ id: 'thumbnails', label: 'Thumbnails' }, { id: 'bookmarks', label: 'Bookmarks' }, { id: 'spaces', label: 'Spaces' }, { id: 'search', label: 'Search' }] as const
+    ? [{ id: 'thumbnails', label: 'Thumbnails' }, { id: 'bookmarks', label: 'Bookmarks' }, { id: 'spaces', label: 'Spaces' }, { id: 'search', label: 'Search' }, { id: 'sets', label: 'Sets' }] as const
     : [{ id: 'properties', label: 'Properties' }, { id: 'toolchest', label: 'Tool Chest' }, { id: 'measurements', label: 'Measurements' }] as const;
   const cur = side === 'left' ? s.left : s.right;
   return (
@@ -47,6 +48,7 @@ export function LeftPanel() {
   const doc = useActiveDoc();
   if (!s.left) return null;
   const close = () => s.setPanels({ left: null });
+  if (s.left === 'sets') return <PanelFrame title="Sets" onClose={close}><SetsPanel /></PanelFrame>;
   if (s.left === 'search') return <PanelFrame title="Search" onClose={close}>{doc ? <SearchPanel doc={doc} /> : null}</PanelFrame>;
   if (s.left === 'spaces') return <PanelFrame title="Spaces" onClose={close}>{doc ? <SpacesPanel doc={doc} /> : null}</PanelFrame>;
   return s.left === 'thumbnails'

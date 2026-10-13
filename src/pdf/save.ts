@@ -553,6 +553,7 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
       entries.Rect = [b.minX, b.minY, b.maxX, b.maxY];
       entries.Border = [0, 0, 0];
       if (m.link?.uri) entries.A = { S: 'URI', URI: PDFString.of(m.link.uri) };
+      else if (m.link?.file) entries.A = { S: 'GoToR', F: { Type: 'Filespec', F: PDFString.of(m.link.file), UF: PDFHexString.fromText(m.link.file) }, D: [m.link.page ?? 0, N('Fit')], NewWindow: false };
       else if (m.link?.page !== undefined && pageRefs[m.link.page]) entries.Dest = [pageRefs[m.link.page], N('Fit')];
       break;
     }

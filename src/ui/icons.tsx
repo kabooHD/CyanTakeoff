@@ -41,6 +41,7 @@ const P: Record<string, ReactNode> = {
   space: <><path d="M3 4h14v12H3z" /><path d="M3 10h7V4M10 10v6" strokeDasharray="2 1.5" /></>,
   legend: <><rect x="2.5" y="3.5" width="15" height="13" /><path d="M2.5 7h15M6.5 7v9.5M4 10h1M4 13h1M8.5 10h6M8.5 13h6" /></>,
   search: <><circle cx="8.5" cy="8.5" r="5" /><path d="M12.5 12.5L17 17" /></>,
+  sets: <><rect x="3" y="5" width="11" height="12" /><path d="M6 5V3h11v12h-3" /></>,
   length: <path d="M2 10h16M2 6v8M18 6v8M5 10l2-2M5 10l2 2M15 10l-2-2M15 10l-2 2" />,
   polylength: <><path d="M2 16l5-8 5 5 6-9" /><circle cx="2" cy="16" r="1" /><circle cx="18" cy="4" r="1" /></>,
   area: <><path d="M3 4h10l4 5v7H3z" /><path d="M6 13l4-4M9 13l4-4M3 10l3-3" opacity=".6" /></>,

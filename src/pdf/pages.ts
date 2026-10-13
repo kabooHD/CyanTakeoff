@@ -1,6 +1,6 @@
 // Page operations on a pdf-lib document (Revu's Document menu): insert,
 // delete, extract, rotate, replace, move, combine, split and flatten.
-import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, PDFRef, PDFStream, degrees, type PDFPage } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFNumber, PDFRef, PDFStream, degrees, type PDFPage } from 'pdf-lib';
 
 const N = (s: string) => PDFName.of(s);
 
@@ -69,6 +69,39 @@ export async function replacePage(doc: PDFDocument, at: number, src: PDFDocument
   }
   doc.insertPage(at, fresh);
   doc.removePage(at + 1);
+  retargetPage(doc, old.ref, fresh.ref);
+}
+
+/** Point links and bookmarks that went to page `from` at page `to` instead. */
+export function retargetPage(doc: PDFDocument, from: PDFRef, to: PDFRef) {
+  const fixDest = (d: unknown) => {
+    const arr = d instanceof PDFRef ? doc.context.lookup(d) : d;
+    if (arr instanceof PDFArray && arr.get(0) === from) arr.set(0, to);
+  };
+  const fixHolder = (h: PDFDict) => {
+    fixDest(h.get(N('Dest')));
+    const a = h.lookup(N('A'));
+    if (a instanceof PDFDict) fixDest(a.get(N('D')));
+  };
+  for (const p of doc.getPages()) {
+    const annots = p.node.lookup(N('Annots'));
+    if (!(annots instanceof PDFArray)) continue;
+    for (const r of annots.asArray()) {
+      const a = doc.context.lookup(r);
+      if (a instanceof PDFDict) fixHolder(a);
+    }
+  }
+  // Bookmarks (outline items).
+  const walk = (item: unknown, depth = 0) => {
+    for (let it: unknown = item instanceof PDFRef ? doc.context.lookup(item) : item; it instanceof PDFDict && depth < 10000; depth++) {
+      fixHolder(it);
+      walk(it.get(N('First')), depth + 1);
+      const next = it.get(N('Next'));
+      it = next instanceof PDFRef ? doc.context.lookup(next) : undefined;
+    }
+  };
+  const outlines = doc.catalog.lookup(N('Outlines'));
+  if (outlines instanceof PDFDict) walk(outlines.get(N('First')));
 }
 
 /** Split into documents of `every` pages. */
@@ -134,4 +167,14 @@ export function flattenPage(doc: PDFDocument, page: PDFPage, keep: (a: PDFDict) 
   }
   page.node.set(N('Annots'), doc.context.obj(remaining));
   return n;
+}
+
+/** Write page labels (each page its own literal label) as the catalog /PageLabels number tree. */
+export function writePageLabels(doc: PDFDocument, labels: string[]) {
+  const ctx = doc.context;
+  const nums: unknown[] = [];
+  labels.forEach((l, i) => {
+    nums.push(i, ctx.obj({ P: PDFHexString.fromText(l) }));
+  });
+  doc.catalog.set(N('PageLabels'), ctx.obj({ Nums: nums as never }));
 }

@@ -71,6 +71,7 @@ function dim(page, x1, y1, x2, y2, text, off = 30) {
   // north arrow
   page.drawLine({ start: { x: 220, y: 1500 }, end: { x: 220, y: 1560 }, thickness: 2 });
   page.drawText('N', { x: 214, y: 1566, size: 16, font: bold });
+  page.drawText('SEE C-101 FOR SITE PLAN', { x: 300, y: 1540, size: 10, font });
   titleBlock(page, 'A-101', 'FLOOR PLAN', `1/4" = 1'-0"`);
 }
 
@@ -88,6 +89,7 @@ function dim(page, x1, y1, x2, y2, text, off = 30) {
   page.drawText('PROPOSED BUILDING', { x: ox + 122 * ft, y: oy + 118 * ft, size: 9, font: bold });
   dim(page, ox, oy + 300 * ft, ox + 400 * ft, oy + 300 * ft, `400'-0"`);
   dim(page, ox, oy, ox, oy + 300 * ft, `300'-0"`);
+  page.drawText('BUILDING: SEE A-101 FOR FLOOR PLAN', { x: 300, y: 1540, size: 10, font });
   titleBlock(page, 'C-101', 'SITE PLAN', `1" = 20'`);
 }
 

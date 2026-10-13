@@ -78,7 +78,9 @@ Legends; Markups List replies, Checkmark/Lock/Creation Date columns, arrow
 keys and jump-to-markup; Search (Ctrl+F); split view (Ctrl+2/Ctrl+H); page operations (insert,
 blank, delete, extract, replace keeping markups, rotate, reorder by
 thumbnail drag, split, combine) and Flatten; Compare Documents (clouds
-differences) and Overlay Pages (two-colour overlay PDF);
+differences) and Overlay Pages (two-colour overlay PDF); Page Labels from
+title-block sheet numbers, Batch Link (incl. across open files), Sets panel
+(open files as one set), Slip Sheet (by sheet number, markups carried);
 length, polylength, area, perimeter, volume, count, angle, radius, diameter;
 cutouts (polygon/ellipse, Revu fuse/trim rules); Dynamic Fill;
 separate X/Y scales; 3-point radius; viewports (regions with their own scale, Revu
