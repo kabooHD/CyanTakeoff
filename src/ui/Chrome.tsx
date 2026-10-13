@@ -32,7 +32,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
     File: [
       { label: 'Open…', shortcut: 'Ctrl+O', action: openFile },
       { label: 'Open Sample Drawing', action: openSample },
-      { label: 'Close', shortcut: 'Ctrl+W', disabled: noDoc, action: () => doc && s.closeDoc(doc.id) },
+      { label: 'Close', shortcut: 'Ctrl+F4', disabled: noDoc, action: () => doc && s.closeDoc(doc.id) },
       { sep: true },
       { label: 'Save', shortcut: 'Ctrl+S', disabled: noDoc, action: () => s.save() },
       { label: 'Save As…', shortcut: 'Ctrl+Shift+S', disabled: noDoc, action: () => s.save(true) },
@@ -44,26 +44,27 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Redo', shortcut: 'Ctrl+Y', disabled: !doc?.redo.length, action: s.redo },
       { sep: true },
       { label: 'Copy', shortcut: 'Ctrl+C', disabled: !doc?.selection.length, action: s.copy },
-      { label: 'Paste', shortcut: 'Ctrl+V', disabled: !s.clipboard.length || noDoc, action: s.paste },
+      { label: 'Paste', shortcut: 'Ctrl+V', disabled: !s.clipboard.length || noDoc, action: () => s.paste() },
+      { label: 'Paste in Place', shortcut: 'Ctrl+Shift+V', disabled: !s.clipboard.length || noDoc, action: () => s.paste(true) },
       { label: 'Delete', shortcut: 'Del', disabled: !doc?.selection.length, action: () => doc && s.deleteMarkups(doc.selection) },
       { label: 'Select All', shortcut: 'Ctrl+A', disabled: noDoc, action: () => doc && s.select(doc.markups.filter((m) => m.page === doc.page).map((m) => m.id)) },
       { sep: true },
       { label: 'Author Name…', action: () => { const a = prompt('Author name for new markups', s.author); if (a) s.setAuthor(a); } },
     ],
     View: [
-      { label: 'Zoom In', shortcut: 'Ctrl+=', disabled: noDoc, action: () => viewerApi.zoomBy(1.25) },
-      { label: 'Zoom Out', shortcut: 'Ctrl+-', disabled: noDoc, action: () => viewerApi.zoomBy(0.8) },
-      { label: 'Fit Page', shortcut: 'Ctrl+0', disabled: noDoc, action: () => viewerApi.fitPage() },
-      { label: 'Fit Width', shortcut: 'Ctrl+2', disabled: noDoc, action: () => viewerApi.fitWidth() },
-      { label: 'Actual Size', shortcut: 'Ctrl+1', disabled: noDoc, action: () => s.setZoom(1) },
+      { label: 'Zoom In', shortcut: 'Plus', disabled: noDoc, action: () => viewerApi.zoomBy(1.25) },
+      { label: 'Zoom Out', shortcut: 'Minus', disabled: noDoc, action: () => viewerApi.zoomBy(0.8) },
+      { label: 'Fit Page', shortcut: 'Ctrl+9', disabled: noDoc, action: () => viewerApi.fitPage() },
+      { label: 'Fit Width', shortcut: 'Ctrl+0', disabled: noDoc, action: () => viewerApi.fitWidth() },
+      { label: 'Actual Size', shortcut: 'Ctrl+8', disabled: noDoc, action: () => s.setZoom(1) },
       { sep: true },
-      { label: 'Grid', checked: s.toggles.grid, action: () => s.toggle('grid') },
-      { label: 'Snap', checked: s.toggles.snap, action: () => s.toggle('snap') },
+      { label: 'Show Grid', shortcut: 'Shift+F9', checked: s.toggles.grid, action: () => s.toggle('grid') },
+      { label: 'Snap to Grid', shortcut: 'Ctrl+Shift+F9', checked: s.toggles.snap, action: () => s.toggle('snap') },
     ],
     Document: [
       { label: 'First Page', shortcut: 'Home', disabled: noDoc, action: () => s.setPage(0) },
-      { label: 'Previous Page', shortcut: 'PgUp', disabled: noDoc, action: () => doc && s.setPage(doc.page - 1) },
-      { label: 'Next Page', shortcut: 'PgDn', disabled: noDoc, action: () => doc && s.setPage(doc.page + 1) },
+      { label: 'Previous Page', shortcut: 'Ctrl+Left', disabled: noDoc, action: () => doc && s.setPage(doc.page - 1) },
+      { label: 'Next Page', shortcut: 'Ctrl+Right', disabled: noDoc, action: () => doc && s.setPage(doc.page + 1) },
       { label: 'Last Page', shortcut: 'End', disabled: noDoc, action: () => doc && s.setPage(doc.loaded.pages.length - 1) },
     ],
     Tools: [
@@ -74,11 +75,11 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
     ],
     Measure: toolItems('measure'),
     Window: [
-      { label: 'Thumbnails', checked: s.left === 'thumbnails', action: () => s.setPanels({ left: s.left === 'thumbnails' ? null : 'thumbnails' }) },
-      { label: 'Bookmarks', checked: s.left === 'bookmarks', action: () => s.setPanels({ left: s.left === 'bookmarks' ? null : 'bookmarks' }) },
-      { label: 'Properties', checked: s.right === 'properties', action: () => s.setPanels({ right: s.right === 'properties' ? null : 'properties' }) },
-      { label: 'Tool Chest', checked: s.right === 'toolchest', action: () => s.setPanels({ right: s.right === 'toolchest' ? null : 'toolchest' }) },
-      { label: 'Measurements', checked: s.right === 'measurements', action: () => s.setPanels({ right: s.right === 'measurements' ? null : 'measurements' }) },
+      { label: 'Thumbnails', shortcut: 'Alt+T', checked: s.left === 'thumbnails', action: () => s.setPanels({ left: s.left === 'thumbnails' ? null : 'thumbnails' }) },
+      { label: 'Bookmarks', shortcut: 'Alt+B', checked: s.left === 'bookmarks', action: () => s.setPanels({ left: s.left === 'bookmarks' ? null : 'bookmarks' }) },
+      { label: 'Properties', shortcut: 'Alt+P', checked: s.right === 'properties', action: () => s.setPanels({ right: s.right === 'properties' ? null : 'properties' }) },
+      { label: 'Tool Chest', shortcut: 'Alt+X', checked: s.right === 'toolchest', action: () => s.setPanels({ right: s.right === 'toolchest' ? null : 'toolchest' }) },
+      { label: 'Measurements', shortcut: 'Alt+U', checked: s.right === 'measurements', action: () => s.setPanels({ right: s.right === 'measurements' ? null : 'measurements' }) },
       { label: 'Markups List', shortcut: 'Alt+L', checked: s.markupsList, action: () => s.setPanels({ markupsList: !s.markupsList }) },
       { sep: true },
       { label: 'Reset Layout', action: () => s.setPanels({ left: 'thumbnails', right: 'properties', markupsList: true }) },
@@ -145,10 +146,10 @@ export function Toolbar() {
         {TOOLS.filter((t) => t.group === 'measure').map((t) => <ToolButton key={t.id} id={t.id} />)}
       </div>
       <div className="tb-group">
-        <button className="tb-btn" title="Fit Page (Ctrl+0)" disabled={!doc} onClick={() => viewerApi.fitPage()}><Icon name="fitpage" /></button>
-        <button className="tb-btn" title="Fit Width (Ctrl+2)" disabled={!doc} onClick={() => viewerApi.fitWidth()}><Icon name="fitwidth" /></button>
-        <button className="tb-btn" title="Zoom Out (Ctrl+-)" disabled={!doc} onClick={() => viewerApi.zoomBy(0.8)}><Icon name="zoomout" /></button>
-        <button className="tb-btn" title="Zoom In (Ctrl+=)" disabled={!doc} onClick={() => viewerApi.zoomBy(1.25)}><Icon name="zoomin" /></button>
+        <button className="tb-btn" title="Fit Page (Ctrl+9)" disabled={!doc} onClick={() => viewerApi.fitPage()}><Icon name="fitpage" /></button>
+        <button className="tb-btn" title="Fit Width (Ctrl+0)" disabled={!doc} onClick={() => viewerApi.fitWidth()}><Icon name="fitwidth" /></button>
+        <button className="tb-btn" title="Zoom Out (Minus)" disabled={!doc} onClick={() => viewerApi.zoomBy(0.8)}><Icon name="zoomout" /></button>
+        <button className="tb-btn" title="Zoom In (Plus)" disabled={!doc} onClick={() => viewerApi.zoomBy(1.25)}><Icon name="zoomin" /></button>
       </div>
     </div>
   );
@@ -173,10 +174,10 @@ export function DocTabs() {
 // ---------------- Status bar ----------------
 
 const TOGGLES: { key: keyof Toggles; label: string; title: string }[] = [
-  { key: 'snap', label: 'Snap', title: 'Snap to points' },
-  { key: 'grid', label: 'Grid', title: 'Show grid (snaps when Snap is on)' },
-  { key: 'content', label: 'Content', title: 'Snap to drawing content (line endpoints and lines)' },
-  { key: 'markup', label: 'Markup', title: 'Snap to markups' },
+  { key: 'snap', label: 'Snap', title: 'Snap to grid (Ctrl+Shift+F9)' },
+  { key: 'grid', label: 'Grid', title: 'Show grid (Shift+F9)' },
+  { key: 'content', label: 'Content', title: 'Snap to drawing content: line endpoints and lines (Ctrl+Shift+F8)' },
+  { key: 'markup', label: 'Markup', title: 'Snap to markups (Ctrl+Shift+F7)' },
   { key: 'reuse', label: 'Reuse', title: 'Keep the current tool after placing a markup' },
   { key: 'sync', label: 'Sync', title: 'Sync views across documents (coming soon)' },
 ];

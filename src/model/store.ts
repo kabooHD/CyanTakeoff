@@ -63,7 +63,8 @@ interface AppState {
   undo(): void;
   redo(): void;
   copy(): void;
-  paste(): void;
+  /** Paste; `inPlace` keeps the original position (Paste in Place). */
+  paste(inPlace?: boolean): void;
   setCalibration(page: number, scale: Scale | null, allPages?: boolean): void;
   setToolDefault(type: MarkupType, patch: Partial<MarkupStyle>): void;
   toggle(key: keyof Toggles): void;
@@ -124,7 +125,7 @@ export const useApp = create<AppState>((set, get) => {
     toolLocked: false,
     preset: null,
     toolDefaults: { ...DEFAULT_STYLES, ...(prefs.toolDefaults ?? {}) },
-    toggles: { snap: true, grid: false, content: true, markup: true, reuse: false, sync: false, ...(prefs.toggles ?? {}) },
+    toggles: { snap: false, grid: false, content: true, markup: true, reuse: false, sync: false, ...(prefs.toggles ?? {}) },
     left: prefs.left === undefined ? 'thumbnails' : prefs.left,
     right: prefs.right === undefined ? 'properties' : prefs.right,
     markupsList: prefs.markupsList ?? true,
@@ -251,11 +252,11 @@ export const useApp = create<AppState>((set, get) => {
       if (!d) return;
       set({ clipboard: d.markups.filter((m) => d.selection.includes(m.id)) });
     },
-    paste() {
+    paste(inPlace) {
       const d = activeDoc();
       const clip = get().clipboard;
       if (!d || !clip.length) return;
-      const off = 18;
+      const off = inPlace ? 0 : 18;
       const t = now();
       const copies = clip.map((m) => ({
         ...m, id: crypto.randomUUID(), page: d.page, created: t, modified: t, source: undefined,

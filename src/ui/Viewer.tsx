@@ -76,7 +76,7 @@ export function Viewer({ doc }: { doc: DocState }) {
   }, [doc.loaded.pdf, doc.page]);
 
   // ----- content geometry for snapping -----
-  const wantGeom = s.toggles.snap && s.toggles.content;
+  const wantGeom = s.toggles.content;
   useEffect(() => {
     setGeom(null);
     if (!pdfPage || !wantGeom) return;
@@ -223,8 +223,9 @@ export function Viewer({ doc }: { doc: DocState }) {
     return { x: (e.clientX - r.left) / zoom, y: (e.clientY - r.top) / zoom };
   };
   const GRID = 12;
+  // Like Revu's status bar: Markup = snap to markups, Content = snap to the
+  // drawing, Snap = snap to grid. Each works on its own.
   const snap = (p: Pt, exclude?: string): Pt => {
-    if (!s.toggles.snap) return p;
     const tol = 10 / zoom;
     let best: Pt | null = null, bestD = tol;
     if (s.toggles.markup) {
@@ -237,7 +238,7 @@ export function Viewer({ doc }: { doc: DocState }) {
       }
     }
     if (!best && geom) best = snapToContent(geom, p, tol)?.p ?? null;
-    if (!best && s.toggles.grid) best = { x: Math.round(p.x / GRID) * GRID, y: Math.round(p.y / GRID) * GRID };
+    if (!best && s.toggles.snap) best = { x: Math.round(p.x / GRID) * GRID, y: Math.round(p.y / GRID) * GRID };
     return best ?? p;
   };
   /** Apply snapping and Shift-ortho relative to the previous point. */

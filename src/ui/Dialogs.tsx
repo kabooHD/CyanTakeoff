@@ -60,14 +60,19 @@ export function CalibrateDialog() {
   );
 }
 
+// Revu 20/21 defaults that CyanTakeoff implements.
 const GENERAL = [
-  ['Ctrl+O', 'Open'], ['Ctrl+S', 'Save'], ['Ctrl+Shift+S', 'Save As'], ['Ctrl+W', 'Close document'],
-  ['Ctrl+Z / Ctrl+Y', 'Undo / Redo'], ['Ctrl+C / Ctrl+V', 'Copy / Paste markups'], ['Ctrl+A', 'Select all on page'],
-  ['Delete', 'Delete selected markups'], ['Esc', 'Cancel / back to Select'], ['Enter or double-click', 'Finish polyline/area'],
-  ['Backspace', 'Remove last point while drawing'], ['Shift (hold)', 'Constrain to 45°'], ['Space (hold) / middle mouse', 'Pan'],
-  ['Mouse wheel', 'Zoom at cursor'], ['Ctrl+0 / Ctrl+2 / Ctrl+1', 'Fit page / Fit width / Actual size'],
-  ['Ctrl+= / Ctrl+-', 'Zoom in / out'], ['PgUp / PgDn / Home / End', 'Navigate pages'], ['Alt+L', 'Toggle Markups List'],
-  ['Arrow keys (+Shift)', 'Nudge selected markups'],
+  ['Ctrl+O / Ctrl+S / Ctrl+Shift+S', 'Open / Save / Save As'], ['Ctrl+F4', 'Close document'],
+  ['Ctrl+Z / Ctrl+Y', 'Undo / Redo'], ['Ctrl+X / Ctrl+C / Ctrl+V', 'Cut / Copy / Paste'],
+  ['Ctrl+Shift+V', 'Paste in Place'], ['Ctrl+A', 'Select all on page'], ['Del', 'Delete'],
+  ['Plus / Minus', 'Zoom in / out'], ['Ctrl+9 / Ctrl+0 / Ctrl+8', 'Fit Page / Fit Width / Actual Size'],
+  ['Ctrl+Right / Ctrl+Left', 'Next / previous page'], ['Home / End', 'First / last page'],
+  ['Shift+F9', 'Show Grid'], ['Ctrl+Shift+F9', 'Snap to Grid'], ['Ctrl+Shift+F8', 'Snap to Content'],
+  ['Ctrl+Shift+F7', 'Snap to Markup'], ['Alt+L', 'Markups List'], ['Alt+T / Alt+B', 'Thumbnails / Bookmarks'],
+  ['Alt+P / Alt+X / Alt+U', 'Properties / Tool Chest / Measurements'], ['Shift+F4', 'Hide panels'],
+  ['F1', 'Help'], ['Esc', 'Cancel / back to Select'], ['Enter or double-click', 'Finish polyline / area'],
+  ['Shift (hold)', 'Horizontal, vertical or 45° lines'], ['Space (hold) / middle button', 'Pan'],
+  ['Mouse wheel (Ctrl toggles)', 'Zoom at cursor / scroll'],
 ];
 
 export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
@@ -85,7 +90,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
           </tbody>
         </table>
       </div>
-      <p className="muted small">Double-click a tool button to lock it (keep drawing until you press Esc).</p>
+      <p className="muted small">These are Revu's default shortcuts. Double-click a tool button to lock it. Some browser-reserved keys (Ctrl+Tab, Ctrl+T, Ctrl+N) only work in the desktop version.</p>
       <div className="modal-actions"><button className="primary" onClick={onClose}>Close</button></div>
     </Modal>
   );

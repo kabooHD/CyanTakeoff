@@ -24,28 +24,52 @@ export function App() {
       const d = activeDoc();
       const combo = comboFromEvent(e);
       const run = (fn: () => void) => { e.preventDefault(); fn(); };
+      // Revu 20/21 default shortcuts (support.bluebeam.com, "Keyboard shortcuts
+      // and mouse navigation"). Browser-reserved keys (Ctrl+F4, Ctrl+Tab, Ctrl+N,
+      // Ctrl+T) cannot be intercepted on the web; Ctrl+W/PgUp/PgDn are kept as extras.
+      const left = (p: 'thumbnails' | 'bookmarks') => run(() => s.setPanels({ left: s.left === p ? null : p }));
+      const right = (p: 'properties' | 'toolchest' | 'measurements') => run(() => s.setPanels({ right: s.right === p ? null : p }));
       switch (combo) {
+        // File
         case 'Ctrl+O': return run(openFile);
-        case 'Ctrl+S': return run(() => s.save());
+        case 'Ctrl+S': case 'Ctrl+F2': return run(() => s.save());
         case 'Ctrl+Shift+S': return run(() => s.save(true));
-        case 'Ctrl+W': return run(() => d && s.closeDoc(d.id));
+        case 'Ctrl+F4': case 'Ctrl+W': return run(() => d && s.closeDoc(d.id));
+        case 'Ctrl+Shift+W': return run(() => s.docs.forEach((x) => s.closeDoc(x.id)));
+        // Edit
         case 'Ctrl+Z': return run(s.undo);
         case 'Ctrl+Y': case 'Ctrl+Shift+Z': return run(s.redo);
         case 'Ctrl+C': return run(s.copy);
-        case 'Ctrl+V': return run(s.paste);
+        case 'Ctrl+X': return run(() => { if (d) { s.copy(); s.deleteMarkups(d.selection); } });
+        case 'Ctrl+V': return run(() => s.paste());
+        case 'Ctrl+Shift+V': return run(() => s.paste(true));
         case 'Ctrl+A': return run(() => d && s.select(d.markups.filter((m) => m.page === d.page).map((m) => m.id)));
         case 'Delete': case 'Backspace': return run(() => d && s.deleteMarkups(d.selection));
         case 'Escape': return run(() => { s.setTool('select'); s.select([]); });
-        case 'Ctrl+0': return run(viewerApi.fitPage);
-        case 'Ctrl+2': return run(viewerApi.fitWidth);
-        case 'Ctrl+1': return run(() => s.setZoom(1));
-        case 'Ctrl+=': case 'Ctrl++': case 'Ctrl+Shift+=': return run(() => viewerApi.zoomBy(1.25));
-        case 'Ctrl+-': return run(() => viewerApi.zoomBy(0.8));
-        case 'PageDown': return run(() => d && s.setPage(d.page + 1));
-        case 'PageUp': return run(() => d && s.setPage(d.page - 1));
+        // View
+        case 'Ctrl+9': return run(viewerApi.fitPage);
+        case 'Ctrl+0': return run(viewerApi.fitWidth);
+        case 'Ctrl+8': return run(() => s.setZoom(1));
+        case '+': case '=': case 'Shift++': case 'Shift+=': case 'Ctrl+=': case 'Ctrl++': case 'Ctrl+Shift+=':
+          return run(() => viewerApi.zoomBy(1.25));
+        case '-': case 'Ctrl+-': return run(() => viewerApi.zoomBy(0.8));
+        case 'Shift+F9': return run(() => s.toggle('grid'));
+        case 'Ctrl+Shift+F9': return run(() => s.toggle('snap'));
+        case 'Ctrl+Shift+F8': return run(() => s.toggle('content'));
+        case 'Ctrl+Shift+F7': return run(() => s.toggle('markup'));
+        // Navigation
+        case 'Ctrl+ArrowRight': case 'PageDown': return run(() => d && s.setPage(d.page + 1));
+        case 'Ctrl+ArrowLeft': case 'PageUp': return run(() => d && s.setPage(d.page - 1));
         case 'Home': return run(() => s.setPage(0));
         case 'End': return run(() => d && s.setPage(d.loaded.pages.length - 1));
+        // Window
         case 'Alt+L': return run(() => s.setPanels({ markupsList: !s.markupsList }));
+        case 'Alt+T': return left('thumbnails');
+        case 'Alt+B': return left('bookmarks');
+        case 'Alt+P': return right('properties');
+        case 'Alt+X': return right('toolchest');
+        case 'Alt+U': return right('measurements');
+        case 'Shift+F4': return run(() => s.setPanels({ left: null, right: null }));
         case 'F1': return run(() => setDialog('shortcuts'));
       }
       const arrows: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };

@@ -16,9 +16,9 @@ export interface ToolDef {
   name: string;
   group: 'navigate' | 'markup' | 'measure';
   /**
-   * Default shortcut, written like Revu's: "Shift+Alt+L". Kept in one place so
-   * the full map can be checked against Revu's default profile and
-   * remapped by users later.
+   * Default shortcut, matching Revu 20/21's published defaults
+   * ("Keyboard shortcuts and mouse navigation", support.bluebeam.com).
+   * Revu has no default shortcut for Calibrate.
    */
   shortcut?: string;
   interaction: Interaction;
@@ -33,28 +33,28 @@ export const TOOLS: ToolDef[] = [
   { id: 'pan', name: 'Pan', group: 'navigate', shortcut: 'Shift+V', interaction: 'none', subject: '' },
   { id: 'zoom', name: 'Zoom', group: 'navigate', shortcut: 'Z', interaction: 'none', subject: '' },
 
-  { id: 'textbox', name: 'Text Box', group: 'markup', shortcut: 'W', interaction: 'box', subject: 'Text Box' },
+  { id: 'textbox', name: 'Text Box', group: 'markup', shortcut: 'T', interaction: 'box', subject: 'Text Box' },
   { id: 'callout', name: 'Callout', group: 'markup', shortcut: 'Q', interaction: 'callout', subject: 'Callout' },
-  { id: 'note', name: 'Note', group: 'markup', shortcut: 'Shift+N', interaction: 'point', subject: 'Note' },
-  { id: 'pen', name: 'Pen', group: 'markup', shortcut: 'K', interaction: 'freehand', subject: 'Pen' },
+  { id: 'note', name: 'Note', group: 'markup', shortcut: 'N', interaction: 'point', subject: 'Note' },
+  { id: 'pen', name: 'Pen', group: 'markup', shortcut: 'P', interaction: 'freehand', subject: 'Pen' },
   { id: 'highlight', name: 'Highlight', group: 'markup', shortcut: 'H', interaction: 'box', subject: 'Highlight' },
   { id: 'line', name: 'Line', group: 'markup', shortcut: 'L', interaction: 'two-point', subject: 'Line' },
   { id: 'arrow', name: 'Arrow', group: 'markup', shortcut: 'A', interaction: 'two-point', subject: 'Arrow' },
-  { id: 'polyline', name: 'Polyline', group: 'markup', shortcut: 'N', interaction: 'poly', subject: 'Polyline' },
+  { id: 'polyline', name: 'Polyline', group: 'markup', shortcut: 'Shift+N', interaction: 'poly', subject: 'Polyline' },
   { id: 'rectangle', name: 'Rectangle', group: 'markup', shortcut: 'R', interaction: 'box', subject: 'Rectangle' },
   { id: 'ellipse', name: 'Ellipse', group: 'markup', shortcut: 'E', interaction: 'box', subject: 'Ellipse' },
-  { id: 'polygon', name: 'Polygon', group: 'markup', shortcut: 'P', interaction: 'poly', subject: 'Polygon', closed: true },
+  { id: 'polygon', name: 'Polygon', group: 'markup', shortcut: 'Shift+P', interaction: 'poly', subject: 'Polygon', closed: true },
   { id: 'cloud', name: 'Cloud', group: 'markup', shortcut: 'C', interaction: 'box', subject: 'Cloud', closed: true },
 
-  { id: 'calibrate', name: 'Calibrate', group: 'measure', shortcut: 'Shift+Alt+K', interaction: 'two-point', subject: '' },
+  { id: 'calibrate', name: 'Calibrate', group: 'measure', interaction: 'two-point', subject: '' },
   { id: 'length', name: 'Length', group: 'measure', shortcut: 'Shift+Alt+L', interaction: 'two-point', subject: 'Length Measurement' },
-  { id: 'polylength', name: 'Polylength', group: 'measure', shortcut: 'Shift+Alt+P', interaction: 'poly', subject: 'Polylength Measurement' },
+  { id: 'polylength', name: 'Polylength', group: 'measure', shortcut: 'Shift+Alt+Q', interaction: 'poly', subject: 'Polylength Measurement' },
   { id: 'area', name: 'Area', group: 'measure', shortcut: 'Shift+Alt+A', interaction: 'poly', subject: 'Area Measurement', closed: true },
-  { id: 'perimeter', name: 'Perimeter', group: 'measure', shortcut: 'Shift+Alt+M', interaction: 'poly', subject: 'Perimeter Measurement', closed: true },
+  { id: 'perimeter', name: 'Perimeter', group: 'measure', shortcut: 'Shift+Alt+P', interaction: 'poly', subject: 'Perimeter Measurement', closed: true },
   { id: 'volume', name: 'Volume', group: 'measure', shortcut: 'Shift+Alt+V', interaction: 'poly', subject: 'Volume Measurement', closed: true },
-  { id: 'diameter', name: 'Diameter', group: 'measure', interaction: 'two-point', subject: 'Diameter Measurement' },
-  { id: 'radius', name: 'Radius', group: 'measure', interaction: 'two-point', subject: 'Radius Measurement' },
-  { id: 'angle', name: 'Angle', group: 'measure', interaction: 'poly', subject: 'Angle Measurement', maxPoints: 3 },
+  { id: 'diameter', name: 'Diameter', group: 'measure', shortcut: 'Shift+Alt+D', interaction: 'two-point', subject: 'Diameter Measurement' },
+  { id: 'radius', name: 'Radius', group: 'measure', shortcut: 'Shift+Alt+U', interaction: 'two-point', subject: 'Radius Measurement' },
+  { id: 'angle', name: 'Angle', group: 'measure', shortcut: 'Shift+Alt+G', interaction: 'poly', subject: 'Angle Measurement', maxPoints: 3 },
   { id: 'count', name: 'Count', group: 'measure', shortcut: 'Shift+Alt+C', interaction: 'count', subject: 'Count Measurement' },
 ];
 

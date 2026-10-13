@@ -73,25 +73,22 @@ await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(
 list = await page.locator('.ml-table tbody').innerText();
 assert(list.includes(`60'-0"`), `length measurement 60'-0"`);
 
-// Angle (3 clicks, auto-finish), radius and diameter via the Measure menu (snap off for exact clicks).
-await page.getByRole('button', { name: 'Snap', exact: true }).click();
-const pick = async (name) => {
-  await page.getByRole('button', { name: 'Measure', exact: true }).click();
-  await page.getByRole('menuitem', { name }).click();
-};
-await pick('Angle');
+// Angle, radius and diameter via their Revu shortcuts (snapping off for exact clicks).
+const toggleSnaps = async () => { await page.keyboard.press('Control+Shift+F8'); await page.keyboard.press('Control+Shift+F7'); };
+await toggleSnaps();
+await page.keyboard.press('Shift+Alt+G');
 for (const [x, y] of [[0, 30], [0, 0], [30, 0]]) { const p = await toScreen(x, y); await page.mouse.click(p.x, p.y); }
-await pick('Radius');
+await page.keyboard.press('Shift+Alt+U');
 a = await toScreen(10, 10); b = await toScreen(14, 13);
 await page.mouse.click(a.x, a.y); await page.mouse.click(b.x, b.y);
-await pick('Diameter');
+await page.keyboard.press('Shift+Alt+D');
 a = await toScreen(30, 30); b = await toScreen(36, 38);
 await page.mouse.click(a.x, a.y); await page.mouse.click(b.x, b.y);
 list = await page.locator('.ml-table tbody').innerText();
 assert(list.includes('90°'), 'angle measures 90°');
 assert(list.includes(`5'-0"`), `radius measures 5'-0" (3-4-5 triangle)`);
 assert(list.includes(`10'-0"`), `diameter measures 10'-0" (6-8-10 triangle)`);
-await page.getByRole('button', { name: 'Snap', exact: true }).click();
+await toggleSnaps();
 
 // Count three doors.
 await page.keyboard.press('Shift+Alt+C');
@@ -105,7 +102,7 @@ await page.keyboard.press('Enter');
 await page.keyboard.press('C');
 a = await toScreen(44, 2); b = await toScreen(58, 16);
 await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up();
-await page.keyboard.press('W');
+await page.keyboard.press('T');
 a = await toScreen(26, 6); b = await toScreen(40, 10);
 await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up();
 await page.keyboard.type('Verify door hardware');
