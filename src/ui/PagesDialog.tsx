@@ -1,6 +1,8 @@
 // Revu's page operations (Document menu): Insert, Delete, Extract, Rotate,
 // Replace, Flatten, Split. One dialog with a page range and per-operation options.
 import { useState } from 'react';
+import { PDFDict, PDFName, PDFRef } from 'pdf-lib';
+import { readLayers, writeLayers } from '../pdf/layers';
 import { create } from 'zustand';
 import { PDFDocument } from 'pdf-lib';
 import { serialize, useApp, useActiveDoc } from '../model/store';
@@ -55,6 +57,9 @@ function PagesForm({ op }: { op: PagesOp }) {
   });
   const [file, setFile] = useState<{ name: string; doc: PDFDocument; bytes: Uint8Array } | null>(null);
   const [appendNew, setAppendNew] = useState(true);
+  // Flatten > Assign Layer (Revu): an existing layer's name, or a new one ("Markups" when the file has none).
+  const [assign, setAssign] = useState(false);
+  const [layerName, setLayerName] = useState(() => (doc?.layers ? Object.values(doc.layers.layers)[0]?.name : undefined) ?? 'Markups');
   if (!doc) return null;
   const close = () => usePagesDialog.setState({ op: null });
   const pages = scope === 'current' ? [doc.page] : scope === 'all' ? doc.loaded.pages.map((p) => p.index) : parsePageRange(range, n);
@@ -98,7 +103,22 @@ function PagesForm({ op }: { op: PagesOp }) {
         }, `Replaced ${Math.min(pages.length, file.doc.getPageCount())} page(s)${keep ? ', markups kept' : ''}`);
         break;
       case 'flatten':
-        await s.transformDoc((lib) => { for (const p of pages) flattenPage(lib, lib.getPage(p)); }, `Flattened markups on ${pages.length} page(s)`);
+        await s.transformDoc((lib) => {
+          let target: PDFRef | undefined;
+          if (assign && layerName.trim()) {
+            const set = readLayers(lib) ?? { layers: {}, order: [], configs: [] };
+            let l = Object.values(set.layers).find((x) => x.name === layerName.trim());
+            if (!l) {
+              l = { id: 'new:flatten', name: layerName.trim(), on: true, locked: false, print: true };
+              set.layers[l.id] = l;
+              set.order.push({ id: l.id, kids: [] });
+            }
+            target = writeLayers(lib, set).get(l.id);
+          }
+          // Markups go to the assigned layer, else stay on the layer they were on.
+          const layerOf = (a: PDFDict) => target ?? (a.get(PDFName.of('OC')) instanceof PDFRef ? a.get(PDFName.of('OC')) as PDFRef : undefined);
+          for (const p of pages) flattenPage(lib, lib.getPage(p), () => false, layerOf);
+        }, `Flattened markups on ${pages.length} page(s)${assign ? ` to layer "${layerName.trim()}"` : ''}`);
         break;
       case 'ocr': {
         try {
@@ -188,7 +208,13 @@ function PagesForm({ op }: { op: PagesOp }) {
           {op === 'extract' && <div className="form-row"><label><input type="checkbox" checked={delAfter} onChange={(e) => setDelAfter(e.target.checked)} /> Delete pages after extracting</label></div>}
           {op === 'replace' && <>{range_}{fileRow}<div className="form-row"><label><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} /> Keep markups, page scale and Spaces</label></div>
             <p className="muted small">Replaces the chosen pages, in order, with the new file's pages from page 1.</p></>}
-          {op === 'flatten' && <p className="muted small">Markups become part of the page content and can no longer be edited.</p>}
+          {op === 'flatten' && <>
+            <div className="form-row"><label><input type="checkbox" checked={assign} onChange={(e) => setAssign(e.target.checked)} /> Assign Layer</label>
+              <input aria-label="Flatten to layer" list="flatten-layers" value={layerName} disabled={!assign} onChange={(e) => setLayerName(e.target.value)} />
+              <datalist id="flatten-layers">{Object.values(doc.layers?.layers ?? {}).map((l) => <option key={l.id} value={l.name} />)}</datalist>
+            </div>
+            <p className="muted small">Markups become part of the page content and can no longer be edited. With Assign Layer they go on that layer (a new name creates it); otherwise a markup on a layer stays on its layer.</p>
+          </>}
           {op === 'slip-sheet' && <>{fileRow}<div className="form-row"><label><input type="checkbox" checked={appendNew} onChange={(e) => setAppendNew(e.target.checked)} /> Add sheets that are not in this document</label></div>
             <p className="muted small">Each sheet of the new revision replaces the sheet with the same number (page label), keeping its markups, scale and Spaces.</p></>}
           {op === 'split' && <div className="form-row"><span>Every</span><input aria-label="Pages per file" type="number" min={1} value={every} onChange={(e) => setEvery(e.target.value)} style={{ width: 60 }} /> page(s) per file</div>}

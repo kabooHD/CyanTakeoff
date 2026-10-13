@@ -101,7 +101,9 @@ cutouts (polygon/ellipse, Revu fuse/trim rules); curved segments
 Layers panel (Alt+Y, src/ui/LayersPanel.tsx, src/pdf/layers.ts: PDF
 optional content, show/hide/isolate, Markup Layer, add before/after/child,
 groups, rename, delete with content/markups, properties, configurations,
-drag to reorder, Add Layer from Page with Align Points; markups' /OC);
+drag to reorder, Add Layer from Page with Align Points, zoom-range and
+Export usage, Export Layer to Page, Move/Rotate/Scale a layer, Flatten >
+Assign Layer; markups' /OC);
 separate X/Y scales; 3-point radius; viewports (regions with their own scale, Revu
 `/VP` layout); Apply Scale to Pages dialog (preset/custom/
 calibrate, page range, precision, saved presets) and scale prompt; snap to
@@ -116,8 +118,8 @@ Next (from `docs/PLAN.md`):
    with a display name), live collaboration, self-hostable
 3. Compare versions, Sets, slip sheets, Spaces, Legends, Dynamic Fill, XLSX
 
-Known gaps: Layers: no zoom-range visibility, no Flatten-to-layer, no
-nudge/rotate of a layer added from a page after placing it; not yet measured on
+Known gaps: Move/Rotate/Scale of a layer moves its content, not markups on
+it; not yet measured on
 low-end machines (undo keeps up to 10 file copies); need Revu-made samples (none public; wanted list in
 tests/fixtures/revu/README.md): cutout storage (ours in CTData), custom
 column values (/BSIColumnData kept on edit but not read), .btx tool sets;

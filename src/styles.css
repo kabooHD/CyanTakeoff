@@ -365,3 +365,4 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
 .layer-eye-space { width: 13px; display: inline-block; }
 .layer-group { font-style: italic; }
 .layer-badge { margin-left: auto; color: #1a73e8; }
+.layer-name.out-of-range { color: #999; }

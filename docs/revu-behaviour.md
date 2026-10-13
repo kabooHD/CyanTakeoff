@@ -206,8 +206,17 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - Delete Layer asks: Delete Layer Content on Page, Delete Layer
   Annotations; unchecked items move to the base PDF.
 - Layer Properties: Title, Default State, Locked (title and state fixed,
-  visibility cannot be toggled), View, Print. (Revu also has Export usage and
-  a zoom range; not built.)
+  visibility cannot be toggled), View, Print, Export, Zoom (always, or only
+  between a minimum and maximum zoom; PDF /Usage /Zoom, factors where 1 =
+  100%). Layers outside their zoom range show greyed in the list.
+- Export Layer to Page: a new PDF with only the selected layers and their
+  children; layers whose Export is off, or that are hidden, come without
+  content. Show Export Layers in the Layers menu shows just those.
+- Flatten > Assign Layer: flattened markups go on that layer (a new name
+  creates it); without it a markup on a layer flattens onto its layer.
+- Ours, beyond Revu (Reddit request): Move / Rotate / Scale a layer's
+  content after placing it (e.g. a sheet added from a page), with nudge
+  buttons, about a base point (default the page centre).
 - Drag a layer to reorder; drop it to the right to make it a child.
 - Markups: right-click > Layer to assign or create a layer; a markup on a
   hidden layer is hidden. Stored as the annotation's /OC.

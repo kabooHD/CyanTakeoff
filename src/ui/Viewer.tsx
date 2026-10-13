@@ -106,8 +106,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   /** Page pixels (unrotated, relative to the page) to scroll-area pixels, and back. */
   const outPt = (u: number, v: number) => { const q = rotateOut(u, v, pw, ph, rot); return { x: left + q.x, y: top + q.y }; };
   // Markups on hidden layers are not shown (nor hit or snapped to).
-  const markups = doc.markups.filter((m) => m.page === pageIdx && markupShown(doc, m));
-  const visKey = visibilityKey(doc);
+  const markups = doc.markups.filter((m) => m.page === pageIdx && markupShown(doc, m, zoom));
+  const visKey = visibilityKey(doc, zoom);
   const viewports = doc.viewports[pageIdx] ?? [];
   /** Scale a measurement starting at `p` would use (viewport, else page). */
   const scaleFor = (p: Pt | undefined) => scaleAt(doc.calibrations[pageIdx], viewports, p);
@@ -256,7 +256,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       const off = document.createElement('canvas');
       off.width = Math.ceil(vp.width); off.height = Math.ceil(vp.height);
       // Form fields are drawn as live inputs (FormLayer), so the canvas leaves them out.
-      task = pdfPage.render({ canvas: off, viewport: vp, annotationMode: doc.loaded.fields.length ? 2 : 1, optionalContentConfigPromise: ocConfig(doc) });
+      task = pdfPage.render({ canvas: off, viewport: vp, annotationMode: doc.loaded.fields.length ? 2 : 1, optionalContentConfigPromise: ocConfig(doc, zoom) });
       task.promise.then(() => {
         canvas.width = off.width; canvas.height = off.height;
         canvas.getContext('2d')!.drawImage(off, 0, 0);
@@ -292,7 +292,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         viewport: pdfPage.getViewport({ scale: sc }),
         transform: [1, 0, 0, 1, -x * sc, -y * sc],
         annotationMode: doc.loaded.fields.length ? 2 : 1,
-        optionalContentConfigPromise: ocConfig(doc),
+        optionalContentConfigPromise: ocConfig(doc, zoom),
       });
       task.promise.then(() => {
         const c = detailRef.current;
@@ -1300,7 +1300,7 @@ function PageTile({ doc, slot, zoom, rot, active, onActivate }: {
       const vp = p.getViewport({ scale: sc });
       const off = document.createElement('canvas');
       off.width = Math.ceil(vp.width); off.height = Math.ceil(vp.height);
-      task = p.render({ canvas: off, viewport: vp, annotationMode: forms ? 2 : 1, optionalContentConfigPromise: ocConfig(doc) });
+      task = p.render({ canvas: off, viewport: vp, annotationMode: forms ? 2 : 1, optionalContentConfigPromise: ocConfig(doc, zoom) });
       task.promise.then(() => {
         const c = ref.current;
         if (!c || !alive) return;
@@ -1311,8 +1311,8 @@ function PageTile({ doc, slot, zoom, rot, active, onActivate }: {
     }, done.current ? 200 : 0);
     return () => { alive = false; clearTimeout(t); task?.cancel(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc.loaded.pdf, slot.index, Math.round(sc * 20), visibilityKey(doc)]);
-  const markups = active ? [] : doc.markups.filter((m) => m.page === slot.index && markupShown(doc, m));
+  }, [doc.loaded.pdf, slot.index, Math.round(sc * 20), visibilityKey(doc, zoom)]);
+  const markups = active ? [] : doc.markups.filter((m) => m.page === slot.index && markupShown(doc, m, zoom));
   return (
     <div className="page-tile" data-page={slot.index + 1} onPointerDown={onActivate}
       style={{ left: slot.x, top: slot.y, width: pw, height: ph, transform: rotateCss(pw, ph, rot), transformOrigin: '0 0' }}>

@@ -106,3 +106,67 @@ describe('layer tree edits', async () => {
     expect(out.configs[0].off).toEqual(['A1']);
   });
 });
+
+describe('layer usage, export, transform, flatten', async () => {
+  const { keepOnlyLayers, transformLayer } = await import('../src/pdf/layers');
+  const { flattenPage } = await import('../src/pdf/pages');
+
+  it('reads and writes Export usage and a zoom range', async () => {
+    const { doc, walls } = await layered();
+    const set = readLayers(doc)!;
+    const id = `${walls.objectNumber}R`;
+    set.layers[id] = { ...set.layers[id], export: false, zoom: { min: 0.5, max: Infinity } };
+    writeLayers(doc, set);
+    const again = readLayers(await PDFDocument.load(await doc.save()))!;
+    expect(again.layers[id]).toMatchObject({ export: false, print: true, zoom: { min: 0.5, max: Infinity } });
+    expect(again.layers[`${(await layered()).notes.objectNumber}R`]).toBeDefined();
+  });
+
+  it('moves a layer\'s content in page space, also when it sits under a transform', async () => {
+    const { doc, walls } = await layered();
+    transformLayer(doc, `${walls.objectNumber}R`, [1, 0, 0, 1, 10, 20]);
+    const c = contentOf(doc);
+    expect(c).toMatch(/\/OC \/MC0 BDC\nq\n1 0 0 1 10 20 cm[\s\S]*?Q\nEMC/);
+    // Under "2 0 0 2 0 0 cm" the same page-space move is half as far in local units.
+    const d2 = await PDFDocument.create();
+    const pg = d2.addPage([400, 400]);
+    const ocg = d2.context.register(d2.context.obj({ Type: 'OCG', Name: PDFString.of('L') }));
+    pg.node.set(PDFName.of('Resources'), d2.context.obj({ Properties: { MC0: ocg } }));
+    pg.node.set(PDFName.of('Contents'), d2.context.register(d2.context.flateStream('q 2 0 0 2 0 0 cm /OC /MC0 BDC 0 0 m 10 10 l S EMC Q')));
+    transformLayer(d2, `${ocg.objectNumber}R`, [1, 0, 0, 1, 10, 20]);
+    expect(contentOf(d2)).toContain('1 0 0 1 5 10 cm');
+  });
+
+  it('Export Layer to Page keeps only the chosen layers', async () => {
+    const { doc, notes } = await layered();
+    keepOnlyLayers(doc, new Set([`${notes.objectNumber}R`]));
+    const c = contentOf(doc);
+    expect(c).toContain('(NOTE) Tj');
+    expect(c).not.toContain('100 0 l');
+    expect(c).not.toContain('310 310 l');
+  });
+
+  it('flattens a markup onto a layer', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([200, 200]);
+    const ctx = doc.context;
+    const ap = ctx.register(ctx.stream('0 0 m 10 10 l S', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 10, 10] }));
+    const annot = ctx.register(ctx.obj({ Type: 'Annot', Subtype: 'Square', Rect: [20, 20, 30, 30], AP: { N: ap } }));
+    page.node.set(PDFName.of('Annots'), ctx.obj([annot]));
+    const ocg = ctx.register(ctx.obj({ Type: 'OCG', Name: PDFString.of('Markups') }));
+    expect(flattenPage(doc, page, () => false, () => ocg)).toBe(1);
+    const all = (page.node.Contents() as unknown as { asArray(): unknown[] }).asArray().map((r) => latin1(streamBytes(ctx.lookup(r as never) as PDFStream))).join('\n');
+    expect(all).toMatch(/\/OC \/CTFlat1 BDC q .* Do Q EMC/);
+  });
+});
+
+describe('layer move / rotate / scale matrix', async () => {
+  const { layerMatrix } = await import('../src/model/layerTree');
+  const ap = (m: number[], x: number, y: number) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]].map((v) => Math.round(v * 1e6) / 1e6);
+  it('rotates and scales about the base point, then moves', () => {
+    expect(ap(layerMatrix(0, 0, 90, 1, 100, 100), 200, 100)).toEqual([100, 200]);
+    expect(ap(layerMatrix(0, 0, 0, 2, 100, 100), 150, 100)).toEqual([200, 100]);
+    expect(ap(layerMatrix(10, -5, 0, 1, 0, 0), 1, 1)).toEqual([11, -4]);
+    expect(ap(layerMatrix(0, 0, 0, 1, 50, 50), 50, 50)).toEqual([50, 50]);
+  });
+});

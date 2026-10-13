@@ -123,7 +123,21 @@ const nums = (doc: PDFDocument, a: unknown): number[] => {
  * appearance is drawn where the annotation is (ISO 32000 12.5.5), then the
  * annotation is removed. `keep(dict)` can exclude annotations (links, forms...).
  */
-export function flattenPage(doc: PDFDocument, page: PDFPage, keep: (a: PDFDict) => boolean = () => false): number {
+export function flattenPage(doc: PDFDocument, page: PDFPage, keep: (a: PDFDict) => boolean = () => false,
+  /** Revu's Flatten > Assign Layer: the layer (OCG) each flattened markup's appearance goes on, if any. */
+  layerOf?: (a: PDFDict) => PDFRef | undefined): number {
+  const layerName = (ocg: PDFRef) => {
+    const res = page.node.Resources() ?? (doc.context.obj({}) as PDFDict);
+    const pr = res.lookup(N('Properties'));
+    const props = pr instanceof PDFDict ? pr : (doc.context.obj({}) as PDFDict);
+    for (const [k, v] of props.entries()) if (v === ocg) return k.toString().slice(1);
+    let i = 1;
+    while (props.has(N(`CTFlat${i}`))) i++;
+    props.set(N(`CTFlat${i}`), ocg);
+    res.set(N('Properties'), props);
+    page.node.set(N('Resources'), res);
+    return `CTFlat${i}`;
+  };
   const annots = page.node.lookup(N('Annots'));
   if (!(annots instanceof PDFArray)) return 0;
   const remaining: PDFRef[] = [];
@@ -158,7 +172,9 @@ export function flattenPage(doc: PDFDocument, page: PDFPage, keep: (a: PDFDict) 
           wrapped = true;
         }
         const name = page.node.newXObject('Flat', nRef);
-        const ops = `q ${sx} 0 0 ${sy} ${rect[0] - x0 * sx} ${rect[1] - y0 * sy} cm /${name.asString().slice(1)} Do Q`;
+        let ops = `q ${sx} 0 0 ${sy} ${rect[0] - x0 * sx} ${rect[1] - y0 * sy} cm /${name.asString().slice(1)} Do Q`;
+        const ocg = layerOf?.(a);
+        if (ocg) ops = `/OC /${layerName(ocg)} BDC ${ops} EMC`;
         const content = doc.context.flateStream(ops);
         page.node.addContentStream(doc.context.register(content));
         n++;

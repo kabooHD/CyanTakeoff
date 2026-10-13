@@ -5,15 +5,17 @@
 import { useState } from 'react';
 import { create } from 'zustand';
 import { PDFArray, PDFDict, PDFName, PDFRef } from 'pdf-lib';
-import { activeDoc, useApp, type DocState } from '../model/store';
-import { alphabetical, findNode, idsUnder, insertNode, moveNode, nodeKey, removeNodes, withoutLayers, type Where } from '../model/layerTree';
-import { readLayers, refId, stripLayerContent, writeLayers, type Layer, type LayerNode, type LayerSet } from '../pdf/layers';
+import { activeDoc, serialize, useApp, type DocState } from '../model/store';
+import { alphabetical, layerMatrix, findNode, idsUnder, insertNode, moveNode, nodeKey, removeNodes, withoutLayers, type Where } from '../model/layerTree';
+import { keepOnlyLayers, readLayers, refId, stripLayerContent, transformLayer, writeLayers, type Layer, type LayerNode, type LayerSet } from '../pdf/layers';
+import { loadForUpdate } from '../pdf/incremental';
+import { layerShown } from './layersView';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { openCompare } from './Compare';
 
 const EMPTY: LayerSet = { layers: {}, order: [], configs: [] };
 
-export const useLayersUi = create<{ dialog: { kind: 'delete' | 'props'; keys: string[] } | null; onPage: boolean; alpha: boolean }>(() => ({ dialog: null, onPage: false, alpha: false }));
+export const useLayersUi = create<{ dialog: { kind: 'delete' | 'props' | 'adjust'; keys: string[] } | null; onPage: boolean; alpha: boolean }>(() => ({ dialog: null, onPage: false, alpha: false }));
 
 const setOf = (d: DocState) => d.layers ?? EMPTY;
 const newId = () => `new:${crypto.randomUUID()}`;
@@ -65,6 +67,43 @@ export async function deleteLayers(keys: string[], deleteContent: boolean, delet
     const now = readLayers(lib) ?? EMPTY;
     writeLayers(lib, withoutLayers(now, fileIds));
   }, `Deleted ${fileIds.size} layer(s)`);
+}
+
+/**
+ * Revu's Export Layer to Page: a new PDF with only the selected layers (and
+ * their children). Layers set not to export, or hidden now, come without
+ * their content.
+ */
+export async function exportLayers(keys: string[]) {
+  const app = useApp.getState();
+  const d = activeDoc();
+  if (!d?.layers) return;
+  const set = d.layers;
+  const chosen = keys.map((k) => findNode(set.order, k)).filter(Boolean).flatMap((n) => idsUnder(n!));
+  const withContent = new Set(chosen.filter((id) => set.layers[id]?.export !== false && d.layerVisible[id] !== false).map((id) => set.layers[id].name));
+  const names = new Set(chosen.map((id) => set.layers[id]?.name));
+  app.setStatus('Exporting layers…');
+  const lib = await loadForUpdate(await serialize(d));
+  // Layers created in this session got their ids on serialising: find them by name.
+  const now = readLayers(lib) ?? EMPTY;
+  const keepIds = new Set(Object.values(now.layers).filter((l) => withContent.has(l.name)).map((l) => l.id));
+  keepOnlyLayers(lib, keepIds);
+  const others = new Set(Object.values(now.layers).filter((l) => !names.has(l.name)).map((l) => l.id));
+  writeLayers(lib, withoutLayers(now, others));
+  const label = [...names].join(', ');
+  await app.openBytes(await lib.save({ useObjectStreams: false }), `${d.name.replace(/\.pdf$/i, '')} - ${label}.pdf`);
+  app.setStatus(`Exported layer(s) ${label} to a new PDF`);
+}
+
+export async function adjustLayer(id: string, m: [number, number, number, number, number, number]) {
+  const app = useApp.getState();
+  const d = activeDoc();
+  const name = d?.layers?.layers[id]?.name;
+  if (!d || !name) return;
+  await app.transformDoc((lib) => {
+    const target = Object.values(readLayers(lib)?.layers ?? {}).find((l) => l.id === id || l.name === name);
+    if (target) transformLayer(lib, target.id, m);
+  }, `Layer "${name}" moved`);
 }
 
 export function LayersPanel({ doc }: { doc: DocState }) {
@@ -135,6 +174,8 @@ export function LayersPanel({ doc }: { doc: DocState }) {
         { label: 'Rename', shortcut: 'F2', disabled: !!l?.locked, action: () => rename(key) },
         { label: 'Delete', action: () => useLayersUi.setState({ dialog: { kind: 'delete', keys } }) },
         { sep: true },
+        { label: 'Export Layer to Page…', action: () => void exportLayers(keys) },
+        ...(n.id ? [{ label: 'Move / Rotate / Scale…', disabled: n.id.startsWith('new:') || !!l?.locked, action: () => useLayersUi.setState({ dialog: { kind: 'adjust', keys: [n.id!] } }) }] : []),
         ...(n.id ? [{ label: 'Layer Properties…', action: () => useLayersUi.setState({ dialog: { kind: 'props', keys: keys.filter((k) => !k.startsWith('g:')) } }) }] : []),
       ],
     });
@@ -166,7 +207,8 @@ export function LayersPanel({ doc }: { doc: DocState }) {
           <input type="checkbox" className="layer-eye" aria-label={`Show ${l.name}`} checked={vis[l.id] !== false} disabled={l.locked}
             onClick={(e) => e.stopPropagation()} onChange={() => toggleNode(n)} />
         ) : <span className="layer-eye-space" />}
-        <span className={`layer-name ${l ? '' : 'layer-group'}`}>{l?.locked && '🔒 '}{l ? l.name : n.label}</span>
+        <span className={`layer-name ${l ? '' : 'layer-group'} ${l && !layerShown({ ...doc, layerVisible: {} }, l.id, doc.zoom || 1) ? 'out-of-range' : ''}`}
+          title={l?.zoom ? `Shown from ${Math.round(l.zoom.min * 100)}% to ${Number.isFinite(l.zoom.max) ? `${Math.round(l.zoom.max * 100)}%` : 'any zoom'}` : undefined}>{l?.locked && '🔒 '}{l ? l.name : n.label}</span>
         {l && doc.markupLayer === l.id && <span className="layer-badge" title="Markup Layer: new markups go here">✎</span>}
       </div>,
       ...rows(n.kids, depth + 1),
@@ -177,6 +219,7 @@ export function LayersPanel({ doc }: { doc: DocState }) {
     x: e.clientX, y: e.clientY, items: [
       { label: 'Reset Layers', action: () => view(configVis(doc.layerConfig)) },
       { label: 'Show Print Layers', action: () => view(Object.fromEntries(allIds.map((id) => [id, set.layers[id].print]))) },
+      { label: 'Show Export Layers', action: () => view(Object.fromEntries(allIds.map((id) => [id, set.layers[id].export !== false]))) },
       { label: 'Show All Layers', action: showAll },
       { label: 'Show Layers on Page Only', checked: ui.onPage, action: () => useLayersUi.setState({ onPage: !ui.onPage }) },
       { label: 'Show Layers Alphabetically', checked: ui.alpha, action: () => useLayersUi.setState({ alpha: !ui.alpha }) },
@@ -240,6 +283,7 @@ export function LayerDialogs() {
   const dialog = useLayersUi((x) => x.dialog);
   const doc = useApp((s) => s.docs.find((d) => d.id === s.activeId));
   if (!dialog || !doc?.layers) return null;
+  if (dialog.kind === 'adjust') return <AdjustForm doc={doc} id={dialog.keys[0]} />;
   return dialog.kind === 'delete' ? <DeleteForm doc={doc} keys={dialog.keys} /> : <PropsForm doc={doc} keys={dialog.keys} />;
 }
 
@@ -283,13 +327,18 @@ function PropsForm({ doc, keys }: { doc: DocState; keys: string[] }) {
   const [on, setOn] = useState(first?.on ?? true);
   const [locked, setLocked] = useState(first?.locked ?? false);
   const [print, setPrint] = useState(first?.print ?? true);
+  const [exp, setExp] = useState(first?.export !== false);
+  const [zoomOn, setZoomOn] = useState(!!first?.zoom);
+  const [zmin, setZmin] = useState(first?.zoom ? String(Math.round(first.zoom.min * 100)) : '100');
+  const [zmax, setZmax] = useState(first?.zoom && Number.isFinite(first.zoom.max) ? String(Math.round(first.zoom.max * 100)) : '');
   const [view, setView] = useState(first ? doc.layerVisible[first.id] !== false : true);
   const close = () => useLayersUi.setState({ dialog: null });
   if (!first) return null;
   const ok = () => {
     close();
     const layers = { ...set.layers };
-    for (const l of ls) layers[l.id] = { ...l, name: ls.length === 1 && name.trim() ? name.trim() : l.name, on, locked, print };
+    const zoom = zoomOn ? { min: Math.max(0, Number(zmin) || 0) / 100, max: zmax.trim() ? Math.max(0, Number(zmax)) / 100 : Infinity } : undefined;
+    for (const l of ls) layers[l.id] = { ...l, name: ls.length === 1 && name.trim() ? name.trim() : l.name, on, locked, print, export: exp, zoom };
     s.setLayers({ ...set, layers }, { layerVisible: { ...doc.layerVisible, ...Object.fromEntries(ls.map((l) => [l.id, view])) } });
   };
   const onOff = (v: boolean, set: (x: boolean) => void, label: string) => (
@@ -303,8 +352,65 @@ function PropsForm({ doc, keys }: { doc: DocState; keys: string[] }) {
       <div className="prop-section">Usage</div>
       <div className="form-row"><span>View</span>{onOff(view, setView, 'View')}</div>
       <div className="form-row"><span>Print</span>{onOff(print, setPrint, 'Print')}</div>
+      <div className="form-row"><span>Export</span>{onOff(exp, setExp, 'Export')}</div>
+      <div className="form-row"><span>Zoom</span>
+        <select aria-label="Zoom" value={zoomOn ? 'range' : 'always'} onChange={(e) => setZoomOn(e.target.value === 'range')}>
+          <option value="always">Always visible</option><option value="range">On when in range</option>
+        </select>
+      </div>
+      {zoomOn && (
+        <div className="form-row"><span>Range</span>
+          <input aria-label="Minimum zoom" type="number" min={0} style={{ width: 64 }} value={zmin} onChange={(e) => setZmin(e.target.value)} /> % to
+          <input aria-label="Maximum zoom" type="number" min={0} style={{ width: 64 }} placeholder="any" value={zmax} onChange={(e) => setZmax(e.target.value)} /> %
+        </div>
+      )}
       <div className="modal-actions"><span className="spacer" />
         <button className="primary" onClick={ok}>OK</button><button onClick={close}>Cancel</button>
+      </div>
+    </Frame>
+  );
+}
+
+/** Move / rotate / scale a layer's content (e.g. a sheet added from a page), about a base point. */
+function AdjustForm({ doc, id }: { doc: DocState; id: string }) {
+  const l = doc.layers?.layers[id];
+  const pg = doc.loaded.pages[doc.page];
+  // Inches on paper, base point at the page centre (PDF space: origin bottom-left).
+  const [dx, setDx] = useState('0');
+  const [dy, setDy] = useState('0');
+  const [deg, setDeg] = useState('0');
+  const [pct, setPct] = useState('100');
+  const [step, setStep] = useState('0.125');
+  const [bx, setBx] = useState(((pg?.width ?? 0) / 144).toFixed(3));
+  const [by, setBy] = useState(((pg?.height ?? 0) / 144).toFixed(3));
+  const close = () => useLayersUi.setState({ dialog: null });
+  if (!l) return null;
+  const nudge = (x: number, y: number) => { const st = Number(step) || 0; setDx(String(+((Number(dx) || 0) + x * st).toFixed(4))); setDy(String(+((Number(dy) || 0) + y * st).toFixed(4))); };
+  const ok = async () => {
+    close();
+    await adjustLayer(id, layerMatrix((Number(dx) || 0) * 72, (Number(dy) || 0) * 72, Number(deg) || 0, (Number(pct) || 100) / 100, (Number(bx) || 0) * 72, (Number(by) || 0) * 72));
+  };
+  const field = (label: string, v: string, set: (x: string) => void, unit: string) => (
+    <div className="form-row"><span>{label}</span><input aria-label={label} type="number" step="any" style={{ width: 90 }} value={v} onChange={(e) => set(e.target.value)} /> {unit}</div>
+  );
+  return (
+    <Frame title="Move / Rotate / Scale Layer">
+      <p className="small">Layer: <strong>{l.name}</strong>. Moves its content on every page; the PDF stays a normal layered PDF.</p>
+      {field('Move right', dx, setDx, 'in')}
+      {field('Move up', dy, setDy, 'in')}
+      <div className="form-row"><span>Nudge</span>
+        <button aria-label="Nudge left" onClick={() => nudge(-1, 0)}>←</button><button aria-label="Nudge right" onClick={() => nudge(1, 0)}>→</button>
+        <button aria-label="Nudge up" onClick={() => nudge(0, 1)}>↑</button><button aria-label="Nudge down" onClick={() => nudge(0, -1)}>↓</button>
+        by <input aria-label="Nudge step" type="number" step="any" style={{ width: 70 }} value={step} onChange={(e) => setStep(e.target.value)} /> in
+      </div>
+      {field('Rotate', deg, setDeg, '° counterclockwise')}
+      {field('Scale', pct, setPct, '%')}
+      <div className="form-row"><span>Base point</span>
+        <input aria-label="Base point X" type="number" step="any" style={{ width: 70 }} value={bx} onChange={(e) => setBx(e.target.value)} /> ,
+        <input aria-label="Base point Y" type="number" step="any" style={{ width: 70 }} value={by} onChange={(e) => setBy(e.target.value)} /> in from the bottom-left (default: page centre)
+      </div>
+      <div className="modal-actions"><span className="spacer" />
+        <button className="primary" onClick={ok}>Apply</button><button onClick={close}>Cancel</button>
       </div>
     </Frame>
   );

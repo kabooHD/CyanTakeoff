@@ -66,3 +66,10 @@ export function alphabetical(set: LayerSet): LayerNode[] {
   const name = (n: LayerNode) => (n.id ? set.layers[n.id]?.name : n.label) ?? '';
   return [...set.order].sort((a, b) => name(a).localeCompare(name(b), undefined, { numeric: true }));
 }
+
+/** Move (dx, dy, PDF points), rotate (degrees, counterclockwise) and scale a layer about a base point (PDF space). */
+export function layerMatrix(dx: number, dy: number, deg: number, scale: number, bx: number, by: number): [number, number, number, number, number, number] {
+  const r = (deg * Math.PI) / 180, c = Math.cos(r) * scale, sn = Math.sin(r) * scale;
+  // p' = (p - b)·(scale·R) + b + d
+  return [c, sn, -sn, c, bx - (c * bx - sn * by) + dx, by - (sn * bx + c * by) + dy];
+}

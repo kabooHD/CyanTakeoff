@@ -1100,6 +1100,68 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForFunction(() => /Deleted 1 layer/.test(document.querySelector('.statusbar')?.textContent ?? ''));
   await page.waitForTimeout(1000);
   assert(await lpanel.getByRole('treeitem', { name: 'Layer Notes' }).count() === 0 && await ink() < 20, 'deleting a layer removes it and its content');
+  // Ink in a PDF-space box of the rendered page.
+  const inkAt = async (x0, y0, w, h) => page.evaluate(([x0, y0, w, h]) => {
+    const c = document.querySelector('.page canvas');
+    const k = c.width / 600;
+    const d = c.getContext('2d').getImageData(x0 * k, (400 - y0 - h) * k, w * k, h * k).data;
+    let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 128) n++;
+    return n;
+  }, [x0, y0, w, h]);
+  const planProps = async () => {
+    await lpanel.getByRole('treeitem', { name: 'Layer Plan' }).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Layer Properties…' }).click();
+    return page.getByRole('dialog', { name: 'Layer Properties' });
+  };
+  // Zoom range: Plan only shows up to 100% zoom.
+  let lpd = await planProps();
+  await lpd.getByLabel('Zoom', { exact: true }).selectOption('range');
+  await lpd.getByLabel('Minimum zoom').fill('0');
+  await lpd.getByLabel('Maximum zoom').fill('100');
+  await lpd.getByRole('button', { name: 'OK' }).click();
+  await page.waitForTimeout(1200);
+  const atFit = await inkAt(44, 100, 12, 200);
+  await page.keyboard.press('Control+8');
+  await page.waitForTimeout(1500);
+  const at100 = await inkAt(44, 100, 12, 200);
+  assert(atFit < 5 && at100 > 50, `a layer with a zoom range hides outside it (fit: ${atFit}, 100%: ${at100} dark pixels)`);
+  await page.keyboard.press('Control+9');
+  lpd = await planProps();
+  await lpd.getByLabel('Zoom', { exact: true }).selectOption('always');
+  await lpd.getByRole('button', { name: 'OK' }).click();
+  await page.waitForTimeout(1200);
+  // Move the Plan layer 1 inch right.
+  const before = [await inkAt(44, 100, 12, 200), await inkAt(116, 100, 12, 200)];
+  await lpanel.getByRole('treeitem', { name: 'Layer Plan' }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Move / Rotate / Scale…' }).click();
+  const mv = page.getByRole('dialog', { name: 'Move / Rotate / Scale Layer' });
+  await mv.getByLabel('Nudge step').fill('0.5');
+  await mv.getByLabel('Nudge right').click();
+  await mv.getByLabel('Nudge right').click();
+  assert(await mv.getByLabel('Move right').inputValue() === '1', 'nudge buttons add to the move');
+  await mv.getByRole('button', { name: 'Apply' }).click();
+  await page.waitForFunction(() => /Layer "Plan" moved/.test(document.querySelector('.statusbar')?.textContent ?? ''));
+  await page.waitForTimeout(1500);
+  const after = [await inkAt(44, 100, 12, 200), await inkAt(116, 100, 12, 200)];
+  assert(before[0] > 50 && before[1] < 5 && after[0] < 5 && after[1] > 50, `Move / Rotate / Scale moves the layer's content (${before} -> ${after})`);
+  // Export Layer to Page: a new PDF with only that layer.
+  const tabs0 = await page.locator('.doc-tab').count();
+  await lpanel.getByRole('treeitem', { name: 'Layer Plan' }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Export Layer to Page…' }).click();
+  await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs0);
+  assert((await page.locator('.doc-tab.active').innerText()).includes('layered - Plan'), 'Export Layer to Page opens the layer as a new PDF');
+  await page.locator('.doc-tab', { hasText: 'layered.pdf' }).click();
+  await page.waitForTimeout(800);
+  // Flatten markups to a new layer "Flat".
+  await page.getByRole('button', { name: 'Document', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^Flatten/ }).first().click();
+  const fd = page.getByRole('dialog', { name: 'Flatten Markups' });
+  await fd.getByLabel('Assign Layer').check();
+  await fd.getByLabel('Flatten to layer').fill('Flat');
+  await fd.getByRole('button', { name: 'OK' }).click();
+  await lpanel.getByRole('treeitem', { name: 'Layer Flat' }).waitFor({ timeout: 15000 });
+  assert(await page.locator('.ml-table tbody tr:not(.reply-row)').filter({ hasText: 'Rectangle' }).count() === 0, 'Flatten with Assign Layer puts the flattened markups on a new layer');
+
   // Add Layer from Page: the sheet drawn onto itself as a new layer.
   await page.getByRole('button', { name: 'From Page…' }).click();
   const al = page.getByRole('dialog', { name: 'Add Layer from Page' });

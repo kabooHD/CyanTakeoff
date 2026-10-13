@@ -173,6 +173,9 @@ filling, image signatures, redaction and OCR.
     markups removed or moved to the base PDF), properties, configurations,
     drag to reorder, Add Layer from Page with Align Points. Unlike Revu,
     a new empty layer shows in the list at once (a Reddit complaint).
+  - [x] Layers, second pass: zoom-range visibility, Export usage and Export
+    Layer to Page, Flatten > Assign Layer, Move / Rotate / Scale a layer's
+    content after placing it (the other Reddit request).
   - Low-end machines: measure load time, memory and pan/zoom speed on a
     4 GB laptop with a 100-sheet set; cap undo by memory (not 10 copies of
     the file); lower render limits when `navigator.deviceMemory` is small;

@@ -3,7 +3,7 @@
 // locked layers, print usage, and named configurations (/D /Configs).
 // Layer ids are the OCG's reference as pdf.js names it ("12R"), or
 // "new:<uuid>" for layers created since the file was opened.
-import { PDFArray, PDFDict, PDFHexString, PDFName, PDFRef, PDFStream, PDFString, type PDFDocument, type PDFObject } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFHexString, PDFName, PDFNumber, PDFRef, PDFStream, PDFString, type PDFDocument, type PDFObject } from 'pdf-lib';
 import { bytesOfLatin1, latin1, mkOp, name as nameOp, parseContent, writeContent, type Op } from './content';
 import { streamBytes } from './redactContent';
 
@@ -15,6 +15,10 @@ export interface Layer {
   locked: boolean;
   /** Included when printing. */
   print: boolean;
+  /** Included by Export Layer to Page (Revu's Export usage). Default true. */
+  export?: boolean;
+  /** Shown only between these zoom factors (1 = 100%); max may be Infinity. */
+  zoom?: { min: number; max: number };
 }
 /** A node of the layer tree: a layer (with child layers), or a label-only layer group. */
 export interface LayerNode { id?: string; label?: string; kids: LayerNode[] }
@@ -52,10 +56,15 @@ export function readLayers(doc: PDFDocument): LayerSet | null {
     const usage = g.lookup(N('Usage'));
     const pr = usage instanceof PDFDict ? usage.lookup(N('Print')) : undefined;
     const printOff = pr instanceof PDFDict && String(pr.get(N('PrintState'))) === '/OFF';
+    const ex = usage instanceof PDFDict ? usage.lookup(N('Export')) : undefined;
+    const exportOff = ex instanceof PDFDict && String(ex.get(N('ExportState'))) === '/OFF';
+    const zm = usage instanceof PDFDict ? usage.lookup(N('Zoom')) : undefined;
+    const num = (o: unknown, d: number) => (o instanceof PDFNumber ? o.asNumber() : d);
     layers[id] = {
       id, name: text(g.lookup(N('Name'))) || 'Layer',
       on: base === '/OFF' ? onIds.has(id) : !offIds.has(id),
-      locked: lockedIds.has(id), print: !printOff,
+      locked: lockedIds.has(id), print: !printOff, export: !exportOff,
+      ...(zm instanceof PDFDict ? { zoom: { min: num(zm.lookup(N('min')), 0), max: num(zm.lookup(N('max')), Infinity) } } : {}),
     };
   }
   const seen = new Set<string>();
@@ -120,9 +129,13 @@ export function writeLayers(doc: PDFDocument, set: LayerSet): Map<string, PDFRef
     let g = r ? ctx.lookup(r) : undefined;
     if (!(g instanceof PDFDict)) { g = ctx.obj({ Type: 'OCG' }) as PDFDict; r = ctx.register(g); }
     (g as PDFDict).set(N('Name'), encode(l.name));
-    const usage = (g as PDFDict).lookup(N('Usage'));
-    if (!l.print) (g as PDFDict).set(N('Usage'), ctx.obj({ ...(usage instanceof PDFDict ? {} : {}), Print: { PrintState: 'OFF' } }));
-    else if (usage instanceof PDFDict) usage.delete(N('Print'));
+    // Usage (8.11.4.4): keep entries we don't edit (Language, User, View...).
+    const u0 = (g as PDFDict).lookup(N('Usage'));
+    const usage = u0 instanceof PDFDict ? u0 : (ctx.obj({}) as PDFDict);
+    if (!l.print) usage.set(N('Print'), ctx.obj({ PrintState: 'OFF' })); else usage.delete(N('Print'));
+    if (l.export === false) usage.set(N('Export'), ctx.obj({ ExportState: 'OFF' })); else usage.delete(N('Export'));
+    if (l.zoom) usage.set(N('Zoom'), ctx.obj({ min: l.zoom.min, ...(Number.isFinite(l.zoom.max) ? { max: l.zoom.max } : {}) })); else usage.delete(N('Zoom'));
+    if (usage.entries().length) (g as PDFDict).set(N('Usage'), usage); else (g as PDFDict).delete(N('Usage'));
     refs.set(l.id, r!);
   }
   const ids = layerIds(set.order).filter((id) => refs.has(id));
@@ -300,4 +313,163 @@ export function layersOnPages(doc: PDFDocument): string[][] {
     }
     return [...out];
   });
+}
+
+// ---------------- Rewriting a layer's content ----------------
+
+type Mat = [number, number, number, number, number, number];
+const ID: Mat = [1, 0, 0, 1, 0, 0];
+const mulM = (a: Mat, b: Mat): Mat => [
+  a[0] * b[0] + a[1] * b[2], a[0] * b[1] + a[1] * b[3], a[2] * b[0] + a[3] * b[2], a[2] * b[1] + a[3] * b[3],
+  a[4] * b[0] + a[5] * b[2] + b[4], a[4] * b[1] + a[5] * b[3] + b[5],
+];
+const invM = (m: Mat): Mat => {
+  const d = m[0] * m[3] - m[1] * m[2] || 1e-12;
+  return [m[3] / d, -m[1] / d, -m[2] / d, m[0] / d, (m[2] * m[5] - m[3] * m[4]) / d, (m[1] * m[4] - m[0] * m[5]) / d];
+};
+const cmOp = (m: Mat) => mkOp('cm', ...m.map((v) => ({ t: 'num' as const, v, raw: String(+v.toFixed(6)) })));
+const PATH = new Set(['m', 'l', 'c', 'v', 'y', 'h', 're']);
+const PAINT = new Set(['S', 's', 'f', 'F', 'f*', 'B', 'B*', 'b', 'b*', 'n']);
+const SHOW = new Set(['Tj', 'TJ', "'", '"']);
+
+/** Whether an /OC value (OCG or OCMD) belongs to one of `ids`. */
+function ocIn(doc: PDFDocument, o: unknown, ids: Set<string>): boolean {
+  if (o instanceof PDFRef) {
+    if (ids.has(refId(o))) return true;
+    o = doc.context.lookup(o);
+  }
+  if (o instanceof PDFDict && String(o.get(N('Type'))) === '/OCMD') {
+    const g = o.get(N('OCGs'));
+    return g instanceof PDFRef ? ids.has(refId(g)) : refsOf(doc, g).some((r) => ids.has(refId(r)));
+  }
+  return false;
+}
+
+/**
+ * Walk every page's content (and nested forms, rewritten as copies), letting
+ * `edit` rewrite operations. `edit` gets each op with the current CTM and
+ * whether it is inside marked content of one of `ids`.
+ */
+function rewriteContent(doc: PDFDocument, ids: Set<string>,
+  edit: (op: Op, ctx: { ctm: Mat; inLayer: boolean; xobjInLayer: boolean; res: PDFDict | undefined; out: Op[]; next: () => void }) => void) {
+  const ctx = doc.context;
+  const walk = (content: string, res: PDFDict | undefined, ctm0: Mat, inLayer0: boolean, depth: number): string | null => {
+    const props = res?.lookup(N('Properties'));
+    const xobjs = res?.lookup(N('XObject'));
+    const ops = parseContent(content);
+    const out: Op[] = [];
+    let changed = false;
+    let ctm = ctm0;
+    const ctmStack: Mat[] = [];
+    const mc: boolean[] = [];
+    for (const op of ops) {
+      const inLayer = inLayer0 || mc.some(Boolean);
+      if (op.op === 'q') ctmStack.push(ctm);
+      else if (op.op === 'Q') ctm = ctmStack.pop() ?? ctm;
+      else if (op.op === 'cm') ctm = mulM(op.args.map((a) => (a.t === 'num' ? a.v : 0)) as Mat, ctm);
+      else if (op.op === 'BDC' || op.op === 'BMC') {
+        mc.push(op.op === 'BDC' && op.args[0]?.t === 'name' && op.args[0].v === 'OC' && op.args[1]?.t === 'name'
+          && props instanceof PDFDict && ocIn(doc, props.get(N(op.args[1].v)), ids));
+      } else if (op.op === 'EMC') {
+        // `edit` sees EMC while its block is still open.
+      }
+      let xobjInLayer = false;
+      if (op.op === 'Do' && op.args[0]?.t === 'name' && xobjs instanceof PDFDict && depth < 20) {
+        const xr = xobjs.get(N(op.args[0].v));
+        const xo = xr instanceof PDFRef ? ctx.lookup(xr) : xr;
+        if (xo instanceof PDFStream) {
+          xobjInLayer = ocIn(doc, xo.dict.get(N('OC')), ids);
+          if (!xobjInLayer && String(xo.dict.get(N('Subtype'))) === '/Form') {
+            const fm = (xo.dict.lookup(N('Matrix')) as PDFArray | undefined)?.asArray().map((n) => (n instanceof PDFNumber ? n.asNumber() : 0));
+            const fr = xo.dict.lookup(N('Resources'));
+            const inner = walk(latin1(streamBytes(xo)), fr instanceof PDFDict ? fr : res, mulM(fm?.length === 6 ? fm as Mat : ID, ctm), inLayer, depth + 1);
+            if (inner !== null) {
+              const fresh = ctx.flateStream(bytesOfLatin1(inner), {});
+              for (const [k, v] of xo.dict.entries()) if (!['Filter', 'DecodeParms', 'Length'].includes(k.toString().slice(1))) fresh.dict.set(k, v);
+              const nm = `CTCopy${Object.keys(Object.fromEntries((xobjs as PDFDict).entries())).length + 1}`;
+              (xobjs as PDFDict).set(N(nm), ctx.register(fresh));
+              out.push(mkOp('Do', nameOp(nm)));
+              changed = true;
+              continue;
+            }
+          }
+        }
+      }
+      const before = out.length;
+      let passed = false;
+      edit(op, { ctm, inLayer, xobjInLayer, res, out, next: () => { passed = true; out.push(op); } });
+      if (!passed || out.length !== before + 1) changed = true;
+      if (op.op === 'EMC') mc.pop();
+    }
+    return changed ? writeContent(out) : null;
+  };
+  for (const page of doc.getPages()) {
+    const c = page.node.Contents();
+    const streams: PDFStream[] = [];
+    if (c instanceof PDFStream) streams.push(c);
+    else if (c instanceof PDFArray) for (const r of c.asArray()) { const s = ctx.lookup(r); if (s instanceof PDFStream) streams.push(s); }
+    if (!streams.length) continue;
+    const next = walk(streams.map((s) => latin1(streamBytes(s))).join('\n'), page.node.Resources(), ID, false, 0);
+    if (next !== null) page.node.set(N('Contents'), ctx.register(ctx.flateStream(bytesOfLatin1(next))));
+  }
+}
+
+/**
+ * Move, rotate or scale everything on layer `id`: `m` is applied in page
+ * (PDF user) space, wherever the layer's content sits in the content tree.
+ */
+export function transformLayer(doc: PDFDocument, id: string, m: Mat) {
+  const ids = new Set([id]);
+  // Inside content with transform C, apply C·m·C⁻¹ so the change is m in page space.
+  const local = (ctm: Mat) => mulM(mulM(ctm, m), invM(ctm));
+  const opened: boolean[] = [];
+  rewriteContent(doc, ids, (op, x) => {
+    if (op.op === 'BDC' || op.op === 'BMC') {
+      const startsLayer = op.op === 'BDC' && !x.inLayer && op.args[0]?.t === 'name' && op.args[0].v === 'OC' && op.args[1]?.t === 'name'
+        && ocIn(doc, (x.res?.lookup(N('Properties')) as PDFDict | undefined)?.get(N(op.args[1].v)), ids);
+      opened.push(startsLayer);
+      x.next();
+      if (startsLayer) x.out.push(mkOp('q'), cmOp(local(x.ctm)));
+      return;
+    }
+    if (op.op === 'EMC') {
+      if (opened.pop()) x.out.push(mkOp('Q'));
+      x.next();
+      return;
+    }
+    if (op.op === 'Do' && x.xobjInLayer && !x.inLayer) { x.out.push(mkOp('q'), cmOp(local(x.ctm)), op, mkOp('Q')); return; }
+    x.next();
+  });
+}
+
+/**
+ * Revu's Export Layer to Page: keep only what is drawn on layers `ids`
+ * (page content outside them is removed; graphics state is kept). For a
+ * copy of the document that becomes the exported PDF.
+ */
+export function keepOnlyLayers(doc: PDFDocument, ids: Set<string>) {
+  let path: Op[] = [];
+  let clip = false;
+  rewriteContent(doc, ids, (op, x) => {
+    if (x.inLayer || x.xobjInLayer) { if (path.length && PAINT.has(op.op)) { x.out.push(...path); path = []; } x.next(); return; }
+    if (PATH.has(op.op)) { path.push(op); return; }
+    if (op.op === 'W' || op.op === 'W*') { clip = true; path.push(op); return; }
+    if (PAINT.has(op.op)) {
+      // Clipping paths still apply to what is kept; anything painted outside the layers goes.
+      if (clip) x.out.push(...path, mkOp('n'));
+      path = []; clip = false;
+      return;
+    }
+    if (SHOW.has(op.op) || op.op === 'Do' || op.op === 'sh' || op.op === 'BI') return;
+    x.next();
+  });
+  // Markups that are not on the exported layers go too.
+  for (const page of doc.getPages()) {
+    const annots = page.node.lookup(N('Annots'));
+    if (!(annots instanceof PDFArray)) continue;
+    page.node.set(N('Annots'), doc.context.obj(annots.asArray().filter((r) => {
+      const a = doc.context.lookup(r);
+      return a instanceof PDFDict && String(a.get(N('Subtype'))) !== '/Popup' && ocIn(doc, a.get(N('OC')), ids);
+    })));
+  }
 }
