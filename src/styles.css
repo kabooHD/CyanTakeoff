@@ -157,6 +157,19 @@ button.primary { background: var(--accent) !important; color: #fff; border-color
 .tab-close:hover { opacity: 1; background: var(--hover); }
 
 /* ---------- viewer ---------- */
+.viewer-wrap { flex: 1; position: relative; display: flex; min-height: 0; }
+.measure-preview {
+  position: absolute; right: 18px; bottom: 18px; z-index: 4; background: rgba(255,255,255,0.96); border: 1px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25); padding: 6px 10px 6px 22px; font-variant-numeric: tabular-nums; pointer-events: auto;
+}
+.measure-preview td { padding: 1px 6px; }
+.measure-preview td:first-child { color: var(--muted); }
+.measure-preview td:last-child { font-weight: 600; text-align: right; }
+.measure-preview-close { position: absolute; left: 4px; top: 4px; border: 0; background: none; padding: 2px; display: grid; }
+.measure-preview-icon {
+  position: absolute; right: 18px; bottom: 18px; z-index: 4; border: 1px solid var(--border); background: #fff; padding: 4px; display: grid;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
 .viewer { flex: 1; overflow: auto; background: var(--canvas); position: relative; min-height: 0; user-select: none; -webkit-user-select: none; }
 .page { position: absolute; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.45); }
 .page canvas { position: absolute; left: 0; top: 0; }
@@ -178,7 +191,18 @@ button.primary { background: var(--accent) !important; color: #fff; border-color
 .markups-list { position: relative; display: flex; flex-direction: column; background: #fff; border-top: 1px solid var(--border); min-height: 80px; }
 .resize-handle { position: absolute; top: -3px; left: 0; right: 0; height: 6px; cursor: ns-resize; z-index: 2; }
 .ml-toolbar { display: flex; align-items: center; gap: 10px; padding: 3px 6px; background: var(--chrome-2); border-bottom: 1px solid var(--border); }
-.ml-filter { width: 200px; }
+.ml-filter { width: 180px; }
+.ml-toolbar button.on { background: var(--accent-soft); border-color: var(--accent); }
+.ml-columns { position: relative; }
+.ml-columns-menu {
+  position: absolute; top: 100%; left: 0; z-index: 30; background: #fff; border: 1px solid var(--border);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18); padding: 4px 0; min-width: 170px; max-height: 300px; overflow: auto;
+}
+.ml-columns-menu label { display: flex; gap: 6px; align-items: center; padding: 3px 10px; white-space: nowrap; }
+.ml-columns-menu label:hover { background: var(--hover); }
+.ml-filter-row th { top: 23px; padding: 2px 4px; cursor: default; }
+.ml-filter-row select { width: 100%; font-size: 11px; padding: 0; }
+.ml-table th.dragging { opacity: 0.5; }
 .ml-table-wrap { flex: 1; overflow: auto; }
 .ml-table { border-collapse: collapse; width: max-content; min-width: 100%; }
 .ml-table th {
@@ -204,11 +228,13 @@ button.primary { background: var(--accent) !important; color: #fff; border-color
 .sb-nav button { border: 0; background: none; padding: 2px; display: grid; }
 .sb-nav button:hover { background: var(--hover); }
 .sb-nav input { width: 56px; text-align: center; padding: 0 3px; height: 18px; }
-.sb-scale { font-weight: 600; }
+.sb-scale { font-weight: 600; border: 0; border-left: 1px solid var(--border); background: none; font-size: 11px; }
+.sb-scale:hover { background: var(--hover); }
+.sb-zoom { margin-left: 8px; }
 .sb-pos { min-width: 140px; font-variant-numeric: tabular-nums; }
-.sb-toggles { display: flex; height: 100%; }
+.sb-toggles { display: flex; height: 100%; border-right: 1px solid var(--border); }
 .sb-toggles button {
-  border: 0; border-left: 1px solid var(--border); background: none; padding: 0 9px; font-size: 11px; color: #777;
+  border: 0; border-right: 1px solid var(--border); background: none; padding: 0 9px; font-size: 11px; color: #777;
 }
 .sb-toggles button.on { color: #0b4ea2; background: var(--accent-soft); font-weight: 600; }
 
@@ -225,5 +251,5 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
 
 @media (max-width: 900px) {
   .panel { width: 200px; }
-  .sb-pos, .sb-section[title="Page size"] { display: none; }
+  .sb-pos, .sb-size { display: none; }
 }

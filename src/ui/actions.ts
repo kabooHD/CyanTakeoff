@@ -84,7 +84,7 @@ function unitsOf(m: Markup) {
   }
 }
 
-export function exportSummaryCsv(markups?: Markup[]) {
+export function exportSummaryCsv(markups?: Markup[], columns: SummaryColumn[] = SUMMARY_COLUMNS) {
   const d = activeDoc();
   if (!d) return;
   const rows = markups ?? d.markups;
@@ -93,8 +93,8 @@ export function exportSummaryCsv(markups?: Markup[]) {
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const csv = [
-    SUMMARY_COLUMNS.map((c) => c.label).join(','),
-    ...rows.map((m) => SUMMARY_COLUMNS.map((c) => esc(c.value(m, d))).join(',')),
+    columns.map((c) => c.label).join(','),
+    ...rows.map((m) => columns.map((c) => esc(c.value(m, d))).join(',')),
   ].join('\r\n');
   const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
   const a = Object.assign(document.createElement('a'), { href: url, download: d.name.replace(/\.pdf$/i, '') + ' - Markups Summary.csv' });

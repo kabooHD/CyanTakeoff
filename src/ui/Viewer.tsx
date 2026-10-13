@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PDFPageProxy, RenderTask } from 'pdfjs-dist';
 import { useApp, type DocState } from '../model/store';
-import { dist, ortho, rectCorners } from '../model/measure';
+import { MEASURE_TYPES, dist, formatLength, formatNumber, measure, ortho, rectCorners, resolveFormat } from '../model/measure';
+import { Icon } from './icons';
 import type { Markup, MarkupType, Pt, ToolId } from '../model/types';
 import { toolById } from '../tools/tools';
 import { MarkupShape, handlePoints } from './renderMarkup';
@@ -25,7 +26,7 @@ type Drag =
   | { kind: 'pan'; sx: number; sy: number; left: number; top: number }
   | { kind: 'move'; start: Pt; snapshot: Markup[]; ids: string[]; moved: boolean }
   | { kind: 'vertex'; id: string; index: number; snapshot: Markup[]; moved: boolean }
-  | { kind: 'band'; start: Pt; cur: Pt; add: boolean };
+  | { kind: 'band'; start: Pt; cur: Pt; add: boolean; right?: { x: number; y: number } };
 
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
@@ -49,6 +50,8 @@ export function Viewer({ doc }: { doc: DocState }) {
   const anchor = useRef<{ px: number; py: number; cx: number; cy: number } | null>(null);
   const spaceDown = useRef(false);
   const countId = useRef<string | null>(null);
+  const lastMiddle = useRef(0);
+  const rightDown = useRef<{ x: number; y: number } | null>(null);
   const [, force] = useState(0);
   const [geom, setGeom] = useState<SnapGeometry | null>(null);
 
@@ -293,6 +296,28 @@ export function Viewer({ doc }: { doc: DocState }) {
     // preventDefault also stops the focus change, so close an open editor here.
     if (document.activeElement instanceof HTMLElement && document.activeElement !== document.body) document.activeElement.blur();
     const el = scrollRef.current!;
+    if (e.button === 1) {
+      // Middle double-click re-centers the view on that point (Revu).
+      const now = Date.now();
+      if (now - lastMiddle.current < 350) {
+        const r = el.getBoundingClientRect();
+        el.scrollLeft += e.clientX - (r.left + el.clientWidth / 2);
+        el.scrollTop += e.clientY - (r.top + el.clientHeight / 2);
+        lastMiddle.current = 0;
+        return;
+      }
+      lastMiddle.current = now;
+    }
+    if (e.button === 2) {
+      // Right button: click = context menu (or leave the tool), drag = multi-select (Revu).
+      rightDown.current = { x: e.clientX, y: e.clientY };
+      if (tool === 'select') {
+        const raw = toPage(e);
+        setDrag({ kind: 'band', start: raw, cur: raw, add: true, right: { x: e.clientX, y: e.clientY } });
+        (e.target as Element).setPointerCapture?.(e.pointerId);
+      }
+      return;
+    }
     if (e.button === 1 || (e.button === 0 && tool === 'pan')) {
       setDrag({ kind: 'pan', sx: e.clientX, sy: e.clientY, left: el.scrollLeft, top: el.scrollTop });
       (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -423,18 +448,22 @@ export function Viewer({ doc }: { doc: DocState }) {
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
+    if (e.button === 2) {
+      const start = rightDown.current;
+      rightDown.current = null;
+      const moved = start ? Math.hypot(e.clientX - start.x, e.clientY - start.y) > 4 : false;
+      if (drag?.kind === 'band' && drag.right && moved) {
+        selectInBand(drag);
+        setDrag(null);
+        return;
+      }
+      setDrag(null);
+      rightClick(e);
+      return;
+    }
     if (drag) {
       if ((drag.kind === 'move' || drag.kind === 'vertex') && drag.moved) s.pushUndo(drag.snapshot);
-      if (drag.kind === 'band') {
-        const b = { minX: Math.min(drag.start.x, drag.cur.x), maxX: Math.max(drag.start.x, drag.cur.x), minY: Math.min(drag.start.y, drag.cur.y), maxY: Math.max(drag.start.y, drag.cur.y) };
-        if (b.maxX - b.minX > 1 / zoom) {
-          const ids = markups.filter((m) => {
-            const mb = markupBounds(m);
-            return mb.minX >= b.minX && mb.maxX <= b.maxX && mb.minY >= b.minY && mb.maxY <= b.maxY;
-          }).map((m) => m.id);
-          s.select(ids, drag.add);
-        }
-      }
+      if (drag.kind === 'band') selectInBand(drag);
       setDrag(null);
       return;
     }
@@ -449,6 +478,16 @@ export function Viewer({ doc }: { doc: DocState }) {
       const moved = Math.hypot(e.clientX - draft.dragFrom.x, e.clientY - draft.dragFrom.y) > 4;
       if (moved) completeTwoPoint(constrain(toPage(e), e, draft.points[0]));
     }
+  };
+
+  const selectInBand = (band: Extract<Drag, { kind: 'band' }>) => {
+    const b = { minX: Math.min(band.start.x, band.cur.x), maxX: Math.max(band.start.x, band.cur.x), minY: Math.min(band.start.y, band.cur.y), maxY: Math.max(band.start.y, band.cur.y) };
+    if (b.maxX - b.minX <= 1 / zoom) return;
+    const ids = markups.filter((m) => {
+      const mb = markupBounds(m);
+      return mb.minX >= b.minX && mb.maxX <= b.maxX && mb.minY >= b.minY && mb.maxY <= b.maxY;
+    }).map((m) => m.id);
+    s.select(ids, band.add);
   };
 
   const onDoubleClick = (e: React.MouseEvent) => {
@@ -466,9 +505,17 @@ export function Viewer({ doc }: { doc: DocState }) {
     }
   };
 
-  const onContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
+  // The browser's own menu is suppressed; the right button is handled on pointer-up.
+  const onContextMenu = (e: React.MouseEvent) => e.preventDefault();
+
+  const rightClick = (e: { clientX: number; clientY: number }) => {
     if (draft) { finishPoly(); return; }
+    // Right-click leaves a drawing tool, including Reuse mode (Revu).
+    if (s.tool !== 'select') {
+      if (countId.current) countId.current = null;
+      s.setTool('select');
+      return;
+    }
     const raw = toPage(e);
     const hit = [...markups].reverse().find((m) => hitTest(m, raw, 5 / zoom));
     const items: MenuItem[] = [];
@@ -519,6 +566,7 @@ export function Viewer({ doc }: { doc: DocState }) {
     : tool === 'select' ? 'default' : tool === 'zoom' ? 'zoom-in' : 'crosshair';
 
   return (
+    <div className="viewer-wrap">
     <div className="viewer" ref={scrollRef} onScroll={() => setScrollTick((n) => n + 1)}>
       <div style={{ width: innerW, height: innerH, position: 'relative' }}>
         <div className="page" style={{ left, top, width: pw, height: ph }}>
@@ -576,6 +624,38 @@ export function Viewer({ doc }: { doc: DocState }) {
         </div>
       </div>
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
+    </div>
+      <MeasurePreview markup={preview && MEASURE_TYPES.has(preview.type) && doc.calibrations[doc.page] ? preview : null} />
+    </div>
+  );
+}
+
+/**
+ * Live values while placing a measurement on a calibrated page, in the
+ * lower-right corner of the drawing (Revu). X hides it; the icon recalls it.
+ */
+function MeasurePreview({ markup }: { markup: Markup | null }) {
+  const [hidden, setHidden] = useState(false);
+  if (!markup) return null;
+  if (hidden) {
+    return <button className="measure-preview-icon" title="Show measurement values" onClick={() => setHidden(false)}><Icon name="measurements" size={16} /></button>;
+  }
+  const v = measure(markup)!;
+  const s = markup.scale!;
+  const f = resolveFormat(s);
+  const len = (x: number) => formatLength(x, s.unit, f.decimals, f.den, f.trim);
+  const P = markup.points;
+  const rows: [string, string][] = [];
+  if (v.length !== undefined) rows.push([markup.type === 'area' ? 'Perimeter' : markup.type === 'radius' ? 'Radius' : markup.type === 'diameter' ? 'Diameter' : 'Length', len(v.length)]);
+  if (v.area !== undefined) rows.push(['Area', `${formatNumber(v.area, f.decimals, f.trim)} ${f.areaLabel}`]);
+  if (v.volume !== undefined) rows.push(['Volume', `${formatNumber(v.volume, f.decimals, f.trim)} ${f.volumeLabel}`]);
+  if (v.angle !== undefined) rows.push(['Angle', v.text]);
+  if (v.count !== undefined) rows.push(['Count', v.text]);
+  if (P.length > 2 && markup.type !== 'angle') rows.push(['Segment', len(dist(P[P.length - 2], P[P.length - 1]) * s.factor)]);
+  return (
+    <div className="measure-preview">
+      <button className="measure-preview-close" title="Hide" onClick={() => setHidden(true)}><Icon name="close" size={10} /></button>
+      <table><tbody>{rows.map(([k, x]) => <tr key={k}><td>{k}</td><td>{x}</td></tr>)}</tbody></table>
     </div>
   );
 }

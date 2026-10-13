@@ -37,6 +37,8 @@ async function toScreen(xFt, yFt) {
   return { x: box.x + px * zoom, y: box.y + py * zoom };
 }
 
+assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'status bar says Scale Not Set before calibrating');
+
 // Set scale from the Measurements panel preset.
 await page.locator('.side-right button[title="Measurements"]').click();
 await page.locator('.props select').first().selectOption(`1/4" = 1'-0"`);
@@ -47,6 +49,12 @@ await page.keyboard.press('Shift+Alt+A');
 for (const [x, y] of [[0, 22], [24, 22], [24, 40], [0, 40]]) {
   const p = await toScreen(x, y);
   await page.mouse.click(p.x, p.y);
+}
+{
+  const p = await toScreen(1, 39); await page.mouse.move(p.x, p.y);
+  await page.waitForTimeout(100);
+  const preview = await page.locator('.measure-preview').innerText();
+  assert(preview.includes('Area') && preview.includes('Perimeter'), 'live measurement preview while drawing');
 }
 await page.keyboard.press('Enter');
 await page.waitForTimeout(200);
@@ -113,6 +121,34 @@ list = await page.locator('.ml-table tbody').innerText();
 assert(list.includes('Count Measurement') && /\t3\t/.test(list), 'count of 3');
 assert(list.includes('Verify door hardware'), 'text box content in list');
 await page.screenshot({ path: `${OUT}/03-takeoff.png` });
+
+// Right-click leaves a drawing tool.
+await page.keyboard.press('L');
+{ const p = await toScreen(50, 30); await page.mouse.click(p.x, p.y, { button: 'right' }); }
+assert((await page.locator('.tb-btn.active').getAttribute('title')).startsWith('Select'), 'right-click returns to Select');
+
+// Right-drag selects the markups inside the box (here: the count, cloud and text box on the right).
+{
+  const a = await toScreen(25, 17), b = await toScreen(59.9, 1);
+  await page.mouse.move(a.x, a.y); await page.mouse.down({ button: 'right' });
+  await page.mouse.move(b.x, b.y, { steps: 6 }); await page.mouse.up({ button: 'right' });
+  const selected = await page.locator('.ml-table tbody tr.selected').count();
+  assert(selected >= 2, `right-drag multi-selects (${selected} selected)`);
+  await page.keyboard.press('Escape');
+}
+
+// Markups List: hide a column, filter a column.
+await page.getByRole('button', { name: 'Columns ▾' }).click();
+await page.locator('.ml-columns-menu label', { hasText: 'Author' }).locator('input').uncheck();
+await page.mouse.move(5, 5);
+assert(!(await page.locator('.ml-table thead').innerText()).includes('Author'), 'column chooser hides Author');
+await page.getByRole('button', { name: 'Filter List' }).click();
+await page.locator('.ml-filter-row th').first().locator('select').selectOption('Count Measurement');
+assert((await page.locator('.ml-table tbody tr').count()) === 1, 'filter row shows only the count');
+await page.getByRole('button', { name: 'Filter List' }).click();
+await page.getByRole('button', { name: 'Columns ▾' }).click();
+await page.locator('.ml-columns-menu label', { hasText: 'Author' }).locator('input').check();
+await page.mouse.move(5, 5);
 
 // Undo/redo.
 const rows = () => page.locator('.ml-table tbody tr').count();

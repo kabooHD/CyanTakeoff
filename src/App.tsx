@@ -96,7 +96,7 @@ export function App() {
 
   return (
     <div className={`app ${dragOver ? 'drag-over' : ''}`}
-      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragOver={(e) => { if (!e.dataTransfer.types.includes('Files')) return; e.preventDefault(); setDragOver(true); }}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false); }}
       onDrop={async (e) => {
         e.preventDefault(); setDragOver(false);

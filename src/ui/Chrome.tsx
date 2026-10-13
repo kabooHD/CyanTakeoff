@@ -173,13 +173,23 @@ export function DocTabs() {
 
 // ---------------- Status bar ----------------
 
+const TOOL_HINTS: Partial<Record<string, string>> = {
+  'two-point': 'Click and drag, or click two points. Hold Shift for horizontal, vertical or 45°.',
+  box: 'Click and drag to draw.',
+  poly: 'Click to add points. Double-click or Enter to finish, Backspace removes the last point.',
+  freehand: 'Click and drag to draw.',
+  point: 'Click to place.',
+  count: 'Click each item to count it. Enter or Esc to finish.',
+  callout: 'Click the arrow point, then click where the text box goes.',
+};
+
 const TOGGLES: { key: keyof Toggles; label: string; title: string }[] = [
-  { key: 'snap', label: 'Snap', title: 'Snap to grid (Ctrl+Shift+F9)' },
-  { key: 'grid', label: 'Grid', title: 'Show grid (Shift+F9)' },
-  { key: 'content', label: 'Content', title: 'Snap to drawing content: line endpoints and lines (Ctrl+Shift+F8)' },
-  { key: 'markup', label: 'Markup', title: 'Snap to markups (Ctrl+Shift+F7)' },
-  { key: 'reuse', label: 'Reuse', title: 'Keep the current tool after placing a markup' },
-  { key: 'sync', label: 'Sync', title: 'Sync views across documents (coming soon)' },
+  { key: 'snap', label: 'Snap', title: 'Snap to Grid (Ctrl+Shift+F9)' },
+  { key: 'grid', label: 'Grid', title: 'Show Grid (Shift+F9)' },
+  { key: 'content', label: 'Content', title: 'Snap to Content: line endpoints and lines in the drawing (Ctrl+Shift+F8)' },
+  { key: 'markup', label: 'Markup', title: 'Snap to Markup (Ctrl+Shift+F7)' },
+  { key: 'reuse', label: 'Reuse', title: 'Reuse Markup Tools: keep the tool after placing a markup, until Esc or right-click' },
+  { key: 'sync', label: 'Sync', title: 'Sync views in split view (coming with split view)' },
 ];
 
 export function StatusBar() {
@@ -193,13 +203,24 @@ export function StatusBar() {
     ? `${formatLength(cursor.p.x * scale.factor, scale.unit)}, ${formatLength(cursor.p.y * scale.factor, scale.unit)}`
     : `${(cursor.p.x / 72).toFixed(2)}", ${(cursor.p.y / 72).toFixed(2)}"`);
   const page = doc?.loaded.pages[doc.page];
+  const t = toolById(s.tool);
+  const hint = TOOL_HINTS[t.interaction] ?? '';
   return (
     <div className="statusbar">
-      <div className="sb-section sb-status" title={s.status}>{s.busy ? '⏳ ' : ''}{s.status}</div>
+      {/* Left: snap/reuse toggles and help for the current tool, as in Revu */}
+      <div className="sb-toggles">
+        {TOGGLES.map((x) => (
+          <button key={x.key} className={s.toggles[x.key] ? 'on' : ''} title={x.title}
+            onMouseDown={(e) => e.preventDefault()} onClick={() => s.toggle(x.key)}>{x.label}</button>
+        ))}
+      </div>
+      <div className="sb-section sb-status" title={s.status}>
+        {s.busy ? '⏳ ' : ''}{s.tool !== 'select' && hint ? `${t.name}: ${hint}` : s.status}
+      </div>
       {doc && (
         <div className="sb-section sb-nav">
-          <button onClick={() => s.setPage(0)} title="First Page"><Icon name="first" size={14} /></button>
-          <button onClick={() => s.setPage(doc.page - 1)} title="Previous Page"><Icon name="prev" size={14} /></button>
+          <button onClick={() => s.setPage(0)} title="First Page (Home)"><Icon name="first" size={14} /></button>
+          <button onClick={() => s.setPage(doc.page - 1)} title="Previous Page (Ctrl+Left)"><Icon name="prev" size={14} /></button>
           <input value={pageInput || page?.label || ''} onChange={(e) => setPageInput(e.target.value)}
             onFocus={(e) => e.target.select()}
             onBlur={() => setPageInput('')}
@@ -212,20 +233,21 @@ export function StatusBar() {
               (e.target as HTMLInputElement).blur();
             }} />
           <span>({doc.page + 1} of {n})</span>
-          <button onClick={() => s.setPage(doc.page + 1)} title="Next Page"><Icon name="next" size={14} /></button>
-          <button onClick={() => s.setPage(n - 1)} title="Last Page"><Icon name="last" size={14} /></button>
+          <button onClick={() => s.setPage(doc.page + 1)} title="Next Page (Ctrl+Right)"><Icon name="next" size={14} /></button>
+          <button onClick={() => s.setPage(n - 1)} title="Last Page (End)"><Icon name="last" size={14} /></button>
+          <span className="sb-zoom">{Math.round((doc.zoom || 1) * 100)}%</span>
         </div>
       )}
-      {doc && <div className="sb-section">{Math.round((doc.zoom || 1) * 100)}%</div>}
-      {doc && page && <div className="sb-section" title="Page size">{(page.width / 72).toFixed(2)} x {(page.height / 72).toFixed(2)} in</div>}
-      {doc && <div className="sb-section sb-scale" title="Page scale (Calibrate in the Measurements panel)">{scale ? scale.label : 'Not calibrated'}</div>}
-      {doc && <div className="sb-section sb-pos">{pos ?? ''}</div>}
-      <div className="sb-toggles">
-        {TOGGLES.map((t) => (
-          <button key={t.key} className={s.toggles[t.key] ? 'on' : ''} title={t.title}
-            onMouseDown={(e) => e.preventDefault()} onClick={() => s.toggle(t.key)}>{t.label}</button>
-        ))}
-      </div>
+      {/* Right: page scale (click to set), page size, cursor position */}
+      {doc && (
+        <button className="sb-section sb-scale" title="Page scale. Click to set or reset it."
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => { s.setPanels({ right: 'measurements' }); s.setTool('calibrate'); }}>
+          {scale ? scale.label : 'Scale Not Set'}
+        </button>
+      )}
+      {doc && page && <div className="sb-section sb-size" title="Page size">{(page.width / 72).toFixed(2)} x {(page.height / 72).toFixed(2)} in</div>}
+      {doc && <div className="sb-section sb-pos" title="Cursor position">{pos ?? ''}</div>}
     </div>
   );
 }
