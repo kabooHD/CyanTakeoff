@@ -66,8 +66,9 @@ npm run sample                   # regenerates public/sample-floorplan.pdf
 
 ## Deploy (cyantakeoff.com)
 
-Every push is built and published by `.github/workflows/deploy.yml` to a
-Debian/Ubuntu VPS running Caddy (automatic HTTPS). One-time setup:
+Deployment is manual: `.github/workflows/deploy.yml` builds the app and
+publishes it to a Debian/Ubuntu VPS running Caddy (automatic HTTPS) only when
+run from the Actions tab. One-time setup before the first run:
 
 1. **DNS:** at your domain registrar, add two `A` records pointing to the
    VPS IP address: `@` (cyantakeoff.com) and `www`.
@@ -75,7 +76,7 @@ Debian/Ubuntu VPS running Caddy (automatic HTTPS). One-time setup:
    > New repository secret: `VPS_HOST` (the IP), optionally `VPS_USER`
    (default `root`), and either `VPS_SSH_KEY` (a private key whose public
    key is on the server) or `VPS_PASSWORD`.
-3. **Run it:** Actions tab > Deploy > Run workflow (or push any change).
+3. **Run it:** Actions tab > Deploy > Run workflow.
 
 The first run installs Caddy and rsync on the server (`deploy/setup-vps.sh`).
 

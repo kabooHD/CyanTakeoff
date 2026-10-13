@@ -1,11 +1,10 @@
 name: Deploy
 
 # Builds the app and publishes it to the VPS behind cyantakeoff.com.
-# Needs repository secrets: VPS_HOST (server IP), optional VPS_USER (default
+# Manual only (Actions > Deploy > Run workflow): nothing goes live until the
+# maintainer decides to launch. Needs repository secrets: VPS_HOST (server IP), optional VPS_USER (default
 # root), and either VPS_SSH_KEY (private key) or VPS_PASSWORD.
 on:
-  push:
-    branches: [claude/cyantakeoff-bluebeam-alternative-ke6po9, main]
   workflow_dispatch:
 
 concurrency:
