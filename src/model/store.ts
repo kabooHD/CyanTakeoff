@@ -6,8 +6,9 @@ import { DEFAULT_STYLES, toolById } from '../tools/tools';
 import { MEASURE_TYPES, scaleAt } from './measure';
 import { translated } from './markup';
 import { expandGroups } from './arrange';
+import { columnDefaults } from './columns';
 import type {
-  Markup, MarkupStyle, MarkupType, Pt, Scale, Space, ToolId, ToolPreset, Toggles, Viewport,
+  CustomColumn, Markup, MarkupStyle, MarkupType, Pt, Scale, Space, ToolId, ToolPreset, Toggles, Viewport,
 } from './types';
 
 export type LeftPanel = 'thumbnails' | 'bookmarks' | 'spaces' | null;
@@ -35,6 +36,9 @@ export interface DocState {
   spaces: Space[][];
   /** Pages whose Spaces changed (their /BSISpaces is rewritten on save). */
   dirtySpaces: Set<number>;
+  /** Custom columns of the Markups List (saved with the document). */
+  columns: CustomColumn[];
+  dirtyColumns: boolean;
   page: number;
   zoom: number;
   selection: string[];
@@ -136,6 +140,8 @@ interface AppState {
   setViewport(page: number, v: Viewport): void;
   /** Delete viewports by id, or all on `pages`. */
   deleteViewports(pages: number[], ids?: string[]): void;
+  /** Replace the document's custom columns. */
+  setColumns(cols: CustomColumn[]): void;
   /** Add a Space, or replace the one with the same id. */
   setSpace(page: number, sp: Space): void;
   deleteSpaces(page: number, ids: string[]): void;
@@ -272,6 +278,8 @@ export const useApp = create<AppState>((set, get) => {
           dirtyCalibrations: new Set(),
           spaces: loaded.spaces,
           dirtySpaces: new Set(),
+          columns: loaded.columns,
+          dirtyColumns: false,
           page: 0, zoom: 0, selection: [], undo: [], redo: [], dirty: false,
         };
         set((s) => ({ docs: [...s.docs, doc], activeId: doc.id, status: loaded.readOnly ? `${name} opened read-only (file could not be parsed for editing)` : `Opened ${name}` }));
@@ -317,6 +325,7 @@ export const useApp = create<AppState>((set, get) => {
         ...partial,
       } as Markup;
       if (MEASURE_TYPES.has(m.type) && !m.scale) m.scale = scaleAt(d.calibrations[m.page], d.viewports[m.page], m.points[0]) ?? undefined;
+      if (!m.custom) m.custom = columnDefaults(d.columns);
       withDoc((doc) => ({
         markups: [...doc.markups, m], undo: [...doc.undo, doc.markups], redo: [], dirty: true,
       }));
@@ -448,6 +457,9 @@ export const useApp = create<AppState>((set, get) => {
       });
     },
     setActiveViewport: (activeViewport) => set({ activeViewport }),
+    setColumns(columns) {
+      withDoc(() => ({ columns, dirtyColumns: true, dirty: true }));
+    },
     setSpace(page, sp) {
       withDoc((d) => {
         const spaces = [...d.spaces];
@@ -515,6 +527,7 @@ export const useApp = create<AppState>((set, get) => {
           original: d.bytes, pages: d.loaded.pages, markups: d.markups,
           importedRefs: d.importedRefs, calibrations: d.calibrations, viewports: d.viewports,
           dirtyCalibrations: d.dirtyCalibrations, spaces: d.spaces, dirtySpaces: d.dirtySpaces,
+          columns: d.dirtyColumns ? d.columns : undefined,
         });
         let handle = saveAs ? undefined : d.fileHandle;
         let name = d.name;
@@ -545,7 +558,7 @@ export const useApp = create<AppState>((set, get) => {
             ...x, name, bytes, fileHandle: handle, loaded, markups,
             importedRefs: loaded.importedRefs,
             calibrations: loaded.calibrations, viewports: loaded.viewports, dirtyCalibrations: new Set(),
-            spaces: loaded.spaces, dirtySpaces: new Set(),
+            spaces: loaded.spaces, dirtySpaces: new Set(), columns: loaded.columns, dirtyColumns: false,
             page, zoom, selection: [], undo: [], redo: [], dirty: false,
           } : x),
           status: `Saved ${name}`,

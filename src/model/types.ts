@@ -97,6 +97,22 @@ export interface Space {
   opacity: number;
 }
 
+/** A custom column of the Markups List (Revu: Text, Number, Checkmark, Choice, Date, Formula). */
+export interface CustomColumn {
+  id: string;
+  name: string;
+  type: 'text' | 'number' | 'checkmark' | 'choice' | 'date' | 'formula';
+  /** Choice items. */
+  options?: string[];
+  /** Default for new markups ('today' for Date: the current date). */
+  defaultValue?: string | number | boolean;
+  expression?: string;
+  format?: 'normal' | 'currency' | 'percent';
+  decimals?: number;
+  currency?: string;
+  includeInTotals?: boolean;
+}
+
 export type MarkupStatus = 'None' | 'Accepted' | 'Rejected' | 'Cancelled' | 'Completed';
 
 export type LineStyle = 'solid' | 'dashed' | 'dotted';
@@ -146,6 +162,8 @@ export interface Markup {
   groupId?: string;
   /** Locked markups cannot be moved, resized or deleted (Revu Lock). */
   locked?: boolean;
+  /** Values of the document's custom columns, by column id. */
+  custom?: Record<string, string | number | boolean>;
   /** Original PDF annotation reference when imported from the file. */
   source?: {
     objectNumber: number;

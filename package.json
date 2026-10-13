@@ -14,6 +14,7 @@
     "e2e": "node tests/e2e.mjs"
   },
   "dependencies": {
+    "fflate": "^0.8.2",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.4.299",
     "polygon-clipping": "^0.15.7",

@@ -3,8 +3,8 @@ import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { PDFDocument } from 'pdf-lib';
 import type { PDFDocumentProxy, PageViewport } from 'pdfjs-dist';
-import type { Markup, Pt, Scale, Space, Viewport } from '../model/types';
-import { importAnnotations, removeAnnots } from './importAnnots';
+import type { CustomColumn, Markup, Pt, Scale, Space, Viewport } from '../model/types';
+import { importAnnotations, readColumns, removeAnnots } from './importAnnots';
 
 export { refKey, removeAnnots, type CTData } from './importAnnots';
 
@@ -28,6 +28,8 @@ export interface LoadedDoc {
   viewports: Viewport[][];
   /** Revu Spaces, per page (page space). */
   spaces: Space[][];
+  /** Custom columns saved with the document. */
+  columns: CustomColumn[];
   /** refKeys of every annotation represented by a markup. */
   importedRefs: Set<string>;
   /** True when pdf-lib could not parse the file; markups cannot be saved into it. */
@@ -89,6 +91,7 @@ export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
     pages,
     markups,
     spaces,
+    columns: lib ? readColumns(lib) : [],
     calibrations: pages.map((_, i) => result.pageScales[i] ?? null),
     viewports,
     importedRefs: new Set(result.imported.flatMap((s) => [...s])),

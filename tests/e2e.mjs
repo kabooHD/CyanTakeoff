@@ -492,6 +492,39 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Control+Shift+F8');
 }
 
+// Custom columns (Number + Formula) and Summary to Excel.
+{
+  await page.getByRole('button', { name: 'Columns ▾' }).click();
+  await page.getByRole('button', { name: 'Manage Columns…' }).click();
+  const mc = page.getByRole('dialog', { name: 'Manage Columns' });
+  await mc.getByRole('button', { name: 'Add…' }).click();
+  await mc.getByLabel('Column name').fill('Unit Cost');
+  await mc.getByLabel('Column type').selectOption('number');
+  await mc.getByRole('button', { name: 'OK' }).click();
+  await mc.getByRole('button', { name: 'Add…' }).click();
+  await mc.getByLabel('Column name').fill('Total Cost');
+  await mc.getByLabel('Column type').selectOption('formula');
+  await mc.getByLabel('Expression').fill('Area * [Unit Cost]');
+  await mc.getByLabel('Format').selectOption('currency');
+  await mc.getByRole('button', { name: 'OK' }).click();
+  await mc.getByRole('button', { name: 'Close' }).click();
+  const row = page.locator('.ml-table tbody tr').filter({ hasText: '419.43 sf' }).first();
+  await page.screenshot({ path: `${OUT}/10-columns.png` });
+  await row.getByLabel('Unit Cost').fill('2');
+  await row.getByLabel('Unit Cost').press('Enter');
+  assert((await row.innerText()).includes("$838.87"), `formula column computes Area * Unit Cost ($838.87): ${(await row.innerText()).replace(/\s+/g, " ")}`);
+  await page.getByRole('button', { name: 'Summary ▾' }).click();
+  const [x] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Excel (.xlsx)' }).click()]);
+  await x.saveAs(`${OUT}/summary.xlsx`);
+  const { unzipSync, strFromU8 } = await import('fflate');
+  const sheet = strFromU8(unzipSync(readFileSync(`${OUT}/summary.xlsx`))['xl/worksheets/sheet1.xml']);
+  assert(sheet.includes('Total Cost') && sheet.includes('<v>838.8'), 'Excel summary has the custom columns with numeric values');
+  const [sv] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
+  await sv.saveAs(`${OUT}/saved-columns.pdf`);
+  await page.waitForTimeout(800);
+  assert((await page.locator('.ml-table tbody tr').filter({ hasText: '419.43 sf' }).first().innerText()).includes('$838.87'), 'custom columns and values survive save and reload');
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],

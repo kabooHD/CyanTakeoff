@@ -76,6 +76,17 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - Rise/Drop (length, polylength) is added to the length; Depth on lengths
   gives wall area (length × depth). Depth and Rise/Drop are exclusive.
 
+## Custom columns (Markups List > Columns > Manage Columns)
+- Types: Checkmark, Choice (options, default), Date (format, default none/
+  current/custom), Formula (expression over other columns; Measurement =
+  the primary value without units; format Normal/Currency/Percentage,
+  decimals, Include In Totals), Number (format, decimals, totals, min/max,
+  default), Text (multiline, default).
+- CyanTakeoff stores definitions in the document catalog (/CTColumns, our
+  own key) and values in each markup's CTData; Revu's own storage is not
+  known yet.
+- Summary export: Excel (.xlsx) or CSV of the rows and columns shown.
+
 ## Spaces (Alt+S)
 - Spaces panel: Add Space (drag a rectangle or click corners, close on the
   first point or Enter, then name it), Highlight toggle, Edit; per page

@@ -2,11 +2,11 @@ import {
   PDFArray, PDFDict, PDFDocument, PDFHexString, PDFRef, PDFString, StandardFonts,
   type PDFFont, type PDFObject,
 } from 'pdf-lib';
-import type { Cutout, Markup, Pt, Scale, Space, Viewport } from '../model/types';
+import type { CustomColumn, Cutout, Markup, Pt, Scale, Space, Viewport } from '../model/types';
 import { spaceTree, type SpaceNode } from '../model/spaces';
 import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import { refKey, removeAnnots, type CTData, type PageInfo } from './document';
-import { isRulerViewport } from './importAnnots';
+import { COLUMNS_KEY, isRulerViewport } from './importAnnots';
 import { N, hexToRgb, pdfDate, writeMeasure } from './pdfutil';
 
 const f = (n: number) => String(+n.toFixed(3));
@@ -380,6 +380,7 @@ function ctData(m: Markup, P: Pt[]): CTData {
     groupId: m.groupId,
     slope: m.slope,
     rise: m.rise,
+    custom: m.custom && Object.keys(m.custom).length ? m.custom : undefined,
   };
 }
 
@@ -573,6 +574,8 @@ export interface SaveInput {
   spaces?: Space[][];
   /** Pages whose Spaces changed; their /BSISpaces is rewritten. */
   dirtySpaces?: Set<number>;
+  /** Custom column definitions, when changed. */
+  columns?: CustomColumn[];
 }
 
 /** A Revu-style /NM: 16 random capital letters. */
@@ -629,6 +632,11 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
     const d = doc.context.lookup(ref) as PDFDict;
     d.set(N('IRT'), groupHead.get(group)!);
     d.set(N('RT'), N('Group'));
+  }
+
+  if (input.columns) {
+    if (input.columns.length) doc.catalog.set(N(COLUMNS_KEY), PDFHexString.fromText(JSON.stringify(input.columns)));
+    else doc.catalog.delete(N(COLUMNS_KEY));
   }
 
   // Spaces, nested the way Revu writes them: /Kids with /Parent back-links.

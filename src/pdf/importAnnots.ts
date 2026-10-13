@@ -13,7 +13,7 @@
 // - Page /VP: the page scale is a /Viewport covering the whole page with no
 //   /Name; viewports (regions with their own scale) carry a /Name and BBox.
 import { PDFArray, PDFDict, PDFRawStream, PDFRef, decodePDFRawStream, type PDFDocument } from 'pdf-lib';
-import type { Markup, MarkupStatus, MarkupStyle, MarkupType, Pt, Scale } from '../model/types';
+import type { CustomColumn, Markup, MarkupStatus, MarkupStyle, MarkupType, Pt, Scale } from '../model/types';
 import { DEFAULT_STYLES, toolById } from '../tools/tools';
 import { MEASURE_TYPES } from '../model/measure';
 import {
@@ -36,6 +36,7 @@ export interface CTData {
   text?: string; // stamp label, Cloud+ text
   slope?: Markup['slope'];
   rise?: number;
+  custom?: Markup['custom'];
   groupId?: string; // Revu-style markup group
 }
 
@@ -160,6 +161,7 @@ function baseMarkup(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number, 
     groupId: ct?.groupId,
     slope: ct?.slope,
     rise: ct?.rise,
+    custom: ct?.custom,
     locked: ((getNumber(doc, dict, 'F') ?? 0) & 128) !== 0 || undefined,
   } satisfies Omit<Markup, 'points'>;
 }
@@ -535,4 +537,15 @@ function readAttachment(doc: PDFDocument, dict: PDFDict): Markup['file'] | undef
   const bytes = streamBytes(stream);
   if (!fs || !bytes) return undefined;
   return { name: getText(doc, fs, 'UF') ?? getText(doc, fs, 'F') ?? 'attachment', mime: 'application/octet-stream', data: toBase64(bytes) };
+}
+
+/** Catalog key holding CyanTakeoff's custom column definitions (JSON). */
+export const COLUMNS_KEY = 'CTColumns';
+
+export function readColumns(doc: PDFDocument): CustomColumn[] {
+  try {
+    const t = getText(doc, doc.catalog, COLUMNS_KEY);
+    const v = t ? JSON.parse(t) : [];
+    return Array.isArray(v) ? v : [];
+  } catch { return []; }
 }

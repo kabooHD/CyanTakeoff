@@ -289,3 +289,16 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
 .spaces-panel label.inline { display: inline-flex; align-items: center; gap: 4px; }
 .prop-actions button.on { background: var(--accent-soft); border-color: var(--accent); }
 .pad-t { padding-top: 6px; }
+
+/* Manage Columns */
+.modal.wide { min-width: 560px; max-width: calc(100vw - 32px); }
+.cc-list { width: 100%; border-collapse: collapse; font-size: 12px; margin: 6px 0; }
+.cc-list th, .cc-list td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+.cc-actions { white-space: nowrap; text-align: right; }
+.cc-actions button { padding: 1px 6px; margin-left: 2px; }
+.ml-manage { display: block; width: 100%; text-align: left; margin-bottom: 4px; }
+.ml-columns-menu.right { right: 0; left: auto; }
+.ml-columns-menu button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 4px 8px; cursor: pointer; }
+.ml-columns-menu button:hover { background: var(--hover); }
+.ml-cell-input { width: 100%; min-width: 60px; border: 1px solid transparent; background: transparent; font: inherit; }
+.ml-cell-input:focus { border-color: var(--accent); background: #fff; }

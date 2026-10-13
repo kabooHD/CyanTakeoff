@@ -1,7 +1,9 @@
 import { anchorOf, spaceAt } from '../model/spaces';
 import { activeDoc, useApp, type DocState } from '../model/store';
 import { areaLabel, measure, unitLabel, volumeLabel } from '../model/measure';
-import type { Markup } from '../model/types';
+import type { CustomColumn, Markup } from '../model/types';
+import { displayValue, isNumericColumn, numericValue } from '../model/columns';
+import { buildXlsx } from '../model/xlsx';
 
 type Picker = (o: unknown) => Promise<FileSystemFileHandle[]>;
 
@@ -45,6 +47,20 @@ export interface SummaryColumn {
   label: string;
   value: (m: Markup, d: DocState) => string | number;
   numeric?: boolean;
+  /** Custom column definition, for custom columns. */
+  custom?: CustomColumn;
+  /** Exclude from the totals row. */
+  noTotal?: boolean;
+}
+
+/** Built-in columns plus the document's custom columns. */
+export function allColumns(d: DocState | null | undefined): SummaryColumn[] {
+  const custom = (d?.columns ?? []).map((c): SummaryColumn => ({
+    key: `c:${c.id}`, label: c.name, custom: c,
+    numeric: isNumericColumn(c), noTotal: isNumericColumn(c) && c.includeInTotals === false,
+    value: (m, doc) => displayValue(m, c, doc.columns),
+  }));
+  return [...SUMMARY_COLUMNS, ...custom];
 }
 
 const meas = (m: Markup) => measure(m);
@@ -101,6 +117,26 @@ export function exportSummaryCsv(markups?: Markup[], columns: SummaryColumn[] = 
   ].join('\r\n');
   const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
   const a = Object.assign(document.createElement('a'), { href: url, download: d.name.replace(/\.pdf$/i, '') + ' - Markups Summary.csv' });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/** Summary to Excel (.xlsx): the rows and columns shown, with numeric cells and a totals row. */
+export function exportSummaryXlsx(markups: Markup[], columns: SummaryColumn[]) {
+  const d = activeDoc();
+  if (!d) return;
+  const num = (c: SummaryColumn, m: Markup): number | string => {
+    if (c.custom && isNumericColumn(c.custom)) return numericValue(m, c.custom, d.columns) ?? '';
+    const v = c.value(m, d);
+    return c.numeric && v !== '' ? Number(v) : v;
+  };
+  const rows = markups.map((m) => columns.map((c) => num(c, m)));
+  const totals = columns.map((c, i) => (i === 0 ? 'Total'
+    : c.numeric && !c.noTotal && !['depth', 'angle', 'slope'].includes(c.key)
+      ? Math.round(rows.reduce((t, r) => t + (Number(r[i]) || 0), 0) * 1e6) / 1e6 : ''));
+  const bytes = buildXlsx('Markups', columns.map((c) => c.label), rows, totals);
+  const url = URL.createObjectURL(new Blob([bytes as unknown as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: d.name.replace(/\.pdf$/i, '') + ' - Markups Summary.xlsx' });
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

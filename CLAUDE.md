@@ -72,7 +72,8 @@ Done: Revu-style workspace and official default shortcuts; markup tools
 (incl. Cloud+, Typewriter, Arc, Dimension, Stamp, Flag, Strikethrough/
 Underline/Squiggly and text Highlight, Image, Snapshot, Hyperlink, File
 Attachment, Eraser); Group/Ungroup, Arrange, Lock, Align, Flip, Format
-Painter, Lasso; Spaces (Revu /BSISpaces, panel, Space column);
+Painter, Lasso; Spaces (Revu /BSISpaces, panel, Space column); slope, rise/drop, wall area;
+custom columns incl. formulas; Summary to Excel (.xlsx);
 length, polylength, area, perimeter, volume, count, angle, radius, diameter;
 cutouts (polygon/ellipse, Revu fuse/trim rules); Dynamic Fill;
 separate X/Y scales; 3-point radius; viewports (regions with their own scale, Revu

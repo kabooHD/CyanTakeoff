@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useApp, useActiveDoc } from '../model/store';
-import type { MarkupStatus } from '../model/types';
-import { SUMMARY_COLUMNS, exportSummaryCsv, type SummaryColumn } from './actions';
+import type { CustomColumn, Markup, MarkupStatus } from '../model/types';
+import { allColumns, exportSummaryCsv, exportSummaryXlsx, type SummaryColumn } from './actions';
+import { ManageColumns } from './ManageColumns';
 import { Icon } from './icons';
 
 const STATUSES: MarkupStatus[] = ['None', 'Accepted', 'Rejected', 'Cancelled', 'Completed'];
@@ -14,13 +15,15 @@ const LS = 'cyantakeoff:markups-list';
 interface Layout { order: string[]; hidden: string[] }
 
 function loadLayout(): Layout {
-  const all = SUMMARY_COLUMNS.map((c) => c.key);
   try {
     const l = JSON.parse(localStorage.getItem(LS) ?? 'null') as Layout | null;
-    if (l) return { order: [...l.order.filter((k) => all.includes(k)), ...all.filter((k) => !l.order.includes(k))], hidden: l.hidden };
+    if (l) return l;
   } catch { /* storage unavailable */ }
-  return { order: all, hidden: DEFAULT_HIDDEN };
+  return { order: [], hidden: DEFAULT_HIDDEN };
 }
+
+/** Saved order, with columns it does not know yet (new or custom) appended. */
+const effectiveOrder = (l: Layout, keys: string[]) => [...l.order.filter((k) => keys.includes(k)), ...keys.filter((k) => !l.order.includes(k))];
 
 function saveLayout(l: Layout) {
   try { localStorage.setItem(LS, JSON.stringify(l)); } catch { /* storage unavailable */ }
@@ -37,15 +40,19 @@ export function MarkupsList() {
   const [layout, setLayoutState] = useState(loadLayout);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [height, setHeight] = useState(220);
+  const [manage, setManage] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const setLayout = (l: Layout) => { setLayoutState(l); saveLayout(l); };
 
-  const columns: SummaryColumn[] = layout.order
+  const defs = useMemo(() => allColumns(doc), [doc]);
+  const order = effectiveOrder(layout, defs.map((c) => c.key));
+  const columns: SummaryColumn[] = order
     .filter((k) => !layout.hidden.includes(k))
-    .map((k) => SUMMARY_COLUMNS.find((c) => c.key === k)!);
+    .map((k) => defs.find((c) => c.key === k)!);
 
   const all = useMemo(() => doc
-    ? doc.markups.map((m) => ({ m, v: Object.fromEntries(SUMMARY_COLUMNS.map((c) => [c.key, c.value(m, doc)])) as Record<string, string | number> }))
-    : [], [doc]);
+    ? doc.markups.map((m) => ({ m, v: Object.fromEntries(defs.map((c) => [c.key, c.value(m, doc)])) as Record<string, string | number> }))
+    : [], [doc, defs]);
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -78,15 +85,16 @@ export function MarkupsList() {
 
   const moveColumn = (from: string, to: string) => {
     if (from === to) return;
-    const order = layout.order.filter((k) => k !== from);
-    order.splice(order.indexOf(to), 0, from);
-    setLayout({ ...layout, order });
+    const next = order.filter((k) => k !== from);
+    next.splice(next.indexOf(to), 0, from);
+    setLayout({ ...layout, order: next });
   };
 
   const distinct = (key: string) => [...new Set(all.map((r) => String(r.v[key])))].filter((x) => x !== '').sort();
 
   return (
     <div className="markups-list" style={{ height }}>
+      {manage && <ManageColumns onClose={() => setManage(false)} />}
       <div className="resize-handle" onPointerDown={startResize} />
       <div className="ml-toolbar">
         <strong>Markups List</strong>
@@ -94,8 +102,9 @@ export function MarkupsList() {
           <button onClick={() => setColumnsOpen(!columnsOpen)} title="Show or hide columns">Columns ▾</button>
           {columnsOpen && (
             <div className="ml-columns-menu" onMouseLeave={() => setColumnsOpen(false)}>
-              {layout.order.map((k) => {
-                const c = SUMMARY_COLUMNS.find((x) => x.key === k)!;
+              <button className="ml-manage" onClick={() => { setColumnsOpen(false); setManage(true); }}>Manage Columns…</button>
+              {order.map((k) => {
+                const c = defs.find((x) => x.key === k)!;
                 const on = !layout.hidden.includes(k);
                 return (
                   <label key={k}>
@@ -113,9 +122,17 @@ export function MarkupsList() {
         <input className="ml-filter" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <span className="muted">{rows.length} of {all.length} markup{all.length === 1 ? '' : 's'}</span>
         <span className="spacer" />
-        <button disabled={!doc} onClick={() => exportSummaryCsv(rows.map((r) => r.m), columns)} title="Export the rows and columns shown to CSV (opens in Excel)">
-          <Icon name="export" size={14} /> Summary
-        </button>
+        <span className="ml-columns">
+          <button disabled={!doc} onClick={() => setExportOpen(!exportOpen)} title="Export the rows and columns shown">
+            <Icon name="export" size={14} /> Summary ▾
+          </button>
+          {exportOpen && (
+            <div className="ml-columns-menu right" onMouseLeave={() => setExportOpen(false)}>
+              <button onClick={() => { setExportOpen(false); exportSummaryXlsx(rows.map((r) => r.m), columns); }}>Excel (.xlsx)</button>
+              <button onClick={() => { setExportOpen(false); exportSummaryCsv(rows.map((r) => r.m), columns); }}>CSV</button>
+            </div>
+          )}
+        </span>
         <button onClick={() => s.setPanels({ markupsList: false })} title="Close"><Icon name="close" size={12} /></button>
       </div>
       <div className="ml-table-wrap">
@@ -163,7 +180,8 @@ export function MarkupsList() {
                           onChange={(e) => s.updateMarkups([m.id], () => ({ status: e.target.value as MarkupStatus }))}>
                           {STATUSES.map((x) => <option key={x}>{x}</option>)}
                         </select>
-                      ) : v[c.key]}
+                      ) : c.custom && c.custom.type !== 'formula' ? <CustomCell m={m} col={c.custom} />
+                        : v[c.key]}
                   </td>
                 ))}
               </tr>
@@ -173,7 +191,7 @@ export function MarkupsList() {
             <tfoot>
               <tr>
                 {columns.map((c, i) => {
-                  const total = c.numeric && !NO_TOTAL.has(c.key) ? rows.reduce((t, r) => t + (Number(r.v[c.key]) || 0), 0) : 0;
+                  const total = c.numeric && !NO_TOTAL.has(c.key) && !c.noTotal ? rows.reduce((t, r) => t + (Number(String(r.v[c.key]).replace(/[^0-9.eE+-]/g, '')) || 0), 0) : 0;
                   return (
                     <td key={c.key} className={c.numeric ? 'num' : ''}>
                       {i === 0 ? 'Total' : total ? Math.round(total * 100) / 100 : ''}
@@ -187,4 +205,35 @@ export function MarkupsList() {
       </div>
     </div>
   );
+}
+
+/** Editable cell of a custom column (Text, Number, Checkmark, Choice, Date). */
+function CustomCell({ m, col }: { m: Markup; col: CustomColumn }) {
+  const s = useApp();
+  const value = m.custom?.[col.id];
+  const set = (v: string | number | boolean | undefined) => s.updateMarkups([m.id], (x) => {
+    const custom = { ...(x.custom ?? {}) };
+    if (v === undefined || v === '' || v === false) delete custom[col.id]; else custom[col.id] = v;
+    return { custom };
+  });
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+  switch (col.type) {
+    case 'checkmark':
+      return <input type="checkbox" aria-label={col.name} checked={!!value} onClick={stop} onChange={(e) => set(e.target.checked)} />;
+    case 'choice':
+      return (
+        <select aria-label={col.name} value={String(value ?? '')} onClick={stop} onChange={(e) => set(e.target.value)}>
+          <option value="" />
+          {(col.options ?? []).map((o) => <option key={o}>{o}</option>)}
+        </select>
+      );
+    case 'date':
+      return <input type="date" aria-label={col.name} value={String(value ?? '')} onClick={stop} onChange={(e) => set(e.target.value)} />;
+    default:
+      return (
+        <input className="ml-cell-input" aria-label={col.name} type={col.type === 'number' ? 'number' : 'text'} defaultValue={String(value ?? '')} key={String(value ?? '')}
+          onClick={stop} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+          onBlur={(e) => { const t = e.target.value; if (t !== String(value ?? '')) set(col.type === 'number' ? (t === '' ? undefined : Number(t)) : t); }} />
+      );
+  }
 }
