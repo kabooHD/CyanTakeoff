@@ -77,7 +77,8 @@ custom columns incl. formulas; Summary to Excel (.xlsx), CSV or PDF report;
 Legends; Markups List replies, Checkmark/Lock/Creation Date columns, arrow
 keys and jump-to-markup; Search (Ctrl+F); split view (Ctrl+2/Ctrl+H); page operations (insert,
 blank, delete, extract, replace keeping markups, rotate, reorder by
-thumbnail drag, split, combine) and Flatten;
+thumbnail drag, split, combine) and Flatten; Compare Documents (clouds
+differences) and Overlay Pages (two-colour overlay PDF);
 length, polylength, area, perimeter, volume, count, angle, radius, diameter;
 cutouts (polygon/ellipse, Revu fuse/trim rules); Dynamic Fill;
 separate X/Y scales; 3-point radius; viewports (regions with their own scale, Revu
@@ -94,4 +95,6 @@ Next (from `docs/PLAN.md`):
 
 Known gaps: Revu cutout storage unknown (ours in CTData); curved segments
 on polygons/cutouts (Ctrl+drag) not supported; view modes other than
-single page (continuous, side by side) and Rotate View not built.
+single page (continuous, side by side) and Rotate View not built;
+Compare/Overlay have no alignment points (pages compared as positioned)
+and work on rasterised pages (~100 dpi), not vector content.

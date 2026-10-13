@@ -15,6 +15,7 @@ import { SpaceDialog } from './ui/SpacesPanel';
 import { nextHit, useSearch } from './ui/Search';
 import { PagesDialog, openPagesDialog } from './ui/PagesDialog';
 import { rotatePages } from './pdf/pages';
+import { CompareDialog } from './ui/Compare';
 
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
@@ -176,6 +177,7 @@ export function App() {
       <LinkDialog />
       <SpaceDialog />
       <PagesDialog />
+      <CompareDialog />
       {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
       {dialog === 'about' && <AboutDialog onClose={() => setDialog(null)} />}
     </div>

@@ -80,6 +80,14 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - Replace Pages keeps the old page's markups, page scale and Spaces (the
   basis of slip sheeting). Flatten keeps hyperlinks and form fields.
 
+## Compare
+- Compare Documents: pick the original and revised document/page; the
+  differences are clouded (subject "Compare", label Added/Removed/Changed)
+  on the revised sheet, optionally removed items on the original too.
+- Overlay Pages: base and overlay sheets in two colours (default red and
+  blue); what is in both shows grey. Output is a new PDF.
+- Revu also offers alignment points and vector comparison; not built yet.
+
 ## Measurement properties: slope, rise/drop, depth
 - Slope (Pitch x/12, Degree or Grade %) adjusts lengths and areas for a
   sloped plane: sloped = plan × sqrt(1 + slope²).

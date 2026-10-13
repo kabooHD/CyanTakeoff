@@ -638,6 +638,30 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.screenshot({ path: `${OUT}/13-flattened.png` });
 }
 
+// Compare Documents and Overlay Pages: the original sample sheet vs this one (markups flattened into it).
+{
+  const openMenu = async (menu, item) => { await page.getByRole('button', { name: menu, exact: true }).click(); await page.getByRole('menuitem', { name: item }).click(); };
+  await openMenu('Document', 'Compare Documents…');
+  const cd = page.getByRole('dialog', { name: 'Compare Documents' });
+  await cd.getByLabel('Original document').selectOption({ label: 'Sample Floor Plan.pdf' });
+  await cd.getByLabel('Original page').fill('1');
+  await cd.getByLabel('Revised page').fill('1');
+  await cd.getByRole('button', { name: 'OK' }).click();
+  await page.waitForFunction(() => /Compare: \d+ difference/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 30000 });
+  const clouds = (await page.locator('.ml-table tbody').innerText()).split('\nCompare').length - 1;
+  assert(clouds >= 3, `Compare clouds the differences on the revised sheet (${clouds})`);
+  await page.screenshot({ path: `${OUT}/14-compare.png` });
+  const tabs = await page.locator('.doc-tab').count();
+  await openMenu('Document', 'Overlay Pages…');
+  const od = page.getByRole('dialog', { name: 'Overlay Pages' });
+  await od.getByLabel('Base document').selectOption({ label: 'Sample Floor Plan.pdf' });
+  await od.getByRole('button', { name: 'OK' }).click();
+  await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs, { timeout: 30000 });
+  await page.waitForTimeout(1200);
+  assert((await page.locator('.doc-tab.active').innerText()).startsWith('Overlay'), 'Overlay Pages opens a two-colour overlay document');
+  await page.screenshot({ path: `${OUT}/15-overlay.png` });
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],

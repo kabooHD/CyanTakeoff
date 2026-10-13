@@ -8,6 +8,7 @@ import { MenuList, type MenuItem } from './ContextMenu';
 import { exportSummaryCsv, openFile, openSample } from './actions';
 import { viewerApi } from './Viewer';
 import { combineFiles, openPagesDialog } from './PagesDialog';
+import { useCompareDialog } from './Compare';
 import { arrangeItems } from './arrangeMenu';
 import { useCursor } from './cursor';
 
@@ -81,6 +82,9 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Split Document…', disabled: noDoc, action: () => openPagesDialog('split') },
       { sep: true },
       { label: 'Flatten Markups…', shortcut: 'Ctrl+Shift+M', disabled: noDoc, action: () => openPagesDialog('flatten') },
+      { sep: true },
+      { label: 'Compare Documents…', disabled: noDoc, action: () => useCompareDialog.setState({ mode: 'compare' }) },
+      { label: 'Overlay Pages…', disabled: noDoc, action: () => useCompareDialog.setState({ mode: 'overlay' }) },
     ],
     Tools: [
       { label: 'Select', shortcut: 'V', checked: s.tool === 'select', action: () => s.setTool('select') },
