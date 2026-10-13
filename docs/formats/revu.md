@@ -24,6 +24,12 @@ Clean-room notes from inspecting Revu-authored PDFs
   formats; `/D 100` means two decimals and `/FD true` drops trailing zeros.
 - Revu also adds `/TargetUnitConversion` and an annotation-level `/DepthUnit`.
 
+## Groups
+
+- Markup groups use the same link as count groups: every member after the
+  first has `/IRT` pointing at the first markup and `/RT /Group`.
+- Lock is the standard annotation flag Locked (`/F` bit 128).
+
 ## Measurement annotations
 
 | Revu tool | Subtype | /IT | Notes |

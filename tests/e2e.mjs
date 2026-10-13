@@ -431,6 +431,29 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await chooser.setFiles(`${OUT}/02-opened.png`);
   await page.waitForFunction(() => document.querySelector('.ml-table tbody')?.textContent?.includes('Image'));
   assert(await page.locator('.markup-layer image').count() >= 2, 'image markups are drawn');
+
+  // Group (Ctrl+G) selects together; Lock (Ctrl+Shift+L) prevents deleting; groups saved Revu-style.
+  await page.keyboard.press('Escape');
+  await click(52, 14);
+  { const p = await toScreen(57.5, 33.5); await page.keyboard.down('Control'); await page.mouse.click(p.x, p.y); await page.keyboard.up('Control'); }
+  await page.keyboard.press('Control+G');
+  await page.keyboard.press('Escape');
+  await click(52, 14);
+  assert(await page.locator('.ml-table tbody tr.selected').count() === 2, 'clicking one grouped markup selects the group');
+  await page.keyboard.press('Control+Shift+L');
+  const n0 = await page.locator('.ml-table tbody tr').count();
+  await page.keyboard.press('Delete');
+  assert(await page.locator('.ml-table tbody tr').count() === n0, 'locked markups cannot be deleted');
+  await page.keyboard.press('Control+Shift+L');
+  const [dlg] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
+  await dlg.saveAs(`${OUT}/saved-group.pdf`);
+  await page.waitForTimeout(800);
+  const gd = await PDFDocument.load(readFileSync(`${OUT}/saved-group.pdf`));
+  const rts = gd.getPage(0).node.lookup(PDFName.of('Annots'), PDFArray).asArray().map((r) => gd.context.lookup(r, PDFDict).get(PDFName.of('RT'))?.toString());
+  assert(rts.includes('/Group'), 'group saved with /IRT + /RT /Group');
+  await click(52, 14);
+  assert(await page.locator('.ml-table tbody tr.selected').count() === 2, 'group survives save and reload');
+  await page.keyboard.press('Escape');
   await page.keyboard.press('Control+Shift+F8');
 }
 

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { activeDoc, useApp, useActiveDoc } from './model/store';
 import { TOOLS, comboFromEvent } from './tools/tools';
+import { align, flip, group, reorder, ungroup } from './model/arrange';
+import { markupBounds } from './ui/hit';
 import { translated } from './model/markup';
 import { DocTabs, MenuBar, StatusBar, Toolbar } from './ui/Chrome';
 import { LeftPanel, RightPanel, SideTabs } from './ui/Panels';
@@ -46,7 +48,27 @@ export function App() {
         case 'Ctrl+Shift+V': return run(() => s.paste(true));
         case 'Ctrl+A': return run(() => d && s.select(d.markups.filter((m) => m.page === d.page).map((m) => m.id)));
         case 'Delete': case 'Backspace': return run(() => d && s.deleteMarkups(d.selection));
-        case 'Escape': return run(() => { s.setTool('select'); s.select([]); });
+        case 'Escape': return run(() => { s.setTool('select'); s.select([]); useApp.setState({ painter: null }); });
+        // Markup arrangement (Revu defaults)
+        case 'Ctrl+G': return run(() => s.arrange(group));
+        case 'Ctrl+Shift+G': return run(() => s.arrange(ungroup));
+        case 'Ctrl+J': return run(() => s.arrange((m, ids) => reorder(m, ids, 'forward')));
+        case 'Ctrl+Shift+J': return run(() => s.arrange((m, ids) => reorder(m, ids, 'front')));
+        case 'Ctrl+[': return run(() => s.arrange((m, ids) => reorder(m, ids, 'backward')));
+        case 'Ctrl+Shift+[': case 'Ctrl+Shift+{': return run(() => s.arrange((m, ids) => reorder(m, ids, 'back')));
+        case 'Ctrl+Shift+L': return run(s.toggleLock);
+        case 'Ctrl+Alt+L': return run(() => s.arrange((m, ids) => align(m, ids, 'left', markupBounds)));
+        case 'Ctrl+Alt+E': return run(() => s.arrange((m, ids) => align(m, ids, 'center', markupBounds)));
+        case 'Ctrl+Alt+R': return run(() => s.arrange((m, ids) => align(m, ids, 'right', markupBounds)));
+        case 'Ctrl+Alt+T': return run(() => s.arrange((m, ids) => align(m, ids, 'top', markupBounds)));
+        case 'Ctrl+Alt+M': return run(() => s.arrange((m, ids) => align(m, ids, 'middle', markupBounds)));
+        case 'Ctrl+Alt+B': return run(() => s.arrange((m, ids) => align(m, ids, 'bottom', markupBounds)));
+        case 'Ctrl+Alt+H': return run(() => s.arrange((m, ids) => flip(m, ids, 'horizontal')));
+        case 'Ctrl+Alt+V': return run(() => s.arrange((m, ids) => flip(m, ids, 'vertical')));
+        case 'Ctrl+Shift+C': return run(() => {
+          const m = d?.markups.find((x) => x.id === d.selection[0]);
+          if (m) useApp.setState({ painter: { style: m.style }, status: 'Format Painter: click a markup to apply this format (Esc cancels).' });
+        });
         // View
         case 'Ctrl+9': return run(viewerApi.fitPage);
         case 'Ctrl+0': return run(viewerApi.fitWidth);
@@ -78,7 +100,7 @@ export function App() {
       if (arrows[key] && d?.selection.length) {
         const k = combo.startsWith('Shift+') ? 10 : 1;
         const [dx, dy] = arrows[key];
-        return run(() => s.updateMarkups(d.selection, (m) => translated(m, dx * k, dy * k)));
+        return run(() => s.updateMarkups(d.selection.filter((id) => !d.markups.find((m) => m.id === id)?.locked), (m) => translated(m, dx * k, dy * k)));
       }
       const tool = TOOLS.find((t) => t.shortcut === combo);
       // The radius shortcut calls the most recently used radius tool (Revu).

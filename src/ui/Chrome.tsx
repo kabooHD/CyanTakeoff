@@ -7,6 +7,7 @@ import { Icon } from './icons';
 import { MenuList, type MenuItem } from './ContextMenu';
 import { exportSummaryCsv, openFile, openSample } from './actions';
 import { viewerApi } from './Viewer';
+import { arrangeItems } from './arrangeMenu';
 import { useCursor } from './cursor';
 
 // ---------------- Menu bar ----------------
@@ -48,6 +49,8 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Paste in Place', shortcut: 'Ctrl+Shift+V', disabled: !s.clipboard.length || noDoc, action: () => s.paste(true) },
       { label: 'Delete', shortcut: 'Del', disabled: !doc?.selection.length, action: () => doc && s.deleteMarkups(doc.selection) },
       { label: 'Select All', shortcut: 'Ctrl+A', disabled: noDoc, action: () => doc && s.select(doc.markups.filter((m) => m.page === doc.page).map((m) => m.id)) },
+      { sep: true },
+      ...arrangeItems(),
       { sep: true },
       { label: 'Author Name…', action: () => { const a = prompt('Author name for new markups', s.author); if (a) s.setAuthor(a); } },
     ],

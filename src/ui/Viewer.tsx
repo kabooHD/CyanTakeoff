@@ -6,11 +6,13 @@ import { Icon } from './icons';
 import { eraseStroke, translated, typewriterBox } from '../model/markup';
 import { STAMPS, downloadBase64, loadImage, pageText, pickFile, readAsDataUrl, snapshot, textRectsIn } from './toolActions';
 import { applyCutout, ellipsePolygon } from '../model/cutouts';
+import { expandGroups } from '../model/arrange';
+import { arrangeItems } from './arrangeMenu';
 import { DynamicFillBar, FillOverlay, buildMask, fillDown, fillMove, fillUp, finishBoundary, resetFill, useFill } from './DynamicFill';
 import type { Markup, MarkupType, Pt, ToolId, Viewport } from '../model/types';
 import { toolById } from '../tools/tools';
 import { MarkupShape, handlePoints } from './renderMarkup';
-import { cutoutAt, hitTest, markupBounds } from './hit';
+import { cutoutAt, hitTest, markupBounds, outline } from './hit';
 import { setCursor } from './cursor';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { snapGeometry, snapToContent, type SnapGeometry } from '../pdf/geometry';
@@ -464,7 +466,7 @@ export function Viewer({ doc }: { doc: DocState }) {
       // vertex handles of a single selected markup
       if (doc.selection.length === 1) {
         const m = markups.find((x) => x.id === doc.selection[0]);
-        if (m) {
+        if (m && !m.locked) {
           const hs = handlePoints(m);
           const i = hs.findIndex((h) => dist(h, raw) <= 6 / zoom);
           if (i >= 0) {
@@ -474,12 +476,19 @@ export function Viewer({ doc }: { doc: DocState }) {
         }
       }
       const hit = [...markups].reverse().find((m) => hitTest(m, raw, tol));
+      if (hit && s.painter) {
+        // Format Painter: apply the picked-up style to the clicked markup (and its group).
+        s.updateMarkups(expandGroups(doc.markups, [hit.id]), () => ({ style: { ...s.painter!.style } }));
+        useApp.setState({ painter: null, status: 'Format applied' });
+        return;
+      }
       if (hit) {
         const add = e.ctrlKey || e.metaKey;
         if (add && selected.has(hit.id)) { s.select(doc.selection.filter((x) => x !== hit.id)); return; }
-        const ids = selected.has(hit.id) ? doc.selection : add ? [...doc.selection, hit.id] : [hit.id];
+        const ids = expandGroups(doc.markups, selected.has(hit.id) ? doc.selection : add ? [...doc.selection, hit.id] : [hit.id]);
         s.select(ids);
-        setDrag({ kind: 'move', start: raw, snapshot: doc.markups, ids, moved: false });
+        const movable = ids.filter((id) => !doc.markups.find((m) => m.id === id)?.locked);
+        if (movable.length) setDrag({ kind: 'move', start: raw, snapshot: doc.markups, ids: movable, moved: false });
       } else {
         if (!(e.ctrlKey || e.metaKey)) s.select([]);
         setDrag({ kind: 'band', start: raw, cur: raw, add: e.ctrlKey || e.metaKey });
@@ -714,6 +723,14 @@ export function Viewer({ doc }: { doc: DocState }) {
     }
     if (!draft) return;
     if (def.interaction === 'freehand') {
+      if (draft.tool === 'lasso') {
+        // Lasso: select the markups drawn entirely inside the loop.
+        const loop = draft.points;
+        setDraft(null);
+        if (loop.length > 2) s.select(markups.filter((m) => outline(m).pts.every((q) => pointInPolygon(q, loop))).map((m) => m.id), e.shiftKey || e.ctrlKey);
+        s.setTool('select');
+        return;
+      }
       if (draft.points.length > 1) finish('pen', draft.points);
       else setDraft(null);
       return;
@@ -794,7 +811,9 @@ export function Viewer({ doc }: { doc: DocState }) {
         })),
         { sep: true },
         { label: 'Copy', shortcut: 'Ctrl+C', action: () => s.copy() },
-        { label: 'Delete', shortcut: 'Del', action: () => s.deleteMarkups(ids) },
+        { label: 'Delete', shortcut: 'Del', action: () => s.deleteMarkups(ids), disabled: !!hit.locked },
+        { sep: true },
+        ...arrangeItems(),
       );
     } else {
       items.push(
@@ -821,7 +840,7 @@ export function Viewer({ doc }: { doc: DocState }) {
     };
   } else if (draft && draft.cursor) {
     const pts = def.interaction === 'freehand' ? draft.points : [...draft.points, draft.cursor];
-    const boxed = draft.tool === 'viewport' || draft.tool === 'snapshot' || draft.tool === 'link' || def.interaction === 'text';
+    const boxed = draft.tool === 'lasso' || draft.tool === 'viewport' || draft.tool === 'snapshot' || draft.tool === 'link' || def.interaction === 'text';
     let type = (draft.tool === 'calibrate' ? 'length' : boxed ? 'rectangle' : draft.tool) as MarkupType;
     let P = pts;
     if (draft.tool === 'cloudplus' && pts.length >= 3) P = [pts[0], pts[1], pts[2], { x: pts[2].x + 144, y: pts[2].y + 40 }];

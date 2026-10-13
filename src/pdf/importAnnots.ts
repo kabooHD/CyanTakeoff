@@ -376,15 +376,29 @@ export function importAnnotations(doc: PDFDocument): ImportResult {
   for (let p = 0; p < doc.getPageCount(); p++) {
     const taken = new Set<string>();
     const counts: { ref: PDFRef; dict: PDFDict }[] = [];
+    const groupHeads = new Set<string>();
+    const pageRaws: RawImport[] = [];
     for (const a of pageAnnots(doc, p)) {
       try {
         const ct = readCT(doc, a.dict);
         if (getName(doc, a.dict, 'IT') === 'PolygonCount' || ct?.type === 'count') { counts.push(a); continue; }
         const r = readAnnot(doc, a.dict, a.ref, p);
-        if (r) { raws.push(r); taken.add(refKey(a.ref)); }
+        if (r) {
+          // Revu markup groups: /IRT to the group's first markup with /RT /Group.
+          const irt = a.dict.get(N('IRT'));
+          if (irt instanceof PDFRef && getName(doc, a.dict, 'RT') === 'Group') {
+            r.markup.groupId ??= `g${refKey(irt)}`;
+            groupHeads.add(refKey(irt));
+          }
+          raws.push(r); pageRaws.push(r); taken.add(refKey(a.ref));
+        }
       } catch (e) {
         console.warn('Skipping annotation', refKey(a.ref), e);
       }
+    }
+    for (const r of pageRaws) {
+      const key = refKey(r.markup.source as Ref);
+      if (groupHeads.has(key)) r.markup.groupId ??= `g${key}`;
     }
     for (const r of readCounts(doc, counts, p)) {
       raws.push(r);

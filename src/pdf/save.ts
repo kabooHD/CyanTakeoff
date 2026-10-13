@@ -1,6 +1,6 @@
 import {
-  PDFArray, PDFDict, PDFDocument, PDFHexString, PDFString, StandardFonts,
-  type PDFFont, type PDFObject, type PDFRef,
+  PDFArray, PDFDict, PDFDocument, PDFHexString, PDFRef, PDFString, StandardFonts,
+  type PDFFont, type PDFObject,
 } from 'pdf-lib';
 import type { Cutout, Markup, Pt, Scale, Viewport } from '../model/types';
 import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
@@ -583,6 +583,14 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
 
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const pageRefs = doc.getPages().map((pg) => pg.ref);
+  // Groups are written as Revu writes them: members point to the first via /IRT with /RT /Group.
+  const groupHead = new Map<string, PDFRef>();
+  const pendingMembers: { ref: PDFRef; group: string }[] = [];
+  for (const m of input.markups) {
+    if (m.groupId && m.source && !m.source.dirty && !groupHead.has(m.groupId)) {
+      groupHead.set(m.groupId, PDFRef.of(m.source.objectNumber, m.source.generation));
+    }
+  }
   for (const m of input.markups) {
     if (m.source && !m.source.dirty) continue;
     let image: PDFRef | undefined;
@@ -599,11 +607,22 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
       annots = doc.context.obj([]);
       page.node.set(N('Annots'), annots);
     }
-    for (const ref of buildAnnot(doc, font, m, input.pages[m.page], image, pageRefs)) {
+    const built = buildAnnot(doc, font, m, input.pages[m.page], image, pageRefs);
+    if (m.groupId) {
+      if (!groupHead.has(m.groupId)) groupHead.set(m.groupId, built[0]);
+      else pendingMembers.push({ ref: built[0], group: m.groupId });
+    }
+    for (const ref of built) {
       (annots as PDFArray).push(ref);
       // Markup annotations reference their page.
       (doc.context.lookup(ref) as PDFDict).set(N('P'), page.ref);
     }
+  }
+
+  for (const { ref, group } of pendingMembers) {
+    const d = doc.context.lookup(ref) as PDFDict;
+    d.set(N('IRT'), groupHead.get(group)!);
+    d.set(N('RT'), N('Group'));
   }
 
   for (const p of input.dirtyCalibrations) {

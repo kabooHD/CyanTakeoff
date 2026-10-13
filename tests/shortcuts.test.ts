@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { TOOLS } from '../src/tools/tools';
 
 const REVU: Record<string, string> = {
-  select: 'V', pan: 'Shift+V', zoom: 'Z',
+  select: 'V', pan: 'Shift+V', zoom: 'Z', lasso: 'Shift+O',
   textbox: 'T', callout: 'Q', note: 'N', pen: 'P', highlight: 'H', line: 'L', arrow: 'A',
   polyline: 'Shift+N', rectangle: 'R', ellipse: 'E', polygon: 'Shift+P', cloud: 'C',
   length: 'Shift+Alt+L', polylength: 'Shift+Alt+Q', area: 'Shift+Alt+A', perimeter: 'Shift+Alt+P',

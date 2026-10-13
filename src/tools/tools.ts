@@ -38,6 +38,7 @@ export const TOOLS: ToolDef[] = [
   { id: 'select', name: 'Select', group: 'navigate', shortcut: 'V', interaction: 'none', subject: '' },
   { id: 'pan', name: 'Pan', group: 'navigate', shortcut: 'Shift+V', interaction: 'none', subject: '' },
   { id: 'zoom', name: 'Zoom', group: 'navigate', shortcut: 'Z', interaction: 'none', subject: '' },
+  { id: 'lasso', name: 'Lasso', group: 'navigate', shortcut: 'Shift+O', interaction: 'freehand', subject: '' },
 
   { id: 'textbox', name: 'Text Box', group: 'markup', shortcut: 'T', interaction: 'box', subject: 'Text Box' },
   { id: 'callout', name: 'Callout', group: 'markup', shortcut: 'Q', interaction: 'callout', subject: 'Callout' },

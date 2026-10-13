@@ -5,6 +5,7 @@ import { savePdf } from '../pdf/save';
 import { DEFAULT_STYLES, toolById } from '../tools/tools';
 import { MEASURE_TYPES, scaleAt } from './measure';
 import { translated } from './markup';
+import { expandGroups } from './arrange';
 import type {
   Markup, MarkupStyle, MarkupType, Pt, Scale, ToolId, ToolPreset, Toggles, Viewport,
 } from './types';
@@ -99,6 +100,12 @@ interface AppState {
   updateMarkups(ids: string[], fn: (m: Markup) => Partial<Markup>, opts?: { history?: boolean }): void;
   pushUndo(snapshot: Markup[]): void;
   deleteMarkups(ids: string[]): void;
+  /** Apply an arrangement command (group, order, align, flip...) to the selection. */
+  arrange(fn: (markups: Markup[], ids: string[]) => Markup[]): void;
+  /** Toggle Lock on the selection. */
+  toggleLock(): void;
+  /** Format Painter: the style picked up with Ctrl+Shift+C, applied to the next markup clicked. */
+  painter: { style: MarkupStyle } | null;
   /** Replace the document's markups (tools that rewrite several at once). */
   setMarkups(markups: Markup[], opts?: { history?: boolean }): void;
   select(ids: string[], add?: boolean): void;
@@ -321,6 +328,20 @@ export const useApp = create<AppState>((set, get) => {
       }));
     },
     pushUndo: (snapshot) => withDoc((d) => ({ undo: [...d.undo, snapshot], redo: [] })),
+    arrange(fn) {
+      const d = activeDoc();
+      if (!d?.selection.length) return;
+      const next = fn(d.markups, d.selection);
+      if (next !== d.markups) get().setMarkups(next);
+    },
+    toggleLock() {
+      const d = activeDoc();
+      if (!d?.selection.length) return;
+      const lock = !d.markups.find((m) => m.id === d.selection[0])?.locked;
+      get().updateMarkups(d.selection, () => ({ locked: lock || undefined }));
+      set({ status: lock ? 'Locked' : 'Unlocked' });
+    },
+    painter: null,
     setMarkups(markups, opts = {}) {
       withDoc((d) => ({ markups, dirty: true, ...(opts.history === false ? {} : { undo: [...d.undo, d.markups], redo: [] }) }));
     },
@@ -337,7 +358,11 @@ export const useApp = create<AppState>((set, get) => {
       }));
     },
     select(ids, add) {
-      withDoc((d) => ({ selection: add ? [...new Set([...d.selection, ...ids])] : ids }));
+      // Grouped markups select together (Revu).
+      withDoc((d) => {
+        const all = expandGroups(d.markups, ids);
+        return { selection: add ? [...new Set([...d.selection, ...all])] : all };
+      });
     },
     undo() {
       withDoc((d) => {

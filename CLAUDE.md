@@ -71,7 +71,8 @@ preview server can die between turns: restart it if e2e cannot connect.
 Done: Revu-style workspace and official default shortcuts; markup tools
 (incl. Cloud+, Typewriter, Arc, Dimension, Stamp, Flag, Strikethrough/
 Underline/Squiggly and text Highlight, Image, Snapshot, Hyperlink, File
-Attachment, Eraser);
+Attachment, Eraser); Group/Ungroup, Arrange, Lock, Align, Flip, Format
+Painter, Lasso;
 length, polylength, area, perimeter, volume, count, angle, radius, diameter;
 cutouts (polygon/ellipse, Revu fuse/trim rules); Dynamic Fill;
 separate X/Y scales; 3-point radius; viewports (regions with their own scale, Revu
