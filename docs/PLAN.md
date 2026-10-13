@@ -167,6 +167,28 @@ filling, image signatures, redaction and OCR.
 - Host on a VPS (static site + HTTPS), with a feedback link
 - Post to Revu user communities; collect real Revu files and bug reports
 - Publish a compatibility report: which Revu markups round-trip, with tests
+- Before inviting testers (from the user research in 8c):
+  - Layers panel (Revu Alt+Y): list, show/hide, lock, add markups to a
+    layer, PDF layers (optional content) of the drawing itself. Layers are
+    a top complaint and a top reason people stay on Revu.
+  - Low-end machines: measure load time, memory and pan/zoom speed on a
+    4 GB laptop with a 100-sheet set; cap undo by memory (not 10 copies of
+    the file); lower render limits when `navigator.deviceMemory` is small;
+    split the 1.5 MB main script so first load is lighter.
+  - Speed on large drawing sets as a stated goal (competitors sell on it).
+- Tester outreach (do later, with Claude's help):
+  1. Have Claude compile a list of companies publicly known to use
+     Bluebeam (case studies, job ads asking for Revu, partner lists,
+     public bid documents), with only public business contact details.
+  2. Send each a short personal invitation to try the test build (free,
+     in the browser, opens their Revu files, nothing uploaded).
+  3. Rules: send from a separate subdomain (protects cyantakeoff.com
+     deliverability), small batches, honest sender and subject, the
+     postal address and a one-click opt-out in every email, honour opt-outs
+     at once (CAN-SPAM in the US; in the EU/UK prefer role addresses such as
+     info@ and keep a note of the legitimate-interest basis under GDPR/PECR;
+     Canada's CASL is stricter: only addresses published for business use).
+  4. Track replies, sign-ups and which features they ask about.
 
 ### Next 3: cloud documents (2–3 weeks)
 - Sign-in, upload, storage, version history
@@ -208,6 +230,54 @@ Studio (Tauri/Rust) exist. CyanTakeoff's difference: exact Revu
 compatibility proven on real files, Revu's exact UX and shortcuts, and it
 runs in any browser.
 
+Seen in user discussions (2026): PDF-XChange Editor (cheap, general
+PDF editing, weak overlays and collaboration), Drawboard (tablet-first,
+criticised as "cartoonish", paywalled features), Easy Takeoffs and
+deta.studio (browser-based takeoff/markup, cheaper than Revu), Ncored
+(desktop, sells on speed with large drawing sets, one-time price), Xyicon
+(overlay of scanned revisions by reference point), Foxit, Nitro, Xodo,
+Lumin. None claims Revu file compatibility or Revu's exact UX.
+
+## 8c. What users say (Reddit, analysed October 2026)
+
+Two threads: "Is Bluebeam actually bad" (r/Revu) and "Bluebeam
+alternatives?" (r/StructuralEngineering).
+
+What keeps people on Revu (we must match all of it):
+- Markups List, Tool Chest, Profiles that can be shared, Legends for
+  takeoff, markup statuses, stamps and forms, layer control, accurate
+  dimension lines, overlays with recolouring, Studio Sessions. All built
+  except Layers (gap) and Studio (our cloud collaboration, Next 3).
+- "No program, paid or free, holds a candle to Bluebeam" is the common
+  view: compatibility and parity are the bar, not "good enough".
+
+Pain we can turn into reasons to switch:
+- **Price and subscription:** anger at the move to subscription-only and
+  the price rise. Our answer: free local mode, open source, transparent
+  pricing for the cloud (8b).
+- **Licences tied to machines:** people get logged out when they switch
+  between desktop and laptop. Ours: nothing to install or license; open it
+  in any browser.
+- **No Mac (or tablet) version:** browser-only covers Mac, Linux, iPad and
+  Chromebook. Say it loudly; touch support matters (Next 4).
+- **Stability:** reports of corrupted files and files stuck "in" Studio.
+  Ours: files are never rewritten beyond what the user changed, signed
+  files are saved incrementally, round-trip tests. Make "your files are
+  safe" a headline, with the compatibility report as proof.
+- **Speed on large sets:** a competitor is built entirely on this. Needs a
+  measured answer before we claim it (see Next 2).
+- **Layers are hard to use:** creating a layer shows nothing until a markup
+  is added; no way to work on stacked drawings individually; no move/scale/
+  rotate of an overlaid sheet after alignment. When we build Layers: keep
+  Revu's behaviour (no retraining) but show new empty layers, and let an
+  overlaid sheet be re-aligned at any time (we already align by two points).
+- **Small things that annoy:** Ctrl+Backspace (delete word) not working in
+  Revu's text editing (browsers do it natively; keep it), rotating by
+  fractions of a degree.
+- **Overlay of scans:** aligning a scanned revision over a vector one by
+  base point, scale and rotation (we have Align Points; add free nudge /
+  rotate / scale of the overlay later).
+
 ## 8b. Business model
 
 Goal: about $2,000/month for the maintainer, plus running costs.
@@ -230,8 +300,9 @@ Goal: about $2,000/month for the maintainer, plus running costs.
 - **Guests:** anyone with a share link can join without an account (they
   type a display name); creating and owning documents needs an account.
   Link permissions: view, comment, or edit, set by the owner.
-- **Testers:** recruit Revu users on Reddit (r/Bluebeam and similar); ask
-  only for non-confidential drawings.
+- **Testers:** recruit Revu users on Reddit (r/Bluebeam and similar), and
+  by email to companies known to use Bluebeam (list compiled with Claude
+  later, see Next 2); ask only for non-confidential drawings.
 
 ### Still open
 1. Sign-in method: email links, or Google / Microsoft accounts?

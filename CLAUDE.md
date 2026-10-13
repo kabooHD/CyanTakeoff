@@ -105,12 +105,15 @@ content/markup/grid; live measurement preview; Markups List (columns,
 filters, reorder, CSV summary); Tool Chest; save/reopen; Revu round-trip.
 
 Next (from `docs/PLAN.md`):
-1. Public test build in local mode (deploy only when the owner says so)
+1. Public test build in local mode (deploy only when the owner says so);
+   before it: Layers panel, low-end machine performance pass; tester
+   outreach by email to Bluebeam-using companies (list compiled later)
 2. Cloud documents: sign-in, versions, share links (guests join by link
    with a display name), live collaboration, self-hostable
 3. Compare versions, Sets, slip sheets, Spaces, Legends, Dynamic Fill, XLSX
 
-Known gaps: need Revu-made samples (none public; wanted list in
+Known gaps: no Layers panel yet (/OC kept, not shown); not yet measured on
+low-end machines (undo keeps up to 10 file copies); need Revu-made samples (none public; wanted list in
 tests/fixtures/revu/README.md): cutout storage (ours in CTData), custom
 column values (/BSIColumnData kept on edit but not read), .btx tool sets;
 polygon cutouts
