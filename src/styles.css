@@ -309,3 +309,14 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
 .reply-del { border: 0; background: none; cursor: pointer; color: var(--muted); padding: 0 4px; }
 .reply-input { width: calc(100% - 90px); font: inherit; font-style: normal; }
 .ml-table-wrap:focus { outline: none; }
+
+/* Search */
+.search-panel { padding: 8px; font-size: 12px; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.search-row { display: flex; gap: 6px; align-items: center; }
+.search-row input[type=text], .search-row input:not([type]) { flex: 1; min-width: 0; }
+.search-results { overflow: auto; display: flex; flex-direction: column; }
+.search-hit { text-align: left; border: 0; background: none; padding: 4px 6px; cursor: pointer; border-radius: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-hit:hover { background: var(--hover); }
+.search-hit.active { background: var(--accent-soft); }
+.search-hl { fill: #ffd400; fill-opacity: 0.35; stroke: #e0a800; stroke-width: 0.5; }
+.search-hl.active { fill: #ff8a00; fill-opacity: 0.45; }

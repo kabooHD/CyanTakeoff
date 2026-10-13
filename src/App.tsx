@@ -12,6 +12,7 @@ import { AboutDialog, LinkDialog, ScaleDialog, ShortcutsDialog } from './ui/Dial
 import { openFile, openFileObject, openSample } from './ui/actions';
 import { Icon } from './ui/icons';
 import { SpaceDialog } from './ui/SpacesPanel';
+import { nextHit, useSearch } from './ui/Search';
 
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
@@ -31,7 +32,7 @@ export function App() {
       // Revu 20/21 default shortcuts (support.bluebeam.com, "Keyboard shortcuts
       // and mouse navigation"). Browser-reserved keys (Ctrl+F4, Ctrl+Tab, Ctrl+N,
       // Ctrl+T) cannot be intercepted on the web; Ctrl+W/PgUp/PgDn are kept as extras.
-      const left = (p: 'thumbnails' | 'bookmarks' | 'spaces') => run(() => s.setPanels({ left: s.left === p ? null : p }));
+      const left = (p: 'thumbnails' | 'bookmarks' | 'spaces' | 'search') => run(() => s.setPanels({ left: s.left === p ? null : p }));
       const right = (p: 'properties' | 'toolchest' | 'measurements') => run(() => s.setPanels({ right: s.right === p ? null : p }));
       switch (combo) {
         // File
@@ -91,6 +92,10 @@ export function App() {
         case 'Alt+T': return left('thumbnails');
         case 'Alt+B': return left('bookmarks');
         case 'Alt+S': return left('spaces');
+        case 'Alt+1': return left('search');
+        case 'Ctrl+F': return run(() => { s.setPanels({ left: 'search' }); useSearch.setState((x) => ({ focusTick: x.focusTick + 1 })); });
+        case 'F3': return run(() => nextHit(1));
+        case 'Shift+F3': return run(() => nextHit(-1));
         case 'Alt+P': return right('properties');
         case 'Alt+X': return right('toolchest');
         case 'Alt+U': return right('measurements');

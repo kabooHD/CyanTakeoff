@@ -568,6 +568,21 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert(sels.length >= 1 && sels[0] !== firstText, `Down arrow selects the next row (${sels.length})`);
 }
 
+// Search (Ctrl+F): results listed and highlighted; F3 steps.
+{
+  await page.keyboard.press('Control+F');
+  await page.getByLabel('Search text').fill('SF');
+  await page.getByLabel('Search text').press('Enter');
+  await page.waitForFunction(() => /\d+ results?/.test(document.querySelector('.search-panel')?.textContent ?? ''));
+  const n = await page.locator('.search-hit').count();
+  assert(n >= 4, `search finds the room areas (${n} results)`);
+  assert(await page.locator('.search-hl').count() >= 1, 'search hits highlighted on the page');
+  await page.locator('.ml-table-wrap').focus();
+  await page.keyboard.press('F3');
+  assert(await page.locator('.search-hit.active').innerText() !== '' , 'F3 moves to the next result');
+  await page.keyboard.press('Alt+1');
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],

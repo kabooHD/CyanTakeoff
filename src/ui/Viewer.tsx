@@ -4,6 +4,7 @@ import { useApp, type DocState } from '../model/store';
 import { MEASURE_TYPES, bounds, dist, distToSegment, pointInPolygon, formatLength, formatNumber, measure, ortho, rectCorners, resolveFormat, scaleAt, stretchY, circleFrom3 } from '../model/measure';
 import { Icon } from './icons';
 import { eraseStroke, translated, typewriterBox } from '../model/markup';
+import { useSearch } from './Search';
 import { STAMPS, downloadBase64, loadImage, pageText, pickFile, readAsDataUrl, snapshot, textRectsIn } from './toolActions';
 import { applyCutout, ellipsePolygon } from '../model/cutouts';
 import { expandGroups } from '../model/arrange';
@@ -216,6 +217,7 @@ export function Viewer({ doc }: { doc: DocState }) {
 
   // ----- Dynamic Fill: read the page's content layer while the tool is active -----
   const fillKey = useFill((f) => f.key);
+  const search = useSearch();
   const [fillCursor, setFillCursor] = useState<Pt | null>(null);
   useEffect(() => {
     if (s.tool === 'dynamic-fill' && pdfPage) buildMask(pdfPage, `${doc.id}:${doc.page}`);
@@ -941,6 +943,11 @@ export function Viewer({ doc }: { doc: DocState }) {
             {s.activeViewport && !isMeasureTool(s.tool) && viewports.filter((v) => v.id === s.activeViewport).map((v) => (
               <ViewportBox key={v.id} v={drag?.kind === 'viewport' && drag.id === v.id ? { ...v, rect: drag.rect } : v}
                 zoom={zoom} active handles={s.tool === 'select'} />
+            ))}
+            {search.docId === doc.id && search.hits.map((h, i) => h.page === doc.page && (
+              <rect key={`hit${i}`} className={`search-hl ${i === search.index ? 'active' : ''}`} pointerEvents="none"
+                x={Math.min(h.rect[0].x, h.rect[1].x) - 1} y={Math.min(h.rect[0].y, h.rect[1].y) - 1}
+                width={Math.abs(h.rect[1].x - h.rect[0].x) + 2} height={Math.abs(h.rect[1].y - h.rect[0].y) + 2} />
             ))}
             {markups.map((m) => <MarkupShape key={m.id} m={m} />)}
             {preview && <g pointerEvents="none"><MarkupShape m={preview} ghost /></g>}
