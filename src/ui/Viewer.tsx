@@ -530,6 +530,16 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       return;
     }
 
+    // Tool Chest tool in Drawing mode: place a copy of the saved markup, centred on the click (Revu).
+    if (!draft && s.preset?.mode === 'drawing' && s.preset.markup) {
+      const shape = s.preset.markup;
+      const b = bounds(shape.points);
+      const moved = translated({ ...shape, id: '', page: pageIdx, author: '', created: '', modified: '' } as Markup, raw.x - (b.minX + b.w / 2), raw.y - (b.minY + b.h / 2));
+      const m = s.addMarkup({ ...shape, ...moved, page: pageIdx, scale: undefined, replies: undefined, groupId: undefined });
+      if (!s.toolLocked && !s.toggles.reuse) s.setTool('select');
+      s.select([m.id]);
+      return;
+    }
     // Area/Volume tool over a cutout: convert it into its own measurement (Shift: all of them).
     if (!draft && (s.tool === 'area' || s.tool === 'volume')) {
       const host = [...markups].reverse().find((m) => (m.type === 'area' || m.type === 'volume') && cutoutAt(m, raw) >= 0);

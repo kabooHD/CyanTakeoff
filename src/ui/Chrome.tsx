@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { useApp, useActiveDoc } from '../model/store';
+import { activeDoc, useApp, useActiveDoc } from '../model/store';
 import { formatLength } from '../model/measure';
 import type { Toggles, ToolId } from '../model/types';
 import { TOOLS, toolById } from '../tools/tools';
 import { Icon } from './icons';
 import { MenuList, type MenuItem } from './ContextMenu';
-import { exportSummaryCsv, openFile, openSample } from './actions';
+import { allColumns, exportSummaryCsv, exportSummaryPdf, exportSummaryXlsx, openFile, openSample } from './actions';
 import { viewerApi } from './Viewer';
 import { combineFiles, openPagesDialog } from './PagesDialog';
 import { useCompareDialog } from './Compare';
 import { useSheetsDialog } from './Sheets';
+import { usePrefsDialog } from './Prefs';
+import { effectiveCombo } from './commands';
 import { arrangeItems } from './arrangeMenu';
 import { useCursor } from './cursor';
 
@@ -28,11 +30,18 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
   }, [open]);
 
   const noDoc = !doc;
-  const toolItems = (group: 'markup' | 'measure'): MenuItem[] => TOOLS.filter((t) => t.group === group).map((t) => ({
-    label: t.name, shortcut: t.shortcut, disabled: noDoc, checked: s.tool === t.id, action: () => s.setTool(t.id),
+  const toolItems = (group: 'markup' | 'measure'): MenuItem[] => TOOLS.filter((t) => t.group === group && !['viewport', 'space', 'legend'].includes(t.id)).map((t) => ({
+    label: t.name, shortcut: effectiveCombo(`tool:${t.id}`, s.customKeys) || undefined, disabled: noDoc, checked: s.tool === t.id, action: () => s.setTool(t.id),
   }));
 
   const menus: Record<string, MenuItem[]> = {
+    CyanTakeoff: [
+      { label: 'Keyboard Shortcuts…', action: () => usePrefsDialog.setState({ open: 'keys' }) },
+      { label: 'Profiles…', action: () => usePrefsDialog.setState({ open: 'profiles' }) },
+      { label: 'Author Name…', action: () => { const a = prompt('Author name for new markups', s.author); if (a) s.setAuthor(a); } },
+      { sep: true },
+      { label: 'About CyanTakeoff', action: onAbout },
+    ],
     File: [
       { label: 'Open…', shortcut: 'Ctrl+O', action: openFile },
       { label: 'Open Sample Drawing', action: openSample },
@@ -55,8 +64,6 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Select All', shortcut: 'Ctrl+A', disabled: noDoc, action: () => doc && s.select(doc.markups.filter((m) => m.page === doc.page).map((m) => m.id)) },
       { sep: true },
       ...arrangeItems(),
-      { sep: true },
-      { label: 'Author Name…', action: () => { const a = prompt('Author name for new markups', s.author); if (a) s.setAuthor(a); } },
     ],
     View: [
       { label: 'Zoom In', shortcut: 'Plus', disabled: noDoc, action: () => viewerApi.zoomBy(1.25) },
@@ -101,6 +108,14 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { sep: true },
       ...toolItems('measure'),
     ],
+    Batch: [
+      { label: 'Batch Link…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'batch-link' }) },
+      { label: 'Slip Sheet…', disabled: noDoc, action: () => openPagesDialog('slip-sheet') },
+      { label: 'Flatten…', disabled: noDoc, action: () => openPagesDialog('flatten') },
+      { label: 'Summary (Excel)', disabled: noDoc, action: () => { const d = activeDoc(); if (d) exportSummaryXlsx(d.markups, allColumns(d)); } },
+      { label: 'Summary (PDF)', disabled: noDoc, action: () => { const d = activeDoc(); if (d) exportSummaryPdf(d.markups, allColumns(d)); } },
+      { label: 'Combine Files…', action: combineFiles },
+    ],
     Window: [
       { label: 'Thumbnails', shortcut: 'Alt+T', checked: s.left === 'thumbnails', action: () => s.setPanels({ left: s.left === 'thumbnails' ? null : 'thumbnails' }) },
       { label: 'Bookmarks', shortcut: 'Alt+B', checked: s.left === 'bookmarks', action: () => s.setPanels({ left: s.left === 'bookmarks' ? null : 'bookmarks' }) },
@@ -144,7 +159,7 @@ function ToolButton({ id }: { id: ToolId }) {
   return (
     <button className={`tb-btn ${active ? 'active' : ''} ${active && s.toolLocked ? 'locked' : ''}`}
       onMouseDown={(e) => e.preventDefault()}
-      title={`${t.name}${t.shortcut ? ` (${t.shortcut})` : ''}\nDouble-click to lock`}
+      title={`${t.name}${effectiveCombo(`tool:${t.id}`, s.customKeys) ? ` (${effectiveCombo(`tool:${t.id}`, s.customKeys)})` : ''}\nDouble-click to lock`}
       onClick={() => s.setTool(id)}
       onDoubleClick={() => s.setTool(id, { locked: true })}>
       <Icon name={id} />

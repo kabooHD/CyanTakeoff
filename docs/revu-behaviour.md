@@ -91,6 +91,16 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
   markups (and scale, Spaces) carry forward; links and bookmarks to the
   replaced page follow it.
 
+## Tool Chest, shortcuts, profiles
+- Tool Chest: tool sets (gear menu: rename, export, delete, Legend), My
+  Tools first. Right-click a tool: Properties Mode (draw a new markup with
+  its properties) or Drawing Mode (place a copy of the saved markup).
+  Revu's .btx tool set format is not documented, so CyanTakeoff uses its own
+  JSON (.cttools.json) for import/export.
+- Revu > Keyboard Shortcuts: every command and tool can be reassigned;
+  taking a shortcut from another command reassigns it.
+- Revu > Profiles: saved workspace (panels, toolbars, Tool Chest, shortcuts).
+
 ## Compare
 - Compare Documents: pick the original and revised document/page; the
   differences are clouded (subject "Compare", label Added/Removed/Changed)

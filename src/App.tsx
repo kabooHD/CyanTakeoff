@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { activeDoc, useApp, useActiveDoc } from './model/store';
 import { TOOLS, comboFromEvent } from './tools/tools';
+import { resolveCombo } from './ui/commands';
+import type { ToolId } from './model/types';
 import { align, flip, group, reorder, ungroup } from './model/arrange';
 import { markupBounds } from './ui/hit';
 import { translated } from './model/markup';
@@ -17,6 +19,7 @@ import { PagesDialog, openPagesDialog } from './ui/PagesDialog';
 import { rotatePages } from './pdf/pages';
 import { CompareDialog } from './ui/Compare';
 import { SheetsDialog } from './ui/Sheets';
+import { PrefsDialogs } from './ui/Prefs';
 
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
@@ -33,7 +36,13 @@ export function App() {
       if (isEditable(e.target)) return;
       const s = useApp.getState();
       const d = activeDoc();
-      const combo = comboFromEvent(e);
+      const combo = resolveCombo(comboFromEvent(e), useApp.getState().customKeys);
+      if (!combo) return;
+      if (combo.startsWith('tool:')) {
+        const id = combo.slice(5) as ToolId;
+        if (d) { e.preventDefault(); s.setTool(id === 'radius' ? s.radiusTool : id); }
+        return;
+      }
       const run = (fn: () => void) => { e.preventDefault(); fn(); };
       // Revu 20/21 default shortcuts (support.bluebeam.com, "Keyboard shortcuts
       // and mouse navigation"). Browser-reserved keys (Ctrl+F4, Ctrl+Tab, Ctrl+N,
@@ -181,6 +190,7 @@ export function App() {
       <PagesDialog />
       <CompareDialog />
       <SheetsDialog />
+      <PrefsDialogs />
       {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
       {dialog === 'about' && <AboutDialog onClose={() => setDialog(null)} />}
     </div>

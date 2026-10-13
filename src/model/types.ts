@@ -190,7 +190,14 @@ export interface ToolPreset {
   style: MarkupStyle;
   subject: string;
   depth?: number;
+  /** Revu: Properties mode draws a new markup with these properties; Drawing mode places a copy of the saved markup. */
+  mode?: 'properties' | 'drawing';
+  /** The saved markup, for Drawing mode (page-space geometry as captured). */
+  markup?: Omit<Markup, 'id' | 'page' | 'source' | 'author' | 'created' | 'modified'>;
 }
+
+/** A named tool set in the Tool Chest. */
+export interface ToolSet { id: string; name: string; tools: ToolPreset[] }
 
 export interface Toggles {
   snap: boolean;

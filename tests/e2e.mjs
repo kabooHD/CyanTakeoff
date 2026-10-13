@@ -474,6 +474,22 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert(await page.locator('.ml-table tbody tr.selected').count() === 2, 'group survives save and reload');
   await page.keyboard.press('Escape');
 
+  // Tool Chest: save the stamp to My Tools, switch it to Drawing mode, place a copy.
+  {
+    const stamps = async () => (await page.locator('.ml-table tbody').innerText()).split('\nStamp').length - 1;
+    const n0 = await stamps();
+    { const p = await toScreen(52, 14); await page.mouse.click(p.x, p.y, { button: 'right' }); }
+    await page.getByRole('menuitem', { name: 'Add to My Tools' }).click();
+    await page.locator('.side-right button[title="Tool Chest"]').click();
+    const tool = page.locator('.toolchest details').nth(1).locator('.tool-item').last();
+    await tool.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Drawing Mode' }).click();
+    await tool.click();
+    await click(70, 30);
+    assert(await stamps() === n0 + 1, 'a Drawing-mode tool places a copy of the saved markup');
+    await page.keyboard.press('Control+Z');
+    await page.locator('.side-right button[title="Measurements"]').click();
+  }
   // Spaces (Alt+S): name the Conference room; markups inside report it in the Space column.
   await page.keyboard.press('Alt+S');
   await page.getByRole('button', { name: 'Add Space' }).click();
@@ -695,6 +711,27 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForFunction(() => /Slip Sheet: 2 sheet/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 30000 });
   const links = (await page.locator('.ml-table tbody').innerText()).split('Hyperlink').length - 1;
   assert(links === 2, `Slip Sheet replaces both sheets and keeps their markups (${links} links)`);
+}
+
+// Keyboard Shortcuts editor: reassign Length to Ctrl+Shift+K; Tool Chest Drawing mode.
+{
+  await page.getByRole('button', { name: 'CyanTakeoff', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Keyboard Shortcuts…' }).click();
+  const kd = page.getByRole('dialog', { name: 'Keyboard Shortcuts' });
+  await kd.getByLabel('Filter commands').fill('Length');
+  await kd.getByRole('button', { name: 'Change shortcut for Length' }).click();
+  await page.keyboard.press('Control+Shift+K');
+  await kd.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.keyboard.press('Control+Shift+K');
+  assert(await page.locator('.tb-btn.active[title^="Length"]').count() === 1, 'a reassigned shortcut selects the tool');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Shift+Alt+L');
+  assert(await page.locator('.tb-btn.active[title^="Length"]').count() === 0, 'the old shortcut no longer does');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'CyanTakeoff', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Keyboard Shortcuts…' }).click();
+  await kd.getByRole('button', { name: 'Reset All' }).click();
+  await kd.getByRole('button', { name: 'Close', exact: true }).click();
 }
 
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp, useActiveDoc, type DocState } from '../model/store';
 import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, formatNumber, measure, precisionOf, unitLabel, withPrecision } from '../model/measure';
-import type { LineStyle, Markup, MarkupStyle, MarkupType, Scale, ToolPreset } from '../model/types';
+import type { LineStyle, Markup, MarkupStyle, MarkupType, Scale, ToolPreset, ToolSet } from '../model/types';
 import { toolById } from '../tools/tools';
 import { Icon } from './icons';
 import { SpacesPanel } from './SpacesPanel';
 import { SearchPanel } from './Search';
 import { SetsPanel } from './Sheets';
+import { pickFile } from './toolActions';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { openPagesDialog } from './PagesDialog';
 import { deletePages, movePage, rotatePages } from '../pdf/pages';
@@ -290,40 +291,89 @@ function Properties() {
 
 // ---------------- Tool Chest ----------------
 
-function ToolItem({ p, onRemove }: { p: ToolPreset; onRemove?: () => void }) {
+function ToolItem({ p, onRemove, onMenu }: { p: ToolPreset; onRemove?: () => void; onMenu?: (e: React.MouseEvent) => void }) {
   const s = useApp();
   const active = s.preset?.id === p.id;
   return (
-    <div className={`tool-item ${active ? 'active' : ''}`} title={`${p.name} (${toolById(p.type).name})\nClick to use, double-click to lock`}
+    <div className={`tool-item ${active ? 'active' : ''}`} title={`${p.name} (${toolById(p.type).name}, ${p.mode === 'drawing' ? 'Drawing' : 'Properties'} mode)\nClick to use, double-click to lock`}
       onClick={() => s.setTool(p.type, { preset: p })}
-      onDoubleClick={() => s.setTool(p.type, { preset: p, locked: true })}>
+      onDoubleClick={() => s.setTool(p.type, { preset: p, locked: true })}
+      onContextMenu={(e) => { e.preventDefault(); onMenu?.(e); }}>
       <span className="tool-swatch" style={{ borderColor: p.style.color, background: p.style.fill ?? 'transparent' }}><Icon name={p.type} size={16} /></span>
       <span className="tool-name">{p.name}</span>
+      {p.mode === 'drawing' && <span className="tool-mode" title="Drawing mode">D</span>}
       {onRemove && <button className="tool-remove" title="Remove" onClick={(e) => { e.stopPropagation(); onRemove(); }}><Icon name="close" size={10} /></button>}
     </div>
   );
 }
 
+/** Tool set file (export/import). */
+interface ToolSetFile { format: 'cyantakeoff-toolset'; version: 1; name: string; tools: ToolPreset[] }
+
+function exportToolSet(set: ToolSet) {
+  const data: ToolSetFile = { format: 'cyantakeoff-toolset', version: 1, name: set.name, tools: set.tools };
+  const href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
+  Object.assign(document.createElement('a'), { href, download: `${set.name}.cttools.json` }).click();
+  setTimeout(() => URL.revokeObjectURL(href), 10_000);
+}
+
+async function importToolSet(): Promise<ToolSet | null> {
+  const f = await pickFile('.json,application/json');
+  if (!f) return null;
+  try {
+    const d = JSON.parse(await f.text()) as ToolSetFile;
+    if (d.format !== 'cyantakeoff-toolset' || !Array.isArray(d.tools)) throw new Error('not a tool set file');
+    return { id: crypto.randomUUID(), name: d.name || f.name, tools: d.tools.map((t) => ({ ...t, id: crypto.randomUUID() })) };
+  } catch (e) {
+    useApp.getState().setStatus(`${f.name}: ${(e as Error).message}`);
+    return null;
+  }
+}
+
 function ToolChest() {
   const s = useApp();
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const sets = s.toolSets;
+  const update = (id: string, fn: (t: ToolSet) => ToolSet | null) => s.setToolSets(sets.flatMap((t) => (t.id === id ? (fn(t) ? [fn(t)!] : []) : [t])));
+  const setMenuFor = (e: React.MouseEvent, set: ToolSet) => setMenu({ x: e.clientX, y: e.clientY, items: [
+    { label: 'Rename…', action: () => { const n = prompt('Tool set name', set.name); if (n) update(set.id, (t) => ({ ...t, name: n })); } },
+    { label: 'Export…', action: () => exportToolSet(set) },
+    { label: 'Create Legend', disabled: !set.tools.length, action: () => {
+      useApp.setState({ legendKeys: [...new Set(set.tools.map(legendKey))] });
+      s.setTool('legend');
+      s.setStatus(`Click on the drawing to place the Legend for ${set.name}.`);
+    } },
+    { sep: true },
+    { label: 'Delete Tool Set', disabled: sets.length < 2, action: () => { if (confirm(`Delete the tool set "${set.name}"?`)) update(set.id, () => null); } },
+  ] });
+  const toolMenuFor = (e: React.MouseEvent, set: ToolSet, p: ToolPreset) => setMenu({ x: e.clientX, y: e.clientY, items: [
+    { label: 'Properties Mode', checked: p.mode !== 'drawing', action: () => update(set.id, (t) => ({ ...t, tools: t.tools.map((x) => (x.id === p.id ? { ...x, mode: 'properties' } : x)) })) },
+    { label: 'Drawing Mode', checked: p.mode === 'drawing', disabled: !p.markup, action: () => update(set.id, (t) => ({ ...t, tools: t.tools.map((x) => (x.id === p.id ? { ...x, mode: 'drawing' } : x)) })) },
+    { sep: true },
+    { label: 'Rename…', action: () => { const n = prompt('Tool name', p.name); if (n) update(set.id, (t) => ({ ...t, tools: t.tools.map((x) => (x.id === p.id ? { ...x, name: n } : x)) })); } },
+    { label: 'Remove', action: () => s.removeFromToolChest(p.id) },
+  ] });
   return (
     <div className="toolchest">
+      <div className="prop-actions pad">
+        <button onClick={() => { const n = prompt('New tool set name', 'New Tool Set'); if (n) s.setToolSets([...sets, { id: crypto.randomUUID(), name: n, tools: [] }]); }}>New Tool Set</button>
+        <button onClick={async () => { const t = await importToolSet(); if (t) s.setToolSets([...sets, t]); }}>Import…</button>
+      </div>
       <details open>
         <summary>Recent Tools</summary>
         {s.recentTools.length ? s.recentTools.map((p) => <ToolItem key={p.id} p={p} />) : <p className="muted pad">Markups you create appear here.</p>}
       </details>
-      <details open>
-        <summary>My Tools</summary>
-        {s.toolChest.map((p) => <ToolItem key={p.id} p={p} onRemove={() => s.removeFromToolChest(p.id)} />)}
-        <p className="muted pad small">Right-click a markup and choose “Add to My Tools” to save it here.</p>
-        <div className="prop-actions pad">
-          <button disabled={!s.toolChest.length} onClick={() => {
-            useApp.setState({ legendKeys: [...new Set(s.toolChest.map(legendKey))] });
-            s.setTool('legend');
-            s.setStatus('Click on the drawing to place the Legend for My Tools.');
-          }}>Create Legend</button>
-        </div>
-      </details>
+      {sets.map((set, i) => (
+        <details key={set.id} open>
+          <summary onContextMenu={(e) => { e.preventDefault(); setMenuFor(e, set); }}>
+            {set.name}
+            <button className="toolset-gear" title="Tool set options" onClick={(e) => { e.preventDefault(); setMenuFor(e, set); }}>⚙</button>
+          </summary>
+          {set.tools.map((p) => <ToolItem key={p.id} p={p} onRemove={() => s.removeFromToolChest(p.id)} onMenu={(e) => toolMenuFor(e, set, p)} />)}
+          {i === 0 && <p className="muted pad small">Right-click a markup and choose “Add to My Tools” to save it here. Right-click a tool for Drawing mode.</p>}
+        </details>
+      ))}
+      {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
     </div>
   );
 }

@@ -9,7 +9,7 @@ import { translated } from './markup';
 import { expandGroups } from './arrange';
 import { columnDefaults } from './columns';
 import type {
-  CustomColumn, Markup, MarkupStyle, MarkupType, Pt, Scale, Space, ToolId, ToolPreset, Toggles, Viewport,
+  CustomColumn, Markup, MarkupStyle, MarkupType, Pt, Scale, Space, ToolId, ToolPreset, ToolSet, Toggles, Viewport,
 } from './types';
 
 export type LeftPanel = 'thumbnails' | 'bookmarks' | 'spaces' | 'search' | 'sets' | null;
@@ -76,7 +76,11 @@ interface AppState {
   right: RightPanel;
   markupsList: boolean;
   author: string;
-  toolChest: ToolPreset[];
+  /** User keyboard shortcuts: command id -> combo ('' = none). See ui/commands.ts. */
+  customKeys: Record<string, string>;
+  setCustomKeys(k: Record<string, string>): void;
+  /** Tool Chest tool sets; the first is "My Tools". */
+  toolSets: ToolSet[];
   recentTools: ToolPreset[];
   /**
    * Apply Scale to Pages dialog. `pagePts` is set after calibrating (distance
@@ -146,8 +150,10 @@ interface AppState {
   toggle(key: keyof Toggles): void;
   setPanels(p: Partial<Pick<AppState, 'left' | 'right' | 'markupsList'>>): void;
   setAuthor(a: string): void;
-  addToToolChest(m: Markup): void;
+  /** Add a markup as a tool (to the first set, or `setId`). */
+  addToToolChest(m: Markup, setId?: string): void;
   removeFromToolChest(id: string): void;
+  setToolSets(sets: ToolSet[]): void;
   openScaleDialog(d: AppState['scaleDialog']): void;
   /** Start the Calibrate tool; the dialog `d` reopens with the picked length. */
   startCalibrate(d?: ScaleDialogState | null): void;
@@ -186,7 +192,7 @@ function savePrefs(s: AppState) {
   try {
     localStorage.setItem(LS, JSON.stringify({
       toolDefaults: s.toolDefaults, toggles: s.toggles, author: s.author,
-      toolChest: s.toolChest, recentTools: s.recentTools, savedScales: s.savedScales,
+      toolSets: s.toolSets, customKeys: s.customKeys, recentTools: s.recentTools, savedScales: s.savedScales,
       left: s.left, right: s.right, markupsList: s.markupsList,
     }));
   } catch { /* storage unavailable */ }
@@ -279,7 +285,12 @@ export const useApp = create<AppState>((set, get) => {
     right: prefs.right === undefined ? 'properties' : prefs.right,
     markupsList: prefs.markupsList ?? true,
     author: prefs.author ?? 'User',
-    toolChest: prefs.toolChest ?? SAMPLE_TOOL_CHEST,
+    customKeys: prefs.customKeys ?? {},
+    setCustomKeys(customKeys) { set({ customKeys }); savePrefs(get()); },
+    toolSets: prefs.toolSets ?? [
+      { id: 'my-tools', name: 'My Tools', tools: (prefs as { toolChest?: ToolPreset[] }).toolChest ?? [] },
+      { id: 'takeoff', name: 'Sample Takeoff', tools: SAMPLE_TOOL_CHEST },
+    ],
     recentTools: prefs.recentTools ?? [],
     scaleDialog: null,
     calibrateFor: null,
@@ -607,15 +618,21 @@ export const useApp = create<AppState>((set, get) => {
     },
     setPanels(p) { set(p); savePrefs(get()); },
     setAuthor(author) { set({ author }); savePrefs(get()); },
-    addToToolChest(m) {
-      const p: ToolPreset = { id: crypto.randomUUID(), name: m.subject || toolById(m.type).name, type: m.type, style: m.style, subject: m.subject, depth: m.depth };
-      set((s) => ({ toolChest: [...s.toolChest, p], status: `Added "${p.name}" to My Tools` }));
+    addToToolChest(m, setId) {
+      const { id: _i, page: _p, source: _s, author: _a, created: _c, modified: _m, ...shape } = m;
+      const p: ToolPreset = { id: crypto.randomUUID(), name: m.subject || toolById(m.type).name, type: m.type, style: m.style, subject: m.subject, depth: m.depth, mode: 'properties', markup: shape };
+      const target = setId ?? get().toolSets[0]?.id;
+      set((s) => ({
+        toolSets: s.toolSets.map((t) => (t.id === target ? { ...t, tools: [...t.tools, p] } : t)),
+        status: `Added "${p.name}" to ${s.toolSets.find((t) => t.id === target)?.name ?? 'My Tools'}`,
+      }));
       savePrefs(get());
     },
     removeFromToolChest(id) {
-      set((s) => ({ toolChest: s.toolChest.filter((t) => t.id !== id) }));
+      set((s) => ({ toolSets: s.toolSets.map((t) => ({ ...t, tools: t.tools.filter((x) => x.id !== id) })) }));
       savePrefs(get());
     },
+    setToolSets(toolSets) { set({ toolSets }); savePrefs(get()); },
     openScaleDialog: (scaleDialog) => set({ scaleDialog }),
     startCalibrate(d) {
       set({ scaleDialog: null, calibrateFor: d ?? null, tool: 'calibrate', toolLocked: false, preset: null,
