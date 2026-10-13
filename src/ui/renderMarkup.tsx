@@ -64,6 +64,8 @@ export const STAMP_COLORS: Record<string, string> = {
   DRAFT: '#606060', VOID: '#c00000', 'FOR CONSTRUCTION': '#008000', 'AS BUILT': '#0050c0', CONFIDENTIAL: '#c00000',
 };
 
+const TEXTUAL = new Set(['textbox', 'callout', 'typewriter', 'cloudplus']);
+
 export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
   const st = m.style;
   const P = m.points;
@@ -300,6 +302,11 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
       )}
       {shape}
       {styled && <StyledOutline outline={styled} def={def} st={st} ghost={ghost} />}
+      {m.seq && m.label && !TEXTUAL.has(m.type) && P.length > 0 && (() => {
+        const b = bounds(P);
+        return <text x={b.minX + b.w / 2} y={b.minY + b.h / 2} fontSize={st.fontSize} fill={st.color} textAnchor="middle" dominantBaseline="central"
+          fontFamily="Helvetica, Arial, sans-serif" className="seq-label">{m.label}</text>;
+      })()}
       {label && (
         <text x={label.at.x} y={label.at.y} fontSize={m.style.fontSize} fill={st.color}
           textAnchor="middle" dominantBaseline="middle" className="measure-label">{label.text}</text>

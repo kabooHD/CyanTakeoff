@@ -26,6 +26,7 @@ import { stepView } from './ui/Rulers';
 import { addBookmark } from './ui/BookmarksPanel';
 import { StyleManagerDialog } from './ui/LineStyles';
 import { SpellContentDialog, SpellDialog, checkSpelling } from './ui/Spell';
+import { SequenceDialog } from './ui/SequenceDialog';
 import { SheetsDialog } from './ui/Sheets';
 import { PrefsDialogs } from './ui/Prefs';
 import { SignatureDialog } from './ui/Signature';
@@ -224,6 +225,7 @@ export function App() {
       <PrintDialog />
       <StyleManagerDialog />
       <SpellDialog />
+      <SequenceDialog />
       <SpellContentDialog />
       <SheetsDialog />
       <PrefsDialogs />

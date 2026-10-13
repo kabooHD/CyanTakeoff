@@ -185,7 +185,9 @@ filling, image signatures, redaction and OCR.
 - [x] VisualSearch (Search panel > Visual): Get Rectangle, sensitivity,
   multiple rotations, current page/document/all open documents, result
   thumbnails; Count / Highlight / Mark for Redaction on checked results
-- [ ] Sequences (auto-numbered markups)
+- [x] Sequences: Tool Chest > Sequence: Define (1/A/a, start, increment,
+  digits, prefix, suffix), Reset, Remove; markups placed number themselves;
+  Select Sequence
 - [ ] Quantity Link (measurement totals into Excel)
 - [ ] AutoMark (bookmarks from title blocks)
 - [ ] Header/Footer, Watermark, Bates numbering

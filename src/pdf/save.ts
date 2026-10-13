@@ -433,6 +433,15 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
     }
   }
 
+  // Sequence value on a shape (text markups carry it in their text).
+  if (m.seq && m.label && !['textbox', 'callout', 'typewriter', 'cloudplus'].includes(m.type) && P.length) {
+    const bb = bounds(P);
+    const t = safeText(font, m.label);
+    const w = font.widthOfTextAtSize(t, st.fontSize);
+    const q = proj(fr, { x: bb.minX + bb.w / 2, y: bb.minY + bb.h / 2 });
+    textAt(o, font, t, st.fontSize, q.u - w / 2, q.v - st.fontSize * 0.35, rgb, fr);
+  }
+
   if (meas && m.type !== 'count') {
     const pos = m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter' || m.type === 'dimension'
       ? { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 }
@@ -479,6 +488,7 @@ function ctData(m: Markup, P: Pt[]): CTData {
   return {
     v: 1, type: m.type, label: m.label || undefined, status: m.status !== 'None' ? m.status : undefined,
     depth: m.depth, fillOpacity: m.style.fillOpacity, lineStyle: m.style.lineStyle,
+    seq: m.seq,
     lineDef: m.style.lineDef, hatch: m.style.hatch, hatchScale: m.style.hatch ? m.style.hatchScale : undefined,
     points: m.type === 'count' || m.type === 'arc' || m.type === 'cloudplus' ? P.flatMap((p) => [p.x, p.y]) : undefined,
     comment: measure(m) || m.type === 'cloudplus' || m.type === 'stamp' ? m.comment || undefined : undefined,

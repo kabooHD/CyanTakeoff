@@ -258,6 +258,17 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - With the Area or Volume tool, clicking a cutout converts it into its own
   measurement (Shift: all cutouts of that markup); the cutout stays.
 
+## Sequences (Tool Chest)
+A Sequence tool is a Tool Chest tool whose value goes up each time it is
+placed; values can be numbers or letters. Once a sequence is started on the
+PDF, each use of the tool continues it; resetting the tool starts a new
+count, so several sequences can live on one PDF. Right-click a member >
+Select Sequence selects them all. Revu defines it with right-click a tool >
+Sequence > Define (for a grouped symbol, Ctrl+click a text box's control
+point to pick the one that holds the number). Ours: numbers in the text of
+text markups, in the label (drawn in the middle) of other shapes; groups
+not yet.
+
 ## VisualSearch (Search panel, Alt+1 / Ctrl+F > Visual)
 Get Rectangle: drag around a symbol; a preview shows what will be looked
 for. Search in the current page, document, all open documents (also Sets,

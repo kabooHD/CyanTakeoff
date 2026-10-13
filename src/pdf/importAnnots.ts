@@ -45,6 +45,7 @@ export interface CTData {
   legend?: Markup['legend'];
   checked?: boolean;
   groupId?: string; // Revu-style markup group
+  seq?: Markup['seq']; // Sequence member
   handles?: (number[] | null)[]; // curved segments: PDF-space [inX, inY, outX, outY] offsets per vertex
 }
 
@@ -174,6 +175,7 @@ function baseMarkup(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number, 
     custom: ct?.custom,
     legend: ct?.legend,
     checked: ct?.checked,
+    seq: ct?.seq,
     locked: ((getNumber(doc, dict, 'F') ?? 0) & 128) !== 0 || undefined,
     layer: dict.get(PDFName.of('OC')) instanceof PDFRef ? refId(dict.get(PDFName.of('OC')) as PDFRef) : undefined,
   } satisfies Omit<Markup, 'points'>;

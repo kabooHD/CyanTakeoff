@@ -1461,6 +1461,47 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.getByRole('tab', { name: 'Text' }).click();
 }
 
+// Sequences: a Tool Chest tool that numbers its markups (D-01, D-02...), Select Sequence, Reset.
+{
+  const layer = page.locator('.page .markup-layer');
+  const lb = await layer.boundingBox();
+  const drawEllipse = async (fx, fy) => {
+    await page.mouse.move(lb.x + lb.width * fx, lb.y + lb.height * fy);
+    await page.mouse.down();
+    await page.mouse.move(lb.x + lb.width * (fx + 0.03), lb.y + lb.height * (fy + 0.04), { steps: 3 });
+    await page.mouse.up();
+    await page.waitForTimeout(150);
+  };
+  await page.keyboard.press('e');
+  await drawEllipse(0.05, 0.8);
+  const shape = layer.locator('ellipse').last();
+  await shape.click({ button: 'right', force: true });
+  await page.getByRole('menuitem', { name: 'Add to My Tools' }).click();
+  if (!(await page.locator('.toolchest').count())) await page.keyboard.press('Alt+X');
+  const tool = page.locator('.toolchest .tool-item', { hasText: 'Ellipse' }).last();
+  await tool.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Sequence: Define…' }).click();
+  const dlg = page.locator('[role=dialog][aria-label="Sequence"]');
+  await dlg.locator('[aria-label="Prefix"]').fill('D-');
+  await dlg.locator('[aria-label="Digits"]').fill('2');
+  assert((await dlg.locator('[aria-label="Sequence preview"]').innerText()).startsWith('D-01, D-02'), 'the Sequence dialog previews D-01, D-02…');
+  await dlg.getByRole('button', { name: 'OK' }).click();
+  await tool.dblclick(); // locked: place several
+  for (const fx of [0.12, 0.18, 0.24]) await drawEllipse(fx, 0.8);
+  await page.keyboard.press('Escape');
+  const labels = await layer.locator('text.seq-label').allTextContents();
+  assert(labels.join(',') === 'D-01,D-02,D-03', `placed markups number themselves (${labels.join(',')})`);
+  await layer.locator('ellipse').last().click({ button: 'right', force: true });
+  await page.getByRole('menuitem', { name: 'Select Sequence' }).click();
+  assert(await page.locator('.ml-table tbody tr.selected').count() === 3, 'Select Sequence selects the whole run');
+  await tool.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Sequence: Reset' }).click();
+  await tool.click();
+  await drawEllipse(0.30, 0.8);
+  assert((await layer.locator('text.seq-label').allTextContents()).at(-1) === 'D-01', 'after Reset the sequence starts again');
+  await page.screenshot({ path: `${OUT}/sequences.png` });
+}
+
 // Print (Ctrl+P): sheets are prepared in the page, then the browser's print dialog opens.
 {
   await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });

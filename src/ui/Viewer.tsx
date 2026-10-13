@@ -26,6 +26,7 @@ import { cutoutAt, hitTest, markupBounds, outline } from './hit';
 import { setCursor } from './cursor';
 import { ViewOverlays, recordView } from './Rulers';
 import { setVisualTemplate } from './VisualSearch';
+import { formatSequence, nextInSequence, sequenceMembers } from '../model/sequence';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { snapGeometry, snapToContent, type SnapGeometry } from '../pdf/geometry';
 import { layoutPages, rotateCss, rotateIn, rotateOut, rotatedSize, slotAt, type Slot, type ViewRotation } from '../model/layout';
@@ -441,6 +442,17 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const tool = spaceDown.current ? 'pan' : s.tool;
   const def = toolById(s.tool);
 
+  /** A Tool Chest tool with a Sequence numbers the markup it places. */
+  const seqFields = (type: MarkupType): Partial<Markup> => {
+    const p = s.preset;
+    if (!p?.sequence) return {};
+    const cur = useApp.getState().docs.find((x) => x.id === doc.id)?.markups ?? doc.markups;
+    const n = nextInSequence(cur, p.id, p.sequence);
+    const v = formatSequence(p.sequence, n);
+    const textual = type === 'textbox' || type === 'callout' || type === 'typewriter' || type === 'cloudplus';
+    return { seq: { id: p.id, run: p.sequence.run, n }, ...(textual ? { text: v } : { label: v }) };
+  };
+
   const finish = (type: MarkupType, points: Pt[], extra: Partial<Markup> = {}) => {
     const preset = s.preset;
     const style = preset?.style ?? s.toolDefaults[type];
@@ -464,13 +476,14 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       subject: preset?.subject ?? toolById(type).subject,
       depth: type === 'volume' ? preset?.depth ?? 1 : undefined,
       text: editable ? '' : type === 'stamp' ? s.stampName : undefined,
+      ...seqFields(type),
       ...extra,
     });
     setDraft(null);
     const keep = s.toolLocked || s.toggles.reuse;
     if (!keep) s.setTool('select');
     s.select([m.id]);
-    if (editable) setEditing(m.id);
+    if (editable && !m.seq) setEditing(m.id);
     return m;
   };
 
@@ -725,7 +738,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       const shape = s.preset.markup;
       const b = bounds(shape.points);
       const moved = translated({ ...shape, id: '', page: pageIdx, author: '', created: '', modified: '' } as Markup, raw.x - (b.minX + b.w / 2), raw.y - (b.minY + b.h / 2));
-      const m = s.addMarkup({ ...shape, ...moved, page: pageIdx, scale: undefined, replies: undefined, groupId: undefined });
+      const m = s.addMarkup({ ...shape, ...moved, page: pageIdx, scale: undefined, replies: undefined, groupId: undefined, seq: undefined, ...seqFields(shape.type) });
       if (!s.toolLocked && !s.toggles.reuse) s.setTool('select');
       s.select([m.id]);
       return;
@@ -1103,6 +1116,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       items.push(
         { label: 'Properties', action: () => s.setPanels({ right: 'properties' }) },
         { label: 'Add to My Tools', action: () => s.addToToolChest(hit) },
+        ...(hit.seq ? [{ label: 'Select Sequence', action: () => s.select(sequenceMembers(doc.markups, hit)) }] : []),
         { sep: true },
         ...(['None', 'Accepted', 'Rejected', 'Cancelled', 'Completed'] as const).map((st) => ({
           label: `Status: ${st}`, checked: hit.status === st, action: () => s.updateMarkups(ids, () => ({ status: st })),

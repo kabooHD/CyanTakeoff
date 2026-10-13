@@ -1,4 +1,5 @@
 import { BookmarksPanel } from './BookmarksPanel';
+import { updateTool, useSequenceDialog } from './SequenceDialog';
 import { HatchSelect, LineStyleSelect } from './LineStyles';
 import { LayersPanel } from './LayersPanel';
 import { layerIds } from '../pdf/layers';
@@ -289,6 +290,7 @@ function ToolItem({ p, onRemove, onMenu }: { p: ToolPreset; onRemove?: () => voi
       <span className="tool-swatch" style={{ borderColor: p.style.color, background: p.style.fill ?? 'transparent' }}><Icon name={p.type} size={16} /></span>
       <span className="tool-name">{p.name}</span>
       {p.mode === 'drawing' && <span className="tool-mode" title="Drawing mode">D</span>}
+      {p.sequence && <span className="tool-mode" title="Sequence">#</span>}
       {onRemove && <button className="tool-remove" title="Remove" onClick={(e) => { e.stopPropagation(); onRemove(); }}><Icon name="close" size={10} /></button>}
     </div>
   );
@@ -336,6 +338,10 @@ function ToolChest() {
   const toolMenuFor = (e: React.MouseEvent, set: ToolSet, p: ToolPreset) => setMenu({ x: e.clientX, y: e.clientY, items: [
     { label: 'Properties Mode', checked: p.mode !== 'drawing', action: () => update(set.id, (t) => ({ ...t, tools: t.tools.map((x) => (x.id === p.id ? { ...x, mode: 'properties' } : x)) })) },
     { label: 'Drawing Mode', checked: p.mode === 'drawing', disabled: !p.markup, action: () => update(set.id, (t) => ({ ...t, tools: t.tools.map((x) => (x.id === p.id ? { ...x, mode: 'drawing' } : x)) })) },
+    { sep: true },
+    { label: 'Sequence: Define…', checked: !!p.sequence, action: () => useSequenceDialog.setState({ toolId: p.id }) },
+    { label: 'Sequence: Reset', disabled: !p.sequence, action: () => { updateTool(p.id, (x) => ({ ...x, sequence: { ...x.sequence!, run: x.sequence!.run + 1 } })); s.setStatus(`${p.name}: the sequence starts again`); } },
+    { label: 'Sequence: Remove', disabled: !p.sequence, action: () => updateTool(p.id, (x) => ({ ...x, sequence: undefined })) },
     { sep: true },
     { label: 'Rename…', action: () => { const n = prompt('Tool name', p.name); if (n) update(set.id, (t) => ({ ...t, tools: t.tools.map((x) => (x.id === p.id ? { ...x, name: n } : x)) })); } },
     { label: 'Remove', action: () => s.removeFromToolChest(p.id) },

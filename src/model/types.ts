@@ -2,6 +2,7 @@
 // viewport at scale 1 for the page (PDF points, y pointing down, page
 // rotation applied). Conversion to PDF user space happens only on save.
 import type { HatchDef, LineStyleDef } from './lineStyles';
+import type { SequenceDef } from './sequence';
 
 export type Pt = { x: number; y: number };
 
@@ -182,6 +183,8 @@ export interface Markup {
   legend?: import('./legend').LegendDef;
   /** Replies to this markup (PDF: /Text annotations with /IRT to it). */
   replies?: Reply[];
+  /** Member of a Sequence: the tool's id, its run and this markup's value. */
+  seq?: { id: string; run: number; n: number };
   /** Markups List Checkmark column. */
   checked?: boolean;
   /** Values of the document's custom columns, by column id. */
@@ -207,6 +210,8 @@ export interface ToolPreset {
   mode?: 'properties' | 'drawing';
   /** The saved markup, for Drawing mode (page-space geometry as captured). */
   markup?: Omit<Markup, 'id' | 'page' | 'source' | 'author' | 'created' | 'modified'>;
+  /** Sequence: markups placed with this tool number themselves. */
+  sequence?: SequenceDef;
 }
 
 /** A named tool set in the Tool Chest. */
