@@ -1,4 +1,3 @@
-// Usage: node fetch.mjs <url> [url...]  -> writes expanded page text to /tmp/claude-0/bb/<slug>.txt and prints links
 // Fetches Bluebeam help pages with every collapsible section expanded, for
 // reference while matching Revu behaviour (needs support.bluebeam.com allowed).
 // Usage: node scripts/fetch-help.mjs <url>... ; output goes to $OUT (default /tmp/bb).
