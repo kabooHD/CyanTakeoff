@@ -168,6 +168,47 @@ export function calibrate(pagePts: number, realValue: number, unit: LengthUnit):
   return { factor, unit, label };
 }
 
+export type PaperUnit = 'in' | 'mm' | 'cm';
+const PAPER_PTS: Record<PaperUnit, number> = { in: 72, mm: 72 / 25.4, cm: 72 / 2.54 };
+
+/** Precision choices, as in Revu's Precision drop-down. */
+export const FRACTION_PRECISIONS = [1, 2, 4, 8, 16, 32, 64]; // 1/den inch
+export const DECIMAL_PRECISIONS = [0, 1, 2, 3, 4]; // decimal places
+
+/** Apply a precision choice to a scale: a denominator for ft-in, else decimals. */
+export function withPrecision(s: Scale, precision: number): Scale {
+  const format = { ...(s.format ?? {}) };
+  if (s.unit === 'ft-in') format.den = precision;
+  else format.decimals = precision;
+  return { ...s, format };
+}
+
+export function precisionOf(s: Scale): number {
+  const f = resolveFormat(s);
+  return s.unit === 'ft-in' ? f.den : f.decimals;
+}
+
+const num = (v: number) => String(round(v, 4));
+
+/** A custom scale: `paper paperUnit = real realUnit` (Revu's Custom scale). */
+export function customScale(paper: number, paperUnit: PaperUnit, real: number, realUnit: LengthUnit): Scale {
+  const factor = real / (paper * PAPER_PTS[paperUnit]);
+  const realText = realUnit === 'ft-in' ? formatLength(real, 'ft-in') : `${num(real)} ${unitLabel(realUnit)}`;
+  return { factor, unit: realUnit, label: `${num(paper)} ${paperUnit} = ${realText}` };
+}
+
+/** Parse a page range like "1-3, 5, 9" (1-based) into 0-based indexes. */
+export function parsePageRange(text: string, pageCount: number): number[] {
+  const out = new Set<number>();
+  for (const part of text.split(',')) {
+    const m = part.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/);
+    if (!m) continue;
+    const a = Number(m[1]), b = m[2] ? Number(m[2]) : a;
+    for (let p = Math.min(a, b); p <= Math.max(a, b); p++) if (p >= 1 && p <= pageCount) out.add(p - 1);
+  }
+  return [...out].sort((x, y) => x - y);
+}
+
 // ---------- formatting ----------
 
 const round = (v: number, d: number) => Math.round(v * 10 ** d) / 10 ** d;

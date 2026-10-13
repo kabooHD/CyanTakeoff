@@ -70,3 +70,23 @@ describe('cloudSegments', () => {
     }
   });
 });
+
+describe('scale dialog helpers', async () => {
+  const { customScale, parsePageRange, withPrecision } = await import('../src/model/measure');
+  it('custom scale: 1 in = 10 ft', () => {
+    const s = customScale(1, 'in', 10, 'ft');
+    expect(s.factor * 72).toBeCloseTo(10);
+    expect(s.label).toBe('1 in = 10 ft');
+  });
+  it('custom scale mixing systems: 10 mm = 1 m', () => {
+    expect(customScale(10, 'mm', 1, 'm').factor * (72 / 25.4) * 10).toBeCloseTo(1);
+  });
+  it('page ranges', () => {
+    expect(parsePageRange('1-3, 5, 9', 6)).toEqual([0, 1, 2, 4]);
+    expect(parsePageRange('3-1', 5)).toEqual([0, 1, 2]);
+  });
+  it('precision controls rounding', () => {
+    const s = withPrecision({ factor: 1 / 72, unit: 'ft-in', label: '' }, 16);
+    expect(formatLength(10 + 3.0625 / 12, s.unit, 2, s.format!.den)).toBe(`10'-3 1/16"`);
+  });
+});

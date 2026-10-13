@@ -193,6 +193,36 @@ await page.waitForTimeout(1200);
 await page.screenshot({ path: `${OUT}/05-zoomed.png` });
 assert(parseInt(await page.locator('.statusbar').innerText().then((t) => t.match(/(\d+)%/)[1])) > 100, 'wheel zoom');
 
+// Apply Scale to Pages: prompt on an unscaled page, then calibrate (site plan, sheet 2).
+await page.keyboard.press('Control+9');
+await page.keyboard.press('End');
+await page.waitForTimeout(800);
+assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet 2 has no scale');
+{
+  const box = await svg.boundingBox();
+  const z = box.width / (36 * 72);
+  const site = (x, y) => ({ x: box.x + (400 + x * 3.6) * z, y: box.y + (H - (300 + y * 3.6)) * z }); // 1" = 20'
+  await page.keyboard.press('Shift+Alt+L');
+  let p = site(0, 0); await page.mouse.click(p.x, p.y);
+  assert(await page.getByRole('dialog', { name: 'Apply Scale to Pages' }).isVisible(), 'measuring on an unscaled page asks for a scale');
+  await page.getByRole('button', { name: 'Calibrate…' }).click();
+  await page.keyboard.press('Control+Shift+F8'); // exact clicks: content snap off
+  p = site(0, 0); await page.mouse.click(p.x, p.y);
+  p = site(400, 0); await page.mouse.click(p.x, p.y);
+  const dlg = page.getByRole('dialog', { name: 'Apply Scale to Pages' });
+  await dlg.locator('select').nth(1).selectOption('ft');
+  await dlg.locator('input[type=number]').first().fill('400');
+  await dlg.getByRole('button', { name: 'Apply Scale' }).click();
+  assert((await page.locator('.sb-scale').innerText()).startsWith('1" = 20'), `calibrated scale is 1" = 20' (${await page.locator('.sb-scale').innerText()})`);
+  await page.keyboard.press('Shift+Alt+L');
+  p = site(0, 300); await page.mouse.click(p.x, p.y);
+  const q = site(400, 300); await page.mouse.click(q.x, q.y);
+  await page.keyboard.press('Control+Shift+F8');
+  const rows = await page.locator('.ml-table tbody').innerText();
+  assert(rows.includes('400 ft'), 'length on the calibrated sheet reads 400 ft');
+  await page.screenshot({ path: `${OUT}/06-scale-dialog.png` });
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],

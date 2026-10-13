@@ -357,6 +357,11 @@ export function Viewer({ doc }: { doc: DocState }) {
       return;
     }
 
+    // Like Revu, ask for a page scale before the first measurement on an unscaled page.
+    if (!draft && MEASURE_TYPES.has(s.tool) && s.tool !== 'count' && !doc.calibrations[doc.page]) {
+      s.openScaleDialog({ page: doc.page, then: s.tool });
+      return;
+    }
     const prev = draft?.points[draft.points.length - 1];
     const p = constrain(raw, e, prev);
 
@@ -400,7 +405,7 @@ export function Viewer({ doc }: { doc: DocState }) {
     if (dist(a, p) * zoom < 2) return;
     if (draft.tool === 'calibrate') {
       setDraft(null);
-      s.setCalibrating({ page: doc.page, pagePts: dist(a, p) });
+      s.openScaleDialog({ page: doc.page, pagePts: dist(a, p) });
       return;
     }
     finish(draft.tool as MarkupType, [a, p]);

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp, useActiveDoc, type DocState } from '../model/store';
-import { SCALE_PRESETS, measure, unitLabel } from '../model/measure';
-import type { LineStyle, Markup, MarkupStyle, MarkupType, ToolPreset } from '../model/types';
+import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, measure, precisionOf, unitLabel, withPrecision } from '../model/measure';
+import type { LineStyle, Markup, MarkupStyle, MarkupType, Scale, ToolPreset } from '../model/types';
 import { toolById } from '../tools/tools';
 import { Icon } from './icons';
 
@@ -249,7 +249,6 @@ function ToolChest() {
 function Measurements() {
   const s = useApp();
   const doc = useActiveDoc();
-  const [all, setAll] = useState(false);
   if (!doc) return <p className="muted pad">Open a document to calibrate and measure.</p>;
   const scale = doc.calibrations[doc.page];
   const sel = doc.markups.filter((m) => doc.selection.includes(m.id));
@@ -261,24 +260,36 @@ function Measurements() {
   }
   return (
     <div className="props">
-      <div className="prop-section">Scale</div>
-      <div className="scale-current">{scale ? scale.label : 'Not calibrated'}</div>
-      <div className="prop-actions">
-        <button onClick={() => s.setTool('calibrate')}>Calibrate…</button>
-        {scale && <button onClick={() => s.setCalibration(doc.page, null, all)}>Clear</button>}
-      </div>
+      <div className="prop-section">Page Scale</div>
+      <Row label="Page"><input readOnly value={doc.loaded.pages[doc.page].label} /></Row>
+      <div className="scale-current">{scale ? scale.label : 'Scale Not Set'}</div>
       <Row label="Preset">
         <select value="" onChange={(e) => {
-          const p = SCALE_PRESETS.flatMap((g) => g.items).find((x) => x.label === e.target.value);
-          if (p) s.setCalibration(doc.page, { factor: p.factor, unit: p.unit, label: p.label }, all);
+          const p = [...s.savedScales, ...SCALE_PRESETS.flatMap((g) => g.items)].find((x) => x.label === e.target.value);
+          if (p) s.setScale([doc.page], { factor: p.factor, unit: p.unit, label: p.label, format: (p as Scale).format });
         }}>
           <option value="">Choose a scale…</option>
+          {s.savedScales.length > 0 && <optgroup label="Saved">{s.savedScales.map((p) => <option key={p.label}>{p.label}</option>)}</optgroup>}
           {SCALE_PRESETS.map((g) => (
             <optgroup key={g.group} label={g.group}>{g.items.map((p) => <option key={p.label}>{p.label}</option>)}</optgroup>
           ))}
         </select>
       </Row>
-      <label className="prop-row"><span>Apply to all pages</span><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /></label>
+      {scale && (
+        <Row label="Precision">
+          <select value={precisionOf(scale)} onChange={(e) => s.setScale([doc.page], withPrecision(scale, Number(e.target.value)))}>
+            {scale.unit === 'ft-in'
+              ? FRACTION_PRECISIONS.map((d) => <option key={d} value={d}>{d === 1 ? '1"' : `1/${d}"`}</option>)
+              : DECIMAL_PRECISIONS.map((d) => <option key={d} value={d}>{d === 0 ? '1' : (0).toFixed(d).slice(0, -1) + '1'}</option>)}
+          </select>
+        </Row>
+      )}
+      <div className="prop-actions">
+        <button onClick={() => s.setTool('calibrate')}>Calibrate</button>
+        <button onClick={() => s.openScaleDialog({ page: doc.page })}>Set Scale…</button>
+        {scale && <button onClick={() => s.openScaleDialog({ page: doc.page, reuse: true })}>Add Scale to More Pages</button>}
+        {scale && <button onClick={() => s.setScale([doc.page], null)}>Clear</button>}
+      </div>
       <p className="muted small">Calibrate: pick two points on a known dimension, then enter its real length. Changing the scale updates existing measurements on the page.</p>
       {sel.length > 0 && (
         <>

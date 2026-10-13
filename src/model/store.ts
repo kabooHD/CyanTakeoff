@@ -43,8 +43,13 @@ interface AppState {
   author: string;
   toolChest: ToolPreset[];
   recentTools: ToolPreset[];
-  /** Pending calibration: distance between two picked points, in PDF points. */
-  calibrating: { page: number; pagePts: number } | null;
+  /**
+   * Apply Scale to Pages dialog. `pagePts` is set after calibrating (distance
+   * between the two picked points); `then` is the measure tool to resume.
+   */
+  scaleDialog: { page: number; pagePts?: number; then?: ToolId; reuse?: boolean } | null;
+  /** Scales saved with "+ Add Preset", listed first among presets. */
+  savedScales: Scale[];
   status: string;
   busy: boolean;
   clipboard: Markup[];
@@ -66,13 +71,17 @@ interface AppState {
   /** Paste; `inPlace` keeps the original position (Paste in Place). */
   paste(inPlace?: boolean): void;
   setCalibration(page: number, scale: Scale | null, allPages?: boolean): void;
+  /** Set (or clear) the scale of several pages; re-scales their measurements. */
+  setScale(pages: number[], scale: Scale | null): void;
+  addSavedScale(scale: Scale): void;
+  removeSavedScale(label: string): void;
   setToolDefault(type: MarkupType, patch: Partial<MarkupStyle>): void;
   toggle(key: keyof Toggles): void;
   setPanels(p: Partial<Pick<AppState, 'left' | 'right' | 'markupsList'>>): void;
   setAuthor(a: string): void;
   addToToolChest(m: Markup): void;
   removeFromToolChest(id: string): void;
-  setCalibrating(c: AppState['calibrating']): void;
+  openScaleDialog(d: AppState['scaleDialog']): void;
   save(saveAs?: boolean): Promise<void>;
   setStatus(s: string): void;
 }
@@ -87,7 +96,7 @@ function savePrefs(s: AppState) {
   try {
     localStorage.setItem(LS, JSON.stringify({
       toolDefaults: s.toolDefaults, toggles: s.toggles, author: s.author,
-      toolChest: s.toolChest, recentTools: s.recentTools,
+      toolChest: s.toolChest, recentTools: s.recentTools, savedScales: s.savedScales,
       left: s.left, right: s.right, markupsList: s.markupsList,
     }));
   } catch { /* storage unavailable */ }
@@ -132,7 +141,8 @@ export const useApp = create<AppState>((set, get) => {
     author: prefs.author ?? 'User',
     toolChest: prefs.toolChest ?? SAMPLE_TOOL_CHEST,
     recentTools: prefs.recentTools ?? [],
-    calibrating: null,
+    scaleDialog: null,
+    savedScales: prefs.savedScales ?? [],
     status: 'Ready',
     busy: false,
     clipboard: [],
@@ -176,7 +186,7 @@ export const useApp = create<AppState>((set, get) => {
     setZoom: (zoom) => withDoc(() => ({ zoom: Math.max(0.02, Math.min(64, zoom)) })),
 
     setTool(tool, opts = {}) {
-      set({ tool, toolLocked: opts.locked ?? false, preset: opts.preset ?? null, calibrating: null });
+      set({ tool, toolLocked: opts.locked ?? false, preset: opts.preset ?? null });
       if (tool !== 'select') withDoc(() => ({ selection: [] }));
     },
 
@@ -270,8 +280,12 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     setCalibration(page, scale, allPages) {
+      const d = activeDoc();
+      if (!d) return;
+      get().setScale(allPages ? d.loaded.pages.map((p) => p.index) : [page], scale);
+    },
+    setScale(pages, scale) {
       withDoc((d) => {
-        const pages = allPages ? d.loaded.pages.map((p) => p.index) : [page];
         const calibrations = [...d.calibrations];
         const dirtyCalibrations = new Set(d.dirtyCalibrations);
         for (const p of pages) { calibrations[p] = scale; dirtyCalibrations.add(p); }
@@ -283,7 +297,16 @@ export const useApp = create<AppState>((set, get) => {
             : m);
         return { calibrations, dirtyCalibrations, markups, undo: [...d.undo, d.markups], dirty: true };
       });
-      set({ calibrating: null, status: scale ? `Scale set: ${scale.label}` : 'Scale cleared' });
+      const n = pages.length;
+      set({ scaleDialog: null, status: scale ? `Scale set to ${scale.label} on ${n} page${n === 1 ? '' : 's'}` : 'Scale cleared' });
+    },
+    addSavedScale(scale) {
+      set((st) => ({ savedScales: [scale, ...st.savedScales.filter((x) => x.label !== scale.label)], status: `Saved preset ${scale.label}` }));
+      savePrefs(get());
+    },
+    removeSavedScale(label) {
+      set((st) => ({ savedScales: st.savedScales.filter((x) => x.label !== label) }));
+      savePrefs(get());
     },
 
     setToolDefault(type, patch) {
@@ -305,7 +328,7 @@ export const useApp = create<AppState>((set, get) => {
       set((s) => ({ toolChest: s.toolChest.filter((t) => t.id !== id) }));
       savePrefs(get());
     },
-    setCalibrating: (calibrating) => set({ calibrating }),
+    openScaleDialog: (scaleDialog) => set({ scaleDialog }),
     setStatus: (status) => set({ status }),
 
     async save(saveAs) {

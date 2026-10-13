@@ -1,7 +1,10 @@
 import { useState } from 'react';
-import { useApp } from '../model/store';
-import { calibrate, formatLength } from '../model/measure';
-import type { LengthUnit } from '../model/types';
+import { useApp, useActiveDoc } from '../model/store';
+import {
+  DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, calibrate, customScale, parsePageRange,
+  precisionOf, withPrecision, type PaperUnit,
+} from '../model/measure';
+import type { LengthUnit, Scale } from '../model/types';
 import { TOOLS } from '../tools/tools';
 
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
@@ -15,46 +18,154 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
   );
 }
 
-export function CalibrateDialog() {
+const REAL_UNITS: { value: LengthUnit; label: string }[] = [
+  { value: 'ft-in', label: `ft' in"` }, { value: 'ft', label: 'ft' }, { value: 'in', label: 'in' },
+  { value: 'yd', label: 'yd' }, { value: 'm', label: 'm' }, { value: 'cm', label: 'cm' }, { value: 'mm', label: 'mm' },
+];
+
+type Mode = 'preset' | 'custom' | 'calibrate' | 'existing';
+
+/**
+ * Revu's "Apply Scale to Pages" dialog: Preset / Custom / Calibrate, page
+ * range, precision and "+ Add Preset". Opened from the status bar scale, the
+ * Measurements panel, Measure > Set Scale, or when measuring on an unscaled page.
+ */
+export function ScaleDialog() {
+  const dlg = useApp((st) => st.scaleDialog);
+  // Remount for each opening so the form starts fresh.
+  return dlg ? <ScaleDialogForm key={JSON.stringify(dlg)} /> : null;
+}
+
+function ScaleDialogForm() {
   const s = useApp();
-  const c = s.calibrating;
-  const [feet, setFeet] = useState('10');
-  const [inches, setInches] = useState('0');
-  const [value, setValue] = useState('1');
-  const [unit, setUnit] = useState<LengthUnit>('ft-in');
-  const [all, setAll] = useState(false);
-  if (!c) return null;
-  const real = unit === 'ft-in' ? (Number(feet) || 0) + (Number(inches) || 0) / 12 : Number(value) || 0;
+  const doc = useActiveDoc();
+  const dlg = s.scaleDialog;
+  const current = doc && dlg ? doc.calibrations[dlg.page] : null;
+  const [mode, setMode] = useState<Mode>(dlg?.reuse && current ? 'existing' : dlg?.pagePts ? 'calibrate' : 'preset');
+  const [presetLabel, setPresetLabel] = useState(current?.label ?? '');
+  const [paper, setPaper] = useState('1');
+  const [paperUnit, setPaperUnit] = useState<PaperUnit>('in');
+  const [real, setReal] = useState('10');
+  const [realIn, setRealIn] = useState('0');
+  const [realUnit, setRealUnit] = useState<LengthUnit>(current?.unit ?? 'ft-in');
+  const [pagesMode, setPagesMode] = useState<'current' | 'all' | 'custom'>(dlg?.reuse ? 'all' : 'current');
+  const [range, setRange] = useState('');
+  const [precision, setPrecision] = useState<number | null>(null);
+  if (!dlg || !doc) return null;
+  const n = doc.loaded.pages.length;
+
+  const allPresets = [...s.savedScales, ...SCALE_PRESETS.flatMap((g) => g.items)];
+  const realValue = realUnit === 'ft-in' ? (Number(real) || 0) + (Number(realIn) || 0) / 12 : Number(real) || 0;
+
+  let scale: Scale | null = null;
+  if (mode === 'existing') {
+    scale = current;
+  } else if (mode === 'preset') {
+    const p = allPresets.find((x) => x.label === presetLabel);
+    if (p) scale = { factor: p.factor, unit: p.unit, label: p.label, format: (p as Scale).format };
+  } else if (mode === 'custom') {
+    if (Number(paper) > 0 && realValue > 0) scale = customScale(Number(paper), paperUnit, realValue, realUnit);
+  } else if (dlg.pagePts && realValue > 0) {
+    scale = calibrate(dlg.pagePts, realValue, realUnit);
+  }
+  const prec = precision ?? (scale ? precisionOf(scale) : 4);
+  if (scale) scale = withPrecision(scale, scale.unit === 'ft-in' ? (FRACTION_PRECISIONS.includes(prec) ? prec : 4) : (DECIMAL_PRECISIONS.includes(prec) ? prec : 2));
+
+  const pages = pagesMode === 'current' ? [dlg.page]
+    : pagesMode === 'all' ? doc.loaded.pages.map((p) => p.index)
+      : parsePageRange(range, n);
+
+  const close = () => s.openScaleDialog(null);
   const apply = () => {
-    if (real <= 0) return;
-    s.setCalibration(c.page, calibrate(c.pagePts, real, unit), all);
-    s.setTool('select');
+    if (!scale || !pages.length) return;
+    s.setScale(pages, scale);
+    s.setTool(dlg.then ?? 'select');
   };
-  const close = () => { s.setCalibrating(null); };
-  const preview = real > 0 ? calibrate(c.pagePts, real, unit) : null;
+  const startCalibrate = () => {
+    s.openScaleDialog(null);
+    s.setTool('calibrate');
+    s.setStatus('Calibrate: click the two ends of a known length on the drawing.');
+  };
+  const realInputs = (
+    <>
+      <input type="number" min={0} value={real} onChange={(e) => setReal(e.target.value)} style={{ width: 70 }} />
+      {realUnit === 'ft-in' && <>ft <input type="number" min={0} value={realIn} onChange={(e) => setRealIn(e.target.value)} style={{ width: 50 }} />in</>}
+      <select value={realUnit} onChange={(e) => { setRealUnit(e.target.value as LengthUnit); setPrecision(null); }}>
+        {REAL_UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
+      </select>
+    </>
+  );
+
   return (
-    <Modal title="Calibrate" onClose={close}>
-      <p className="muted">Paper distance between the points: {(c.pagePts / 72).toFixed(3)} in</p>
-      <div className="form-row">
-        <span>Real distance</span>
-        {unit === 'ft-in' ? (
-          <span className="inline">
-            <input autoFocus type="number" value={feet} onChange={(e) => setFeet(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && apply()} style={{ width: 70 }} /> ft
-            <input type="number" value={inches} onChange={(e) => setInches(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && apply()} style={{ width: 60 }} /> in
-          </span>
-        ) : (
-          <input autoFocus type="number" value={value} onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && apply()} style={{ width: 100 }} />
+    <Modal title="Apply Scale to Pages" onClose={close}>
+      <div className="scale-dialog" onKeyDown={(e) => e.key === 'Enter' && apply()}>
+        <div className="form-row">
+          <span>Pages</span>
+          <select value={pagesMode} onChange={(e) => setPagesMode(e.target.value as typeof pagesMode)}>
+            <option value="current">Current ({doc.loaded.pages[dlg.page]?.label ?? dlg.page + 1})</option>
+            <option value="all">All Pages</option>
+            <option value="custom">Custom</option>
+          </select>
+          {pagesMode === 'custom' && <input placeholder="1-3, 5, 9" value={range} onChange={(e) => setRange(e.target.value)} style={{ width: 110 }} />}
+        </div>
+        {mode === 'existing' && current && (
+          <div className="form-row"><span>Scale</span><strong>{current.label}</strong> (this page's scale)</div>
         )}
-        <select value={unit} onChange={(e) => setUnit(e.target.value as LengthUnit)}>
-          <option value="ft-in">ft-in</option><option value="ft">ft</option><option value="in">in</option><option value="yd">yd</option>
-          <option value="m">m</option><option value="cm">cm</option><option value="mm">mm</option>
-        </select>
-      </div>
-      <label className="form-row"><span>Apply to all pages</span><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /></label>
-      {preview && <p className="muted">Resulting scale: {preview.label} ({formatLength(real, unit)})</p>}
-      <div className="modal-actions">
-        <button className="primary" onClick={apply} disabled={real <= 0}>OK</button>
-        <button onClick={close}>Cancel</button>
+        <div className="form-row scale-modes">
+          <label><input type="radio" checked={mode === 'preset'} onChange={() => setMode('preset')} /> Preset</label>
+          <label><input type="radio" checked={mode === 'custom'} onChange={() => setMode('custom')} /> Custom</label>
+          <label><input type="radio" checked={mode === 'calibrate'} onChange={() => setMode('calibrate')} disabled={!dlg.pagePts} /> Calibrated</label>
+          <button onClick={startCalibrate}>Calibrate…</button>
+        </div>
+        {mode === 'preset' && (
+          <div className="form-row">
+            <span>Scale</span>
+            <select value={presetLabel} onChange={(e) => { setPresetLabel(e.target.value); setPrecision(null); }}>
+              <option value="">Choose a scale…</option>
+              {s.savedScales.length > 0 && (
+                <optgroup label="Saved">{s.savedScales.map((p) => <option key={p.label}>{p.label}</option>)}</optgroup>
+              )}
+              {SCALE_PRESETS.map((g) => (
+                <optgroup key={g.group} label={g.group}>{g.items.map((p) => <option key={p.label}>{p.label}</option>)}</optgroup>
+              ))}
+            </select>
+            {s.savedScales.some((x) => x.label === presetLabel) && (
+              <button onClick={() => { s.removeSavedScale(presetLabel); setPresetLabel(''); }} title="Delete this saved scale">Delete</button>
+            )}
+          </div>
+        )}
+        {mode === 'custom' && (
+          <div className="form-row">
+            <span>Scale</span>
+            <input type="number" min={0} value={paper} onChange={(e) => setPaper(e.target.value)} style={{ width: 60 }} />
+            <select value={paperUnit} onChange={(e) => setPaperUnit(e.target.value as PaperUnit)}>
+              <option value="in">in</option><option value="mm">mm</option><option value="cm">cm</option>
+            </select>
+            = {realInputs}
+          </div>
+        )}
+        {mode === 'calibrate' && dlg.pagePts && (
+          <div className="form-row">
+            <span>Scale</span>
+            <input readOnly value={`${(dlg.pagePts / 72).toFixed(4)} in`} style={{ width: 90 }} /> = {realInputs}
+          </div>
+        )}
+        <div className="form-row">
+          <span>Precision</span>
+          <select value={prec} onChange={(e) => setPrecision(Number(e.target.value))}>
+            {(scale?.unit ?? realUnit) === 'ft-in'
+              ? FRACTION_PRECISIONS.map((d) => <option key={d} value={d}>{d === 1 ? '1"' : `1/${d}"`}</option>)
+              : DECIMAL_PRECISIONS.map((d) => <option key={d} value={d}>{d === 0 ? '1' : (0).toFixed(d).slice(0, -1) + '1'}</option>)}
+          </select>
+        </div>
+        {scale && <p className="muted">Scale: <strong>{scale.label}</strong> on {pages.length} page{pages.length === 1 ? '' : 's'}</p>}
+        {!current && dlg.then && <p className="muted small">This page has no scale yet. Set one to measure.</p>}
+        <div className="modal-actions">
+          <button disabled={!scale || mode === 'preset'} onClick={() => scale && s.addSavedScale(scale)}>+ Add Preset</button>
+          <span className="spacer" />
+          <button className="primary" disabled={!scale || !pages.length} onClick={apply}>Apply Scale</button>
+          <button onClick={close}>Cancel</button>
+        </div>
       </div>
     </Modal>
   );

@@ -73,7 +73,11 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { sep: true },
       ...toolItems('markup'),
     ],
-    Measure: toolItems('measure'),
+    Measure: [
+      { label: 'Set Scale…', disabled: noDoc, action: () => doc && s.openScaleDialog({ page: doc.page }) },
+      { sep: true },
+      ...toolItems('measure'),
+    ],
     Window: [
       { label: 'Thumbnails', shortcut: 'Alt+T', checked: s.left === 'thumbnails', action: () => s.setPanels({ left: s.left === 'thumbnails' ? null : 'thumbnails' }) },
       { label: 'Bookmarks', shortcut: 'Alt+B', checked: s.left === 'bookmarks', action: () => s.setPanels({ left: s.left === 'bookmarks' ? null : 'bookmarks' }) },
@@ -242,7 +246,7 @@ export function StatusBar() {
       {doc && (
         <button className="sb-section sb-scale" title="Page scale. Click to set or reset it."
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => { s.setPanels({ right: 'measurements' }); s.setTool('calibrate'); }}>
+          onClick={() => s.openScaleDialog({ page: doc.page })}>
           {scale ? scale.label : 'Scale Not Set'}
         </button>
       )}
