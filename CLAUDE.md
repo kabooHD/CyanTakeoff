@@ -44,9 +44,20 @@ preview server can die between turns: restart it if e2e cannot connect.
 - Every feature: unit tests where there is math, plus an e2e check; run the
   full suite before committing. Commit messages end with the attribution
   lines from the system reminder.
+- When a roadmap item is done, update `docs/PLAN.md` (roadmap) and the
+  Status/Next sections below in the same commit, so they never drift.
 - Do not deploy. Deployment (`.github/workflows/deploy.yml`, Caddy on the
   owner's Hetzner Debian VPS, cyantakeoff.com) is manual and is the last
   step before going public.
+
+## Product decisions that shape the code (details in `docs/PLAN.md`)
+- Browser-only, any device; never a desktop build or native dependency.
+- Local mode (open/save files on the user's machine, no account) must keep
+  working when cloud features are added.
+- Cloud: owners sign in; guests join a document by link with just a display
+  name; the owner sets view, comment or edit.
+- Must stay self-hostable (static app + a server anyone can run).
+- Files stay standard PDFs readable by Revu; no proprietary format.
 
 ## Environment
 - Network allowlist includes GitHub, npm, PyPI, support.bluebeam.com and
