@@ -7,14 +7,14 @@ import { MEASURE_TYPES, scaleAt } from './measure';
 import { translated } from './markup';
 import { expandGroups } from './arrange';
 import type {
-  Markup, MarkupStyle, MarkupType, Pt, Scale, ToolId, ToolPreset, Toggles, Viewport,
+  Markup, MarkupStyle, MarkupType, Pt, Scale, Space, ToolId, ToolPreset, Toggles, Viewport,
 } from './types';
 
-export type LeftPanel = 'thumbnails' | 'bookmarks' | null;
+export type LeftPanel = 'thumbnails' | 'bookmarks' | 'spaces' | null;
 export type RightPanel = 'properties' | 'toolchest' | 'measurements' | null;
 
 /** Page scales and viewports, for undoing scale changes. */
-export interface ScaleSnapshot { markups: Markup[]; calibrations: (Scale | null)[]; viewports: Viewport[][] }
+export interface ScaleSnapshot { markups: Markup[]; calibrations: (Scale | null)[]; viewports: Viewport[][]; spaces?: Space[][] }
 /** An undo step: markups only, or markups with page scales and viewports. */
 export type UndoEntry = Markup[] | ScaleSnapshot;
 
@@ -31,6 +31,10 @@ export interface DocState {
   viewports: Viewport[][];
   /** Pages whose scale or viewports changed (their /VP is rewritten on save). */
   dirtyCalibrations: Set<number>;
+  /** Revu Spaces, per page. */
+  spaces: Space[][];
+  /** Pages whose Spaces changed (their /BSISpaces is rewritten on save). */
+  dirtySpaces: Set<number>;
   page: number;
   zoom: number;
   selection: string[];
@@ -132,6 +136,14 @@ interface AppState {
   setViewport(page: number, v: Viewport): void;
   /** Delete viewports by id, or all on `pages`. */
   deleteViewports(pages: number[], ids?: string[]): void;
+  /** Add a Space, or replace the one with the same id. */
+  setSpace(page: number, sp: Space): void;
+  deleteSpaces(page: number, ids: string[]): void;
+  /** Naming dialog for a Space just drawn (or being edited). */
+  spaceDialog: { page: number; points: Pt[]; id?: string } | null;
+  /** Spaces panel: Highlight Spaces toggle and the selected Space. */
+  spacesHighlight: boolean;
+  activeSpace: string | null;
   setActiveViewport(id: string | null): void;
   save(saveAs?: boolean): Promise<void>;
   setStatus(s: string): void;
@@ -178,12 +190,15 @@ export const newViewportId = () => Array.from({ length: 16 }, () => String.fromC
 function restore(d: DocState, e: UndoEntry): [Partial<DocState>, UndoEntry] {
   if (Array.isArray(e)) return [{ markups: e }, d.markups];
   const dirtyCalibrations = new Set(d.dirtyCalibrations);
+  const dirtySpaces = new Set(d.dirtySpaces);
+  const spaces = e.spaces ?? d.spaces;
   d.loaded.pages.forEach((_, p) => {
     if (e.calibrations[p] !== d.calibrations[p] || e.viewports[p] !== d.viewports[p]) dirtyCalibrations.add(p);
+    if (spaces[p] !== d.spaces[p]) dirtySpaces.add(p);
   });
   return [
-    { markups: e.markups, calibrations: e.calibrations, viewports: e.viewports, dirtyCalibrations },
-    { markups: d.markups, calibrations: d.calibrations, viewports: d.viewports },
+    { markups: e.markups, calibrations: e.calibrations, viewports: e.viewports, spaces, dirtyCalibrations, dirtySpaces },
+    { markups: d.markups, calibrations: d.calibrations, viewports: d.viewports, spaces: d.spaces },
   ];
 }
 
@@ -255,6 +270,8 @@ export const useApp = create<AppState>((set, get) => {
           calibrations: loaded.calibrations,
           viewports: loaded.viewports,
           dirtyCalibrations: new Set(),
+          spaces: loaded.spaces,
+          dirtySpaces: new Set(),
           page: 0, zoom: 0, selection: [], undo: [], redo: [], dirty: false,
         };
         set((s) => ({ docs: [...s.docs, doc], activeId: doc.id, status: loaded.readOnly ? `${name} opened read-only (file could not be parsed for editing)` : `Opened ${name}` }));
@@ -431,6 +448,28 @@ export const useApp = create<AppState>((set, get) => {
       });
     },
     setActiveViewport: (activeViewport) => set({ activeViewport }),
+    setSpace(page, sp) {
+      withDoc((d) => {
+        const spaces = [...d.spaces];
+        const list = spaces[page] ?? [];
+        spaces[page] = list.some((x) => x.id === sp.id) ? list.map((x) => (x.id === sp.id ? sp : x)) : [...list, sp];
+        const snap: ScaleSnapshot = { markups: d.markups, calibrations: d.calibrations, viewports: d.viewports, spaces: d.spaces };
+        return { spaces, dirtySpaces: new Set([...d.dirtySpaces, page]), undo: [...d.undo, snap], redo: [], dirty: true };
+      });
+      set({ spaceDialog: null, activeSpace: sp.id });
+    },
+    deleteSpaces(page, ids) {
+      withDoc((d) => {
+        const spaces = [...d.spaces];
+        spaces[page] = (spaces[page] ?? []).filter((x) => !ids.includes(x.id));
+        const snap: ScaleSnapshot = { markups: d.markups, calibrations: d.calibrations, viewports: d.viewports, spaces: d.spaces };
+        return { spaces, dirtySpaces: new Set([...d.dirtySpaces, page]), undo: [...d.undo, snap], redo: [], dirty: true };
+      });
+      set({ activeSpace: null });
+    },
+    spaceDialog: null,
+    spacesHighlight: true,
+    activeSpace: null,
     addSavedScale(scale) {
       set((st) => ({ savedScales: [scale, ...st.savedScales.filter((x) => x.label !== scale.label)], status: `Saved preset ${scale.label}` }));
       savePrefs(get());
@@ -475,7 +514,7 @@ export const useApp = create<AppState>((set, get) => {
         const bytes = await savePdf({
           original: d.bytes, pages: d.loaded.pages, markups: d.markups,
           importedRefs: d.importedRefs, calibrations: d.calibrations, viewports: d.viewports,
-          dirtyCalibrations: d.dirtyCalibrations,
+          dirtyCalibrations: d.dirtyCalibrations, spaces: d.spaces, dirtySpaces: d.dirtySpaces,
         });
         let handle = saveAs ? undefined : d.fileHandle;
         let name = d.name;
@@ -506,6 +545,7 @@ export const useApp = create<AppState>((set, get) => {
             ...x, name, bytes, fileHandle: handle, loaded, markups,
             importedRefs: loaded.importedRefs,
             calibrations: loaded.calibrations, viewports: loaded.viewports, dirtyCalibrations: new Set(),
+            spaces: loaded.spaces, dirtySpaces: new Set(),
             page, zoom, selection: [], undo: [], redo: [], dirty: false,
           } : x),
           status: `Saved ${name}`,

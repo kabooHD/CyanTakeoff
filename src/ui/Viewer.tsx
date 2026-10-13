@@ -225,7 +225,7 @@ export function Viewer({ doc }: { doc: DocState }) {
       if (draft) {
         if (e.key === 'Escape') { setDraft(null); e.stopImmediatePropagation(); }
         else if (e.key === 'Enter') { finishPoly(); e.stopImmediatePropagation(); }
-        else if (draft.tool === 'cutout' && e.key.toLowerCase() === 'c' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        else if (isRegion(draft.tool) && e.key.toLowerCase() === 'c' && !e.ctrlKey && !e.metaKey && !e.altKey) {
           finishPoly(); e.stopImmediatePropagation(); e.preventDefault();
         }
         else if (e.key === 'Backspace') {
@@ -377,7 +377,14 @@ export function Viewer({ doc }: { doc: DocState }) {
 
   const finishCutout = (pts: Pt[], kind: 'polygon' | 'ellipse') => {
     const id = draft?.target;
+    const space = draft?.tool === 'space';
     setDraft(null);
+    if (space) {
+      // Add Space: name it in the Add Space dialog (Revu).
+      s.setTool('select');
+      useApp.setState({ spaceDialog: { page: doc.page, points: pts } });
+      return;
+    }
     if (!id) return;
     // The cutout tool stays active for further cutouts until Esc (Revu).
     const m = doc.markups.find((x) => x.id === id);
@@ -389,7 +396,7 @@ export function Viewer({ doc }: { doc: DocState }) {
 
   const finishPoly = () => {
     if (!draft) return;
-    if (draft.tool === 'cutout') {
+    if (isRegion(draft.tool)) {
       if (draft.points.length >= 3) finishCutout(draft.points, 'polygon');
       else setDraft(null);
       return;
@@ -537,7 +544,9 @@ export function Viewer({ doc }: { doc: DocState }) {
         break;
       }
       case 'cutout': case 'cutout-ellipse': {
-        if (!draft) {
+        if (!draft && s.tool === 'space') {
+          setDraft({ tool: s.tool, points: [p], cursor: p, dragFrom: { x: e.clientX, y: e.clientY } });
+        } else if (!draft) {
           const t = cutoutTarget(p);
           if (!t) { s.setStatus('Click inside an Area or Volume measurement to cut out from it.'); return; }
           setDraft({ tool: s.tool, points: [p], cursor: p, dragFrom: { x: e.clientX, y: e.clientY }, target: t.id });
@@ -595,7 +604,7 @@ export function Viewer({ doc }: { doc: DocState }) {
     const a = draft.points[0];
     if (dist(a, p) * zoom < 2) return;
     if (draft.tool === 'ellipse-cutout') { finishCutout([a, p], 'ellipse'); return; }
-    if (draft.tool === 'cutout') { finishCutout(rectCorners(a, p), 'polygon'); return; }
+    if (isRegion(draft.tool)) { finishCutout(rectCorners(a, p), 'polygon'); return; }
     if (draft.tool === 'calibrate') {
       setDraft(null);
       const back = s.calibrateFor;
@@ -754,7 +763,7 @@ export function Viewer({ doc }: { doc: DocState }) {
 
   const onDoubleClick = (e: React.MouseEvent) => {
     if (s.tool === 'dynamic-fill') { finishBoundary(); return; }
-    if (draft && draft.tool === 'cutout') {
+    if (draft && isRegion(draft.tool)) {
       const pts = draft.points.slice(0, -1); // the double-click's second click added a point
       if (pts.length >= 3) finishCutout(pts, 'polygon');
       return;
@@ -829,12 +838,12 @@ export function Viewer({ doc }: { doc: DocState }) {
 
   // ----- draft preview -----
   let preview: Markup | null = null;
-  if (draft && draft.cursor && (draft.tool === 'cutout' || draft.tool === 'ellipse-cutout')) {
+  if (draft && draft.cursor && (isRegion(draft.tool) || draft.tool === 'ellipse-cutout')) {
     const target = markups.find((m) => m.id === draft.target);
     const pts = [...draft.points, draft.cursor];
     preview = {
-      id: 'draft', type: draft.tool === 'cutout' ? 'polyline' : 'ellipse', page: doc.page,
-      points: draft.tool === 'cutout' && pts.length === 2 && buttonDown.current ? [...rectCorners(pts[0], pts[1]), pts[0]] : pts,
+      id: 'draft', type: isRegion(draft.tool) ? 'polyline' : 'ellipse', page: doc.page,
+      points: isRegion(draft.tool) && pts.length === 2 && buttonDown.current ? [...rectCorners(pts[0], pts[1]), pts[0]] : pts,
       style: { ...(target?.style ?? s.toolDefaults.area), fill: null, lineStyle: 'dashed' },
       subject: '', label: '', comment: '', author: '', created: '', modified: '', status: 'None',
     };
@@ -890,6 +899,15 @@ export function Viewer({ doc }: { doc: DocState }) {
                 <rect width={page.width} height={page.height} fill="url(#grid)" pointerEvents="none" />
               </>
             )}
+            {((s.spacesHighlight && s.left === 'spaces') || s.tool === 'space' || s.activeSpace) && (doc.spaces[doc.page] ?? [])
+              .filter((sp) => (s.spacesHighlight && s.left === 'spaces') || s.tool === 'space' || sp.id === s.activeSpace).map((sp) => (
+                <g key={sp.id} className="space-shape" pointerEvents="none">
+                  <polygon points={sp.points.map((q) => `${q.x},${q.y}`).join(' ')} fill={sp.color} fillOpacity={sp.opacity}
+                    stroke={sp.color} strokeOpacity={sp.id === s.activeSpace ? 0.9 : 0.4} strokeWidth={(sp.id === s.activeSpace ? 2 : 1) / zoom} />
+                  <text x={Math.min(...sp.points.map((q) => q.x)) + 3 / zoom} y={Math.min(...sp.points.map((q) => q.y)) + 12 / zoom}
+                    fontSize={10 / zoom} fill={sp.color} fillOpacity={0.9}>{sp.title}</text>
+                </g>
+              ))}
             {(isMeasureTool(s.tool) || s.tool === 'viewport' || s.tool === 'calibrate') && viewports.map((v) => (
               <ViewportBox key={v.id} v={v} zoom={zoom} />
             ))}
@@ -959,6 +977,8 @@ export function Viewer({ doc }: { doc: DocState }) {
   );
 }
 
+/** Tools that draw a region: drag a rectangle, or click points and close the shape. */
+const isRegion = (t: ToolId) => t === 'cutout' || t === 'space';
 const isMeasureTool = (t: ToolId) => MEASURE_TYPES.has(t) || t === 'radius-3pt';
 
 /** Corners of a viewport rectangle: top-left, top-right, bottom-right, bottom-left. */

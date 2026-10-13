@@ -278,3 +278,14 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
 .fill-bar .sep { width: 1px; height: 18px; background: var(--border); }
 .fill-bar label { display: inline-flex; align-items: center; gap: 2px; }
 .fill-bar input[type=color] { width: 26px; height: 22px; padding: 0; border: 1px solid var(--border); }
+
+/* Spaces panel */
+.spaces-panel { padding: 6px 8px; font-size: 12px; }
+.space-row { display: flex; align-items: center; gap: 6px; padding: 3px 6px; cursor: default; border-radius: 3px; }
+.space-row:hover { background: var(--hover); }
+.space-row.selected { background: var(--accent-soft); }
+.space-row .swatch { width: 10px; height: 10px; border: 1px solid #0003; flex: none; }
+.space-row input { flex: 1; min-width: 0; }
+.spaces-panel label.inline { display: inline-flex; align-items: center; gap: 4px; }
+.prop-actions button.on { background: var(--accent-soft); border-color: var(--accent); }
+.pad-t { padding-top: 6px; }

@@ -16,7 +16,7 @@ const SPEEDS = { Slow: 1_500, Medium: 6_000, Fast: 40_000 } as const;
 const SENSITIVITY = { Low: { lum: 96, grow: 0 }, Medium: { lum: 190, grow: 0 }, High: { lum: 235, grow: 1 } } as const;
 export type CreateKind = 'space' | 'polygon' | 'area' | 'polylength' | 'perimeter' | 'volume';
 export const CREATE_KINDS: { id: CreateKind; label: string }[] = [
-  { id: 'polygon', label: 'Polygon' }, { id: 'area', label: 'Area' },
+  { id: 'space', label: 'Space' }, { id: 'polygon', label: 'Polygon' }, { id: 'area', label: 'Area' },
   { id: 'polylength', label: 'Polylength' }, { id: 'perimeter', label: 'Perimeter' }, { id: 'volume', label: 'Volume' },
 ];
 
@@ -35,6 +35,7 @@ interface FillState {
   speed: keyof typeof SPEEDS;
   boundarySize: number; // page points
   color: string;
+  spaceName: string;
   tick: number; // bumps to repaint
   loading: boolean;
 }
@@ -42,7 +43,7 @@ interface FillState {
 export const useFill = create<FillState>(() => ({
   mode: 'fill', key: '', k: 1, base: null, mask: null, flood: null, boundaries: [], draftBoundary: [],
   create: { space: false, polygon: false, area: true, polylength: false, perimeter: false, volume: false },
-  sensitivity: 'Medium', speed: 'Medium', boundarySize: 2, color: '#00a0ff', tick: 0, loading: false,
+  sensitivity: 'Medium', speed: 'Medium', boundarySize: 2, color: '#00a0ff', spaceName: 'Space', tick: 0, loading: false,
 }));
 
 const bump = () => useFill.setState((s) => ({ tick: s.tick + 1 }));
@@ -188,6 +189,12 @@ export function applyFill(): number {
   let n = 0;
   for (const { outer, holes } of outlines) {
     for (const kind of CREATE_KINDS.map((c) => c.id).filter((c) => st.create[c])) {
+      if (kind === 'space') {
+        const taken = (doc.spaces[doc.page] ?? []).length;
+        app.setSpace(doc.page, { id: crypto.randomUUID(), title: outlines.length > 1 ? `${st.spaceName} ${taken + 1}` : st.spaceName, points: outer, color: '#0000ff', opacity: 0.1 });
+        n++;
+        continue;
+      }
       const type = kind as MarkupType;
       const preset = app.preset?.type === type ? app.preset : null;
       const points = type === 'perimeter' || type === 'polylength' ? [...outer, outer[0]] : outer;
@@ -260,6 +267,7 @@ export function DynamicFillBar() {
       {CREATE_KINDS.map((c) => (
         <label key={c.id}><input type="checkbox" checked={st.create[c.id]} onChange={(e) => set({ create: { ...st.create, [c.id]: e.target.checked } })} /> {c.label}</label>
       ))}
+      {st.create.space && <input aria-label="Space name" value={st.spaceName} onChange={(e) => set({ spaceName: e.target.value })} style={{ width: 90 }} />}
       <button className="primary" disabled={!filled} onClick={applyFill}>Apply</button>
       <span className="sep" />
       <select aria-label="Clear Dynamic Fill" value="" onChange={(e) => { if (e.target.value) clearFill(e.target.value as 'all'); }}>

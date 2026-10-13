@@ -1,3 +1,4 @@
+import { anchorOf, spaceAt } from '../model/spaces';
 import { activeDoc, useApp, type DocState } from '../model/store';
 import { areaLabel, measure, unitLabel, volumeLabel } from '../model/measure';
 import type { Markup } from '../model/types';
@@ -51,6 +52,7 @@ const meas = (m: Markup) => measure(m);
 export const SUMMARY_COLUMNS: SummaryColumn[] = [
   { key: 'subject', label: 'Subject', value: (m) => m.subject },
   { key: 'page', label: 'Page Label', value: (m, d) => d.loaded.pages[m.page]?.label ?? m.page + 1 },
+  { key: 'space', label: 'Space', value: (m, d) => spaceAt(d.spaces[m.page], anchorOf(m))?.title ?? '' },
   { key: 'label', label: 'Label', value: (m) => m.label },
   { key: 'comment', label: 'Comments', value: (m) => m.comment || m.text || '' },
   { key: 'author', label: 'Author', value: (m) => m.author },

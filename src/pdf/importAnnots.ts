@@ -355,6 +355,37 @@ function readCounts(doc: PDFDocument, items: { ref: PDFRef; dict: PDFDict }[], p
   return out;
 }
 
+export interface RawSpace { title: string; path: Pt[]; color: string; opacity: number }
+
+/** Revu Spaces: page /BSISpaces, each /Space with /Title, /Path [[x y]...], /C, /CA and nested /Kids. */
+function readSpaces(doc: PDFDocument, p: number): RawSpace[] {
+  const out: RawSpace[] = [];
+  const walk = (arr: unknown, depth: number) => {
+    if (!(arr instanceof PDFArray) || depth > 32) return;
+    for (let i = 0; i < arr.size(); i++) {
+      const sp = lookup(doc, arr.get(i));
+      if (!(sp instanceof PDFDict)) continue;
+      const path = getArray(doc, sp, 'Path');
+      const pts: Pt[] = [];
+      for (let j = 0; path && j < path.size(); j++) {
+        const xy = numbers(doc, lookup(doc, path.get(j)) as PDFArray);
+        if (xy.length >= 2) pts.push({ x: xy[0], y: xy[1] });
+      }
+      if (pts.length >= 3) {
+        out.push({
+          title: getText(doc, sp, 'Title') ?? '',
+          path: pts,
+          color: colorToHex(numbers(doc, getArray(doc, sp, 'C'))) ?? '#0000ff',
+          opacity: getNumber(doc, sp, 'CA') ?? 0.1,
+        });
+      }
+      walk(lookup(doc, sp.get(N('Kids'))), depth + 1);
+    }
+  };
+  walk(lookup(doc, doc.getPage(p).node.get(N('BSISpaces'))), 0);
+  return out;
+}
+
 /** A /VP viewport with its own scale; `bbox` is in PDF user space. */
 export interface RawViewport { id: string; name: string; bbox: [number, number, number, number]; scale: Scale }
 
@@ -364,6 +395,8 @@ export interface ImportResult {
   pageScales: (Scale | null)[];
   /** Named /VP viewports (regions with their own scale), per page. */
   pageViewports: RawViewport[][];
+  /** Revu Spaces (/BSISpaces), flattened, per page; paths in PDF space. */
+  pageSpaces: RawSpace[][];
   /** refKeys of annotations represented by markups, per page. */
   imported: Set<string>[];
 }
@@ -372,6 +405,7 @@ export function importAnnotations(doc: PDFDocument): ImportResult {
   const raws: RawImport[] = [];
   const pageScales: (Scale | null)[] = [];
   const pageViewports: RawViewport[][] = [];
+  const pageSpaces: RawSpace[][] = [];
   const imported: Set<string>[] = [];
   for (let p = 0; p < doc.getPageCount(); p++) {
     const taken = new Set<string>();
@@ -410,8 +444,9 @@ export function importAnnotations(doc: PDFDocument): ImportResult {
     const { scale, viewports } = readViewports(doc, p);
     pageScales.push(scale);
     pageViewports.push(viewports);
+    pageSpaces.push(readSpaces(doc, p));
   }
-  return { raws, pageScales, pageViewports, imported };
+  return { raws, pageScales, pageViewports, pageSpaces, imported };
 }
 
 /** True for a /VP entry that holds a ruler (/RL) scale. */

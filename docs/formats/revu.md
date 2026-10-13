@@ -59,7 +59,11 @@ Each counted item is its own annotation. The first item carries
 
 ## Other
 
-- Spaces: page-level `/BSISpaces` array.
+- Spaces: page-level `/BSISpaces` array of `/Type /Space` dicts with
+  `/Title`, `/Path` (array of `[x y]` arrays, PDF space), `/C` (RGB),
+  `/CA` (opacity, 0.1 by default) and nested `/Kids`, each kid pointing back
+  with `/Parent`. Nesting follows containment (Revu nests automatically),
+  so CyanTakeoff rebuilds the tree from geometry when writing.
 - Layers: markups reference optional content groups via `/OC`.
 - Text style: `/DS` CSS-like string, `/RC` XHTML with
   `xfa:APIVersion="BluebeamPDFRevu:2018"`.

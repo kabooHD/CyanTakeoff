@@ -4,13 +4,14 @@ import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, measure, precis
 import type { LineStyle, Markup, MarkupStyle, MarkupType, Scale, ToolPreset } from '../model/types';
 import { toolById } from '../tools/tools';
 import { Icon } from './icons';
+import { SpacesPanel } from './SpacesPanel';
 
 // ---------------- side tab strips ----------------
 
 export function SideTabs({ side }: { side: 'left' | 'right' }) {
   const s = useApp();
   const tabs = side === 'left'
-    ? [{ id: 'thumbnails', label: 'Thumbnails' }, { id: 'bookmarks', label: 'Bookmarks' }] as const
+    ? [{ id: 'thumbnails', label: 'Thumbnails' }, { id: 'bookmarks', label: 'Bookmarks' }, { id: 'spaces', label: 'Spaces' }] as const
     : [{ id: 'properties', label: 'Properties' }, { id: 'toolchest', label: 'Tool Chest' }, { id: 'measurements', label: 'Measurements' }] as const;
   const cur = side === 'left' ? s.left : s.right;
   return (
@@ -41,6 +42,7 @@ export function LeftPanel() {
   const doc = useActiveDoc();
   if (!s.left) return null;
   const close = () => s.setPanels({ left: null });
+  if (s.left === 'spaces') return <PanelFrame title="Spaces" onClose={close}>{doc ? <SpacesPanel doc={doc} /> : null}</PanelFrame>;
   return s.left === 'thumbnails'
     ? <PanelFrame title="Thumbnails" onClose={close}>{doc ? <Thumbnails doc={doc} /> : null}</PanelFrame>
     : <PanelFrame title="Bookmarks" onClose={close}>{doc ? <Bookmarks doc={doc} /> : null}</PanelFrame>;

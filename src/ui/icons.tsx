@@ -37,6 +37,8 @@ const P: Record<string, ReactNode> = {
   link: <><path d="M8.5 11.5l3-3" /><path d="M7 9l-2 2a2.5 2.5 0 003.5 3.5l2-2M13 11l2-2a2.5 2.5 0 00-3.5-3.5l-2 2" /></>,
   attachment: <path d="M13 6v8a3 3 0 01-6 0V5a2 2 0 014 0v8a1 1 0 01-2 0V7" />,
   eraser: <><path d="M3 13l7-7 6 6-5 5H7z" /><path d="M7 9l6 6M9 17h8" /></>,
+  spaces: <><path d="M3 4h14v12H3z" /><path d="M3 10h7V4M10 10v6" strokeDasharray="2 1.5" /></>,
+  space: <><path d="M3 4h14v12H3z" /><path d="M3 10h7V4M10 10v6" strokeDasharray="2 1.5" /></>,
   length: <path d="M2 10h16M2 6v8M18 6v8M5 10l2-2M5 10l2 2M15 10l-2-2M15 10l-2 2" />,
   polylength: <><path d="M2 16l5-8 5 5 6-9" /><circle cx="2" cy="16" r="1" /><circle cx="18" cy="4" r="1" /></>,
   area: <><path d="M3 4h10l4 5v7H3z" /><path d="M6 13l4-4M9 13l4-4M3 10l3-3" opacity=".6" /></>,

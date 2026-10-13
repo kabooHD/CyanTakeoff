@@ -70,6 +70,14 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - CyanTakeoff: holes larger than ~0.5% of the room (columns, shafts) become
   cutouts on Area/Volume; small pockets (room labels) are ignored.
 
+## Spaces (Alt+S)
+- Spaces panel: Add Space (drag a rectangle or click corners, close on the
+  first point or Enter, then name it), Highlight toggle, Edit; per page
+  tree. Spaces nest by containment and may not partly overlap.
+- Space Properties: name, colour, opacity. Create Area Markup from a Space.
+- Markups List has a Space column (the Space each markup is in).
+- Dynamic Fill can create Spaces.
+
 ## Cutouts
 - Polygon Cutout and Ellipse Cutout subtract from an existing Area or
   Volume; hovering the target measurement highlights it.

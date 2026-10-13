@@ -2,7 +2,8 @@ import {
   PDFArray, PDFDict, PDFDocument, PDFHexString, PDFRef, PDFString, StandardFonts,
   type PDFFont, type PDFObject,
 } from 'pdf-lib';
-import type { Cutout, Markup, Pt, Scale, Viewport } from '../model/types';
+import type { Cutout, Markup, Pt, Scale, Space, Viewport } from '../model/types';
+import { spaceTree, type SpaceNode } from '../model/spaces';
 import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import { refKey, removeAnnots, type CTData, type PageInfo } from './document';
 import { isRulerViewport } from './importAnnots';
@@ -567,6 +568,9 @@ export interface SaveInput {
   viewports?: Viewport[][];
   /** Pages whose scale or viewports changed; their /VP is rewritten. */
   dirtyCalibrations: Set<number>;
+  spaces?: Space[][];
+  /** Pages whose Spaces changed; their /BSISpaces is rewritten. */
+  dirtySpaces?: Set<number>;
 }
 
 /** A Revu-style /NM: 16 random capital letters. */
@@ -623,6 +627,30 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
     const d = doc.context.lookup(ref) as PDFDict;
     d.set(N('IRT'), groupHead.get(group)!);
     d.set(N('RT'), N('Group'));
+  }
+
+  // Spaces, nested the way Revu writes them: /Kids with /Parent back-links.
+  for (const p of input.dirtySpaces ?? []) {
+    const page = doc.getPage(p);
+    const ctx = doc.context;
+    const vp = input.pages[p].viewport;
+    const build = (n: SpaceNode, parent?: PDFRef): PDFRef => {
+      const ref = ctx.nextRef();
+      const dict = ctx.obj({
+        Type: 'Space',
+        Title: /^[\x20-\x7e]*$/.test(n.space.title) ? PDFString.of(n.space.title) : PDFHexString.fromText(n.space.title),
+        Path: n.space.points.map((q) => vp.convertToPdfPoint(q.x, q.y).map((v: number) => +v.toFixed(4))),
+        C: hexToRgb(n.space.color),
+        CA: n.space.opacity,
+      }) as PDFDict;
+      if (parent) dict.set(N('Parent'), parent);
+      if (n.kids.length) dict.set(N('Kids'), ctx.obj(n.kids.map((k) => build(k, ref))));
+      ctx.assign(ref, dict);
+      return ref;
+    };
+    const roots = spaceTree(input.spaces?.[p] ?? []);
+    if (roots.length) page.node.set(N('BSISpaces'), ctx.obj(roots.map((r) => build(r))));
+    else page.node.delete(N('BSISpaces'));
   }
 
   for (const p of input.dirtyCalibrations) {

@@ -192,3 +192,47 @@ describe('text on rotated pages', () => {
     expect(textFrame(0).right).toEqual({ x: 1, y: 0 });
   });
 });
+
+describe('Revu Spaces (/BSISpaces)', () => {
+  const tree = async (file: string, page: number) => {
+    const { spaceTree } = await import('../src/model/spaces');
+    const { pageSpaces } = await load(file);
+    const spaces = pageSpaces[page].map((s, i) => ({ id: String(i), title: s.title, points: s.path, color: s.color, opacity: s.opacity }));
+    const names = (ns: ReturnType<typeof spaceTree>): Record<string, unknown> => Object.fromEntries(ns.map((n) => [n.space.title, names(n.kids)]));
+    return names(spaceTree(spaces)) as Record<string, Record<string, Record<string, unknown>>>;
+  };
+  // Expected hierarchy as listed by pymkup's tests for the same files.
+  it('markup-space.pdf: Level 1 > Area A/B > rooms', async () => {
+    const t = await tree('markup-space.pdf', 0);
+    expect(Object.keys(t)).toEqual(['Level 1']);
+    expect(Object.keys(t['Level 1']).sort()).toEqual(['Area A', 'Area B']);
+    expect(Object.keys(t['Level 1']['Area A']).sort()).toEqual(['Room 101', 'Room 102']);
+    expect(Object.keys(t['Level 1']['Area B']).sort()).toEqual(['Room 151', 'Room 152']);
+  });
+  it('markup-deep-spaces.pdf: four levels deep on page 1, Level 4 on page 2', async () => {
+    const t = await tree('markup-deep-spaces.pdf', 0);
+    const b = t['Level 3']['Area B'] as Record<string, Record<string, unknown>>;
+    for (const r of ['Room 302', 'Room 303', 'Room 304', 'Room 305', 'Hallway 330', 'Room 106']) expect(b).toHaveProperty([r]);
+    expect(b['Room 302']).toHaveProperty(['Sub Room']);
+    expect(b['Room 305']).toHaveProperty(['Sub Room 2']);
+    const t2 = await tree('markup-deep-spaces.pdf', 1);
+    expect(Object.keys(t2['Level 4']['Area A']).sort()).toEqual(['Hallway 2', 'Room 401']);
+  });
+  it('saves Spaces nested with /Kids and /Parent, and reads them back', async () => {
+    const { savePdf } = await import('../src/pdf/save');
+    const bytes = readFileSync('tests/fixtures/revu/markup-space.pdf');
+    const first = await load('markup-space.pdf');
+    const identity = { convertToPdfPoint: (x: number, y: number) => [x, y] };
+    const pages = [{ index: 0, label: '', width: 0, height: 0, viewport: identity }] as never;
+    const spaces = [first.pageSpaces[0].map((s, i) => ({ id: String(i), title: s.title, points: s.path, color: s.color, opacity: s.opacity }))];
+    spaces[0].push({ id: 'new', title: 'Room 103', points: [{ x: 70, y: 450 }, { x: 140, y: 450 }, { x: 140, y: 400 }, { x: 70, y: 400 }], color: '#ff0000', opacity: 0.2 });
+    const out = await savePdf({
+      original: bytes, pages, markups: [], importedRefs: new Set(), calibrations: [null], dirtyCalibrations: new Set(),
+      spaces, dirtySpaces: new Set([0]),
+    });
+    const again = importAnnotations(await PDFDocument.load(out));
+    expect(again.pageSpaces[0].map((s) => s.title).sort()).toEqual([...first.pageSpaces[0].map((s) => s.title), 'Room 103'].sort());
+    const kids = (await PDFDocument.load(out)).getPage(0).node.lookup(N('BSISpaces'), PDFArray);
+    expect(kids.size()).toBe(1); // one root: Level 1
+  });
+});

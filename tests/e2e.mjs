@@ -18,6 +18,16 @@ page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 // Force the download / <input type=file> fallbacks (no native pickers headless).
 await page.addInitScript(() => { delete window.showSaveFilePicker; delete window.showOpenFilePicker; });
 
+/** Ctrl+O and wait for the file chooser (retried: the picker needs a fresh user activation). */
+async function ctrlO() {
+  for (let i = 0; i < 3; i++) {
+    try {
+      const [fc] = await Promise.all([page.waitForEvent('filechooser', { timeout: 8000 }), page.keyboard.press('Control+O')]);
+      return fc;
+    } catch { console.log('(retrying Ctrl+O)'); await page.mouse.click(5, 500); }
+  }
+  throw new Error('no file chooser');
+}
 const assert = (cond, msg) => { if (!cond) throw new Error(`ASSERT: ${msg}`); console.log(`ok - ${msg}`); };
 
 await page.goto(URL);
@@ -185,7 +195,7 @@ assert(dicts.every((d) => d.get(PDFName.of('AP'))), 'every annotation has an app
 assert(pdf.getPage(0).node.get(PDFName.of('VP')), 'page viewport (/VP) scale written');
 
 // Reopen the saved file: markups and measurements must round-trip.
-const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('Control+O')]);
+const chooser = await ctrlO();
 await chooser.setFiles(saved);
 await page.waitForFunction(() => document.querySelectorAll('.doc-tab').length === 2);
 await page.waitForTimeout(1200);
@@ -227,7 +237,7 @@ await page.keyboard.press('Control+Shift+F8'); await page.keyboard.press('Contro
   const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
   await dl.saveAs(`${OUT}/saved-cutouts.pdf`);
   await page.waitForTimeout(800);
-  const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('Control+O')]);
+  const fc = await ctrlO();
   await fc.setFiles(`${OUT}/saved-cutouts.pdf`);
   await page.waitForFunction(() => document.querySelectorAll('.doc-tab').length === 3);
   await page.waitForTimeout(1200);
@@ -454,6 +464,22 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await click(52, 14);
   assert(await page.locator('.ml-table tbody tr.selected').count() === 2, 'group survives save and reload');
   await page.keyboard.press('Escape');
+
+  // Spaces (Alt+S): name the Conference room; markups inside report it in the Space column.
+  await page.keyboard.press('Alt+S');
+  await page.getByRole('button', { name: 'Add Space' }).click();
+  await drag([42.4, 39.5], [59.5, 18.4]);
+  const sd = page.getByRole('dialog', { name: 'Add Space' });
+  await sd.getByLabel('Space name').fill('Conference 104');
+  await sd.getByRole('button', { name: 'OK' }).click();
+  assert(await page.locator('.space-row').filter({ hasText: 'Conference 104' }).count() === 1, 'Space listed in the Spaces panel');
+  const spaceCells = async () => (await page.locator('.ml-table tbody').innerText()).split('Conference 104').length - 1;
+  assert(await spaceCells() === 6, `the six markups inside report their Space (${await spaceCells()})`);
+  const [sdl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
+  await sdl.saveAs(`${OUT}/saved-spaces.pdf`);
+  await page.waitForTimeout(800);
+  assert(await spaceCells() === 6, 'Spaces survive save and reload');
+  await page.keyboard.press('Alt+S');
   await page.keyboard.press('Control+Shift+F8');
 }
 
@@ -463,7 +489,7 @@ for (const [file, expected] of [
   ['markup-space.pdf', ['15']],
 ]) {
   const tabs = await page.locator('.doc-tab').count();
-  const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('Control+O')]);
+  const fc = await ctrlO();
   await fc.setFiles(`tests/fixtures/revu/${file}`);
   await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs);
   await page.waitForTimeout(1200);

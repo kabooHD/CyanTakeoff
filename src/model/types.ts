@@ -39,7 +39,7 @@ export type MarkupType =
   | 'link'
   | 'attachment';
 
-export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cutout' | 'ellipse-cutout' | 'viewport' | 'radius-3pt' | 'dynamic-fill' | 'snapshot' | 'eraser' | 'lasso';
+export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cutout' | 'ellipse-cutout' | 'viewport' | 'radius-3pt' | 'dynamic-fill' | 'snapshot' | 'eraser' | 'lasso' | 'space';
 
 /** A hole subtracted from an Area or Volume measurement. Ellipse: two opposite corners. */
 export interface Cutout { kind: 'polygon' | 'ellipse'; points: Pt[] }
@@ -82,6 +82,19 @@ export interface Viewport {
   /** Two opposite corners, page space. */
   rect: [Pt, Pt];
   scale: Scale;
+}
+
+/**
+ * A named region of a page (Revu "Spaces"): markups inside it are organised
+ * by it. Spaces nest by containment; they never partly overlap.
+ */
+export interface Space {
+  id: string;
+  title: string;
+  /** Outline, page space. */
+  points: Pt[];
+  color: string;
+  opacity: number;
 }
 
 export type MarkupStatus = 'None' | 'Accepted' | 'Rejected' | 'Cancelled' | 'Completed';
