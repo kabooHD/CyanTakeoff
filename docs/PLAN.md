@@ -84,7 +84,26 @@ Bluebeam users should be able to switch without retraining:
   all slab area on A-201" or "compare rev 3 to rev 4". We measure time per
   task against Revu.
 
-## 4. Architecture (as built)
+## 4. Direction: cloud-native, browser-only (Onshape, not SolidWorks)
+
+Like Onshape against SolidWorks, CyanTakeoff wins by changing where the work
+lives, not only by copying features:
+
+- **Browser-only, no desktop version.** Users can install it from the
+  browser for its own window; it is the same web app.
+- **Documents live in the cloud,** not as files mailed around: every save is
+  a version you can go back to or compare; sharing is a link with
+  permissions (view / comment / edit).
+- **Collaboration is the default:** everyone in a document sees changes
+  live; no separate "session" step.
+- **Any device:** laptop, tablet on site, phone for viewing (touch support).
+- **Self-hostable:** firms that will not use our cloud run their own server,
+  which Onshape cannot offer.
+- **Local mode stays:** open a PDF from disk, nothing uploaded.
+- Browser-reserved keys (Ctrl+Tab, Ctrl+N, Ctrl+T, Ctrl+W) cannot match
+  Revu; those actions get other keys.
+
+## 4b. Architecture (as built)
 
 Web-first, TypeScript only, so it runs in any browser (Windows, macOS,
 Linux) and can be hosted as a static site:
@@ -97,8 +116,6 @@ Linux) and can be hosted as a static site:
 - **Snapping:** vector geometry extracted from the page operator list.
 - **Files stay on the user's machine:** opening and saving happen in the
   browser; nothing is uploaded unless a shared session is started.
-- A desktop wrapper (Tauri) comes later, mainly for browser-reserved
-  shortcuts (Ctrl+Tab, Ctrl+N) and file associations.
 
 ## 5. Roadmap (revised after user research)
 
@@ -122,28 +139,28 @@ and reopen; tested against real Revu files (values match Revu's own).
 - Area/volume cutouts (polygon and ellipse)
 - Viewports (different scales on one sheet)
 
-### Next 2: public test build (days)
-- Host on a VPS (static site + HTTPS), with a feedback link and a clear
-  privacy note: drawings never leave the browser
+### Next 2: public test build in local mode (days)
+- Host on a VPS (static site + HTTPS), with a feedback link
 - Post to Revu user communities; collect real Revu files and bug reports
 - Publish a compatibility report: which Revu markups round-trip, with tests
 
-### Next 3: shared sessions, the Studio replacement (1–2 weeks)
-- Small server: share a session link, real-time markup sync, attendee
-  list, chat, per-user markups, session report; works in the browser with
-  no install for guests
-- Self-hostable (Docker) so firms keep drawings on their own servers
-- Note: we cannot join Revu's Studio sessions (closed service); the pitch
-  is "anyone can join with a link, on any computer"
+### Next 3: cloud documents (2–3 weeks)
+- Sign-in, upload, storage, version history
+- Share links with view / comment / edit permissions
+- Live collaboration in the same document (attendees, per-user markups,
+  chat), no install for guests
+- Self-hostable server (Docker)
+- We cannot join Revu's Studio sessions (closed service); the pitch is
+  "anyone can join with a link, on any device"
 
 ### Next 4: document productivity
-Overlay / compare revisions, Sets and sheet links, slip sheets, page
-operations, then Spaces, Legends, Dynamic Fill, custom columns and Excel
-export.
+Compare versions and overlay revisions (natural once versions exist), Sets
+and sheet links, slip sheets, page operations, then Spaces, Legends,
+Dynamic Fill, custom columns and Excel export, touch support.
 
 ### Later
-Desktop wrapper, signatures, OCR, forms, redaction, profiles and shortcut
-editor, Revu tool set (.btx) import, accessibility, localisation.
+Signatures, OCR, forms, redaction, profiles and shortcut editor, Revu tool
+set (.btx) import, accessibility, localisation.
 
 ## 6. File fidelity is the headline
 
@@ -169,8 +186,25 @@ Studio (Tauri/Rust) exist. CyanTakeoff's difference: exact Revu
 compatibility proven on real files, Revu's exact UX and shortcuts, and it
 runs in any browser.
 
+## 8b. Business model
+
+Goal: about $2,000/month for the maintainer, plus running costs.
+
+- **Free:** local mode, viewing, shared-link documents, self-hosting (open
+  source).
+- **Paid:** hosted cloud with private documents, version history, live
+  collaboration and storage. Roughly $10–15 per user per month, or a team
+  plan around $50–90/month (Revu: about $22–49 per user per month).
+- **Transparent budget:** costs and the maintainer's fixed $2,000 are
+  published monthly (for example on Open Collective). Surplus lowers next
+  month's price or becomes account credit, rather than card refunds.
+- Rough target: 150–220 paying users, or 25–45 small teams.
+
 ## 9. Open decisions
 
 1. Hosting: domain name and VPS provider for the public test build.
-2. Sessions server: allow anonymous guests by link, or require sign-in?
-3. Real Revu users for testing: who can try builds and share Revu files?
+2. Sign-in: email links, or Google / Microsoft accounts?
+3. Hosted only, self-hosted only, or both (recommended)?
+4. Business registration and payments (Stripe / Open Collective), with local
+   tax advice.
+5. Real Revu users for testing: who can try builds and share Revu files?
