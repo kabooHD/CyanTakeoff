@@ -393,3 +393,17 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
 .crosshair-h { left: 0; right: 0; height: 1px; }
 .crosshair-v { top: 0; bottom: 0; width: 1px; }
 .dimmer { position: absolute; inset: 0; background: #fff; pointer-events: none; }
+
+/* Bookmarks panel */
+.bookmarks-panel { outline: none; font-size: 12px; }
+.bookmark-row { display: flex; align-items: center; gap: 4px; min-height: 22px; padding-right: 6px; cursor: default; border-top: 2px solid transparent; border-bottom: 2px solid transparent; }
+.bookmark-row:hover { background: var(--hover, #eef3fb); }
+.bookmark-row.selected { background: #d6e4fa; }
+.bookmark-row.drop-before { border-top-color: var(--accent); }
+.bookmark-row.drop-after { border-bottom-color: var(--accent); }
+.bookmark-row.drop-child { box-shadow: inset 0 0 0 2px var(--accent); }
+.bm-toggle { width: 12px; text-align: center; cursor: pointer; color: #555; flex: none; }
+.bm-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 0; }
+.bm-rename { flex: 1; font: inherit; }
+.bm-here { color: var(--accent); font-size: 10px; }
+.bm-broken { color: #c60; }

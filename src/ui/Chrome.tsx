@@ -10,6 +10,7 @@ import { viewerApi } from './Viewer';
 import { combineFiles, openPagesDialog } from './PagesDialog';
 import { openCompare } from './Compare';
 import { openPrint } from './Print';
+import { addBookmark } from './BookmarksPanel';
 import { stepView, viewHistory } from './Rulers';
 import { openSignDialog } from './DigitalSignature';
 import { useFormsDialog } from './FormsEditor';
@@ -102,6 +103,8 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Previous Page', shortcut: 'Ctrl+Left', disabled: noDoc, action: () => doc && s.setPage(doc.page - 1) },
       { label: 'Next Page', shortcut: 'Ctrl+Right', disabled: noDoc, action: () => doc && s.setPage(doc.page + 1) },
       { label: 'Last Page', shortcut: 'End', disabled: noDoc, action: () => doc && s.setPage(doc.loaded.pages.length - 1) },
+      { sep: true },
+      { label: 'Add Bookmark', shortcut: 'Ctrl+B', disabled: noDoc, action: () => addBookmark() },
       { sep: true },
       { label: 'Insert Pages…', shortcut: 'Ctrl+Shift+I', disabled: noDoc, action: () => openPagesDialog('insert') },
       { label: 'Insert Blank Page…', shortcut: 'Ctrl+Shift+N', disabled: noDoc, action: () => openPagesDialog('insert-blank') },

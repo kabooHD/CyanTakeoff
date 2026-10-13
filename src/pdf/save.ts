@@ -1,4 +1,5 @@
 import { writeLayers, type LayerSet } from './layers';
+import { writeBookmarks, type Bookmark } from './bookmarks';
 import { flattenPath, hasCurves, pdfPath, segments } from '../model/curves';
 import { hasSignatures, incrementalUpdate, loadForUpdate } from './incremental';
 import {
@@ -664,6 +665,8 @@ export interface SaveInput {
   formValues?: Record<string, FieldValue>;
   /** Layers, when the layer list changed. */
   layers?: LayerSet | null;
+  /** Bookmarks, when they changed. */
+  bookmarks?: Bookmark[];
 }
 
 /** A Revu-style /NM: 16 random capital letters. */
@@ -699,7 +702,7 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
   const remove = new Set([...input.importedRefs].filter((r) => !keep.has(r)));
   const toWrite = input.markups.filter((m) => !unchanged(m));
   // Nothing edited: hand back the file exactly as it was.
-  if (!remove.size && !toWrite.length && !(input.formValues && Object.keys(input.formValues).length) && !input.columns && input.layers === undefined
+  if (!remove.size && !toWrite.length && !(input.formValues && Object.keys(input.formValues).length) && !input.columns && input.layers === undefined && !input.bookmarks
     && !input.dirtySpaces?.size && !input.dirtyCalibrations.size) return input.original;
   // Signed files are saved as an incremental update so the signatures stay valid.
   const signed = hasSignatures(doc);
@@ -707,6 +710,7 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
 
   // Layers first, so markups can point /OC at layers created in this session.
   const layerRefs = input.layers !== undefined ? writeLayers(doc, input.layers ?? { layers: {}, order: [], configs: [] }) : new Map<string, PDFRef>();
+  if (input.bookmarks) writeBookmarks(doc, input.bookmarks);
   const layerRef = (id: string) => layerRefs.get(id) ?? (/^(\d+)R(\d*)$/.test(id) ? PDFRef.of(Number(id.split('R')[0]), Number(id.split('R')[1] || 0)) : undefined);
   const font = await doc.embedFont(StandardFonts.Helvetica);
   if (input.formValues && Object.keys(input.formValues).length) writeFields(doc, input.formValues, font);

@@ -10,6 +10,7 @@ import { expandGroups } from './arrange';
 import { columnDefaults } from './columns';
 import type { RulerUnit } from './rulers';
 import type { LayerSet } from '../pdf/layers';
+import type { Bookmark } from '../pdf/bookmarks';
 import { hasSignatures, incrementalUpdate, loadForUpdate } from '../pdf/incremental';
 import type { ViewMode, ViewRotation } from './layout';
 import type {
@@ -24,7 +25,7 @@ export interface ScaleSnapshot { markups: Markup[]; calibrations: (Scale | null)
 /** The whole document before a page operation (insert, delete, rotate...), for undoing it. */
 export interface DocSnapshot { doc: Pick<DocState, typeof DOC_KEYS[number]> }
 const DOC_KEYS = ['bytes', 'loaded', 'markups', 'importedRefs', 'calibrations', 'viewports', 'dirtyCalibrations',
-  'spaces', 'dirtySpaces', 'columns', 'dirtyColumns', 'formValues', 'page', 'layers', 'dirtyLayers'] as const;
+  'spaces', 'dirtySpaces', 'columns', 'dirtyColumns', 'formValues', 'page', 'layers', 'dirtyLayers', 'bookmarks', 'dirtyBookmarks'] as const;
 /** Page operations kept in the undo history per document (each holds a copy of the file). */
 const MAX_DOC_UNDO = 10;
 /** An undo step: markups only, markups with page scales and viewports, or the whole document. */
@@ -67,6 +68,9 @@ export interface DocState {
   /** PDF layers (Layers panel), and whether they changed since opening. */
   layers: LayerSet | null;
   dirtyLayers: boolean;
+  /** Bookmarks (Bookmarks panel), and whether they changed since opening. */
+  bookmarks: Bookmark[];
+  dirtyBookmarks: boolean;
   /** View state, not saved: which layers are shown. */
   layerVisible: Record<string, boolean>;
   /** Revu's Markup Layer: new markups go on it. */
@@ -213,6 +217,8 @@ interface AppState {
   setFieldValue(name: string, value: string | boolean): void;
   /** Change the layer list (saved with the document); `patch` can update view state at the same time. */
   setLayers(layers: LayerSet | null, patch?: Partial<DocState>): void;
+  /** Replace the bookmarks (`edit` false: expand/collapse only, not a change to save). */
+  setBookmarks(bookmarks: Bookmark[], edit?: boolean): void;
   /** Change layer view state (visibility, markup layer, configuration): not saved. */
   setLayerView(patch: Partial<Pick<DocState, 'layerVisible' | 'markupLayer' | 'layerConfig'>>): void;
   /** Add a Space, or replace the one with the same id. */
@@ -292,6 +298,7 @@ export function serialize(d: DocState): Promise<Uint8Array> {
     columns: d.dirtyColumns ? d.columns : undefined,
     formValues: d.formValues,
     layers: d.dirtyLayers ? d.layers : undefined,
+    bookmarks: d.dirtyBookmarks ? d.bookmarks : undefined,
   });
 }
 
@@ -397,7 +404,7 @@ export const useApp = create<AppState>((set, get) => {
           dirtyColumns: false,
           formValues: {},
           page: 0, zoom: 0, selection: [], undo: [], redo: [], dirty: false,
-          ...layerState(loaded),
+          ...layerState(loaded), bookmarks: loaded.bookmarks, dirtyBookmarks: false,
         };
         set((s) => ({ docs: [...s.docs, doc], activeId: doc.id, status: loaded.readOnly ? `${name} opened read-only (file could not be parsed for editing)` : `Opened ${name}` }));
       } catch (e) {
@@ -653,7 +660,7 @@ export const useApp = create<AppState>((set, get) => {
             calibrations: loaded.calibrations, viewports: loaded.viewports, dirtyCalibrations: new Set(),
             spaces: loaded.spaces, dirtySpaces: new Set(), columns: loaded.columns, dirtyColumns: false, formValues: {},
             page: Math.max(0, Math.min(loaded.pages.length - 1, page ?? x.page)), selection: [], undo, redo: [], dirty: true,
-            ...layerState(loaded, x),
+            ...layerState(loaded, x), bookmarks: loaded.bookmarks, dirtyBookmarks: false,
           } : x),
           status: done,
         }));
@@ -668,6 +675,9 @@ export const useApp = create<AppState>((set, get) => {
     },
     setLayers(layers, patch) {
       withDoc(() => ({ layers, dirtyLayers: true, dirty: true, ...patch }));
+    },
+    setBookmarks(bookmarks, edit = true) {
+      withDoc(() => (edit ? { bookmarks, dirtyBookmarks: true, dirty: true } : { bookmarks }));
     },
     setLayerView(patch) {
       withDoc(() => patch);
@@ -779,7 +789,7 @@ export const useApp = create<AppState>((set, get) => {
             calibrations: loaded.calibrations, viewports: loaded.viewports, dirtyCalibrations: new Set(),
             spaces: loaded.spaces, dirtySpaces: new Set(), columns: loaded.columns, dirtyColumns: false, formValues: {},
             page, zoom, selection: [], undo: [], redo: [], dirty: false,
-            ...layerState(loaded, x),
+            ...layerState(loaded, x), bookmarks: loaded.bookmarks, dirtyBookmarks: false,
           } : x),
           status: `Saved ${name}`,
         }));

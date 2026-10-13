@@ -1288,6 +1288,56 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert(await page.locator('.ruler-top').count() === 0 && await page.locator('.dimmer').count() === 0, 'rulers and dimmer toggle off');
 }
 
+// Bookmarks (Alt+B): add at the current view (Ctrl+B), name, reorder by drag, add a child, jump, save to /Outlines.
+{
+  const nav = page.locator('.sb-nav > span').first();
+  await page.keyboard.press('Control+4');
+  await page.keyboard.press('End');
+  await page.waitForTimeout(400);
+  await page.keyboard.press('Control+b');
+  const name = page.locator('input[aria-label="Bookmark name"]');
+  await name.waitFor();
+  assert(await name.inputValue() === 'C-101', 'a new bookmark is named after the page label');
+  await name.fill('Site Plan');
+  await name.press('Enter');
+  await page.keyboard.press('Home');
+  await page.waitForTimeout(400);
+  await page.keyboard.press('Control+b');
+  await name.waitFor();
+  await name.fill('Floor Plan');
+  await name.press('Enter');
+  const titles = () => page.locator('.bookmark-row .bm-title').allInnerTexts();
+  assert((await titles()).join('|') === 'Site Plan|Floor Plan', 'bookmarks added after the selected one');
+  const row = (t) => page.locator('.bookmark-row', { has: page.locator('.bm-title', { hasText: t }) });
+  await row('Floor Plan').dragTo(row('Site Plan'), { targetPosition: { x: 40, y: 2 } });
+  assert((await titles()).join('|') === 'Floor Plan|Site Plan', 'drag reorders bookmarks');
+  await row('Site Plan').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Add Child' }).click();
+  await name.waitFor();
+  await name.fill('Detail');
+  await name.press('Enter');
+  assert((await titles()).join('|') === 'Floor Plan|Site Plan|Detail', 'child bookmark added');
+  await page.locator('.bm-title', { hasText: 'Site Plan' }).click();
+  await page.waitForTimeout(400);
+  assert((await nav.innerText()).startsWith('(2 of'), 'clicking a bookmark jumps to its page');
+  await page.screenshot({ path: `${OUT}/bookmarks.png` });
+  await page.locator('.viewer').first().click({ position: { x: 5, y: 5 } }).catch(() => {});
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
+  const file = `${OUT}/bookmarks.pdf`;
+  await dl.saveAs(file);
+  await page.waitForTimeout(800);
+  const out = await PDFDocument.load(readFileSync(file));
+  const look = (o) => out.context.lookup(o);
+  const outline = out.catalog.lookup(PDFName.of('Outlines'), PDFDict);
+  const names = [];
+  const walk = (r, depth) => { for (let it = r && look(r); it; it = it.get(PDFName.of('Next')) && look(it.get(PDFName.of('Next')))) {
+    names.push('-'.repeat(depth) + it.lookup(PDFName.of('Title')).decodeText()); const f = it.get(PDFName.of('First')); if (f) walk(f, depth + 1); } };
+  walk(outline.get(PDFName.of('First')), 0);
+  assert(names.join('|') === 'Floor Plan|Site Plan|-Detail', `saved outline (${names.join('|')})`);
+  const dest = look(outline.get(PDFName.of('First'))).lookup(PDFName.of('Dest'), PDFArray);
+  assert(dest.get(0).toString() === out.getPage(0).ref.toString() && dest.get(1).toString() === '/XYZ', 'bookmark goes to the view on page 1');
+}
+
 // Print (Ctrl+P): sheets are prepared in the page, then the browser's print dialog opens.
 {
   await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });

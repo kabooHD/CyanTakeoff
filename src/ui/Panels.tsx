@@ -1,3 +1,4 @@
+import { BookmarksPanel } from './BookmarksPanel';
 import { LayersPanel } from './LayersPanel';
 import { layerIds } from '../pdf/layers';
 import { SignaturesPanel } from './DigitalSignature';
@@ -59,7 +60,7 @@ export function LeftPanel() {
   if (s.left === 'spaces') return <PanelFrame title="Spaces" onClose={close}>{doc ? <SpacesPanel doc={doc} /> : null}</PanelFrame>;
   return s.left === 'thumbnails'
     ? <PanelFrame title="Thumbnails" onClose={close}>{doc ? <Thumbnails doc={doc} /> : null}</PanelFrame>
-    : <PanelFrame title="Bookmarks" onClose={close}>{doc ? <Bookmarks doc={doc} /> : null}</PanelFrame>;
+    : <PanelFrame title="Bookmarks" onClose={close}>{doc ? <BookmarksPanel doc={doc} /> : null}</PanelFrame>;
 }
 
 export function RightPanel() {
@@ -144,31 +145,6 @@ function Thumbnails({ doc }: { doc: DocState }) {
   );
 }
 
-// ---------------- Bookmarks ----------------
-
-interface OutlineNode { title: string; dest: unknown; items: OutlineNode[] }
-
-function Bookmarks({ doc }: { doc: DocState }) {
-  const [outline, setOutline] = useState<OutlineNode[] | null>(null);
-  const s = useApp();
-  useEffect(() => { doc.loaded.pdf.getOutline().then((o) => setOutline((o as OutlineNode[]) ?? [])); }, [doc.loaded.pdf]);
-  const go = async (dest: unknown) => {
-    const pdf = doc.loaded.pdf;
-    const d = typeof dest === 'string' ? await pdf.getDestination(dest) : dest as unknown[];
-    if (!d) return;
-    const ref = d[0];
-    const idx = typeof ref === 'number' ? ref : await pdf.getPageIndex(ref as never);
-    s.setPage(idx);
-  };
-  const render = (nodes: OutlineNode[], depth = 0): React.ReactNode => nodes.map((n, i) => (
-    <div key={i}>
-      <button className="bookmark" style={{ paddingLeft: 8 + depth * 14 }} onClick={() => go(n.dest)}>{n.title}</button>
-      {n.items?.length ? render(n.items, depth + 1) : null}
-    </div>
-  ));
-  if (!outline) return null;
-  return outline.length ? <div>{render(outline)}</div> : <p className="muted pad">This document has no bookmarks.</p>;
-}
 
 // ---------------- Properties ----------------
 

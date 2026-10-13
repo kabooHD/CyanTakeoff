@@ -7,6 +7,7 @@ import type { CustomColumn, Markup, Pt, Scale, Space, Viewport } from '../model/
 import { importAnnotations, readColumns, removeAnnots } from './importAnnots';
 import { readFields, type FormField } from './forms';
 import { layersOnPages, readLayers, type LayerSet } from './layers';
+import { readBookmarks, type Bookmark } from './bookmarks';
 
 export { refKey, removeAnnots, type CTData } from './importAnnots';
 
@@ -42,6 +43,8 @@ export interface LoadedDoc {
   layers: LayerSet | null;
   /** Layer ids used by each page's content. */
   pageLayers: string[][];
+  /** Bookmarks (PDF outline). */
+  bookmarks: Bookmark[];
 }
 
 export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
@@ -122,6 +125,7 @@ export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
     readOnly: !lib,
     layers: lib ? readLayers(lib) : null,
     pageLayers: lib ? layersOnPages(lib) : [],
+    bookmarks: lib ? readBookmarks(lib) : [],
   };
 }
 

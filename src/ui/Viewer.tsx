@@ -41,6 +41,10 @@ export const viewerApi = {
   zoomBy: (_f: number) => {},
   /** Scroll so page point `p` is in the middle of the view. */
   centerOn: (_p: Pt) => {},
+  /** Scroll so page point `p` is at the top left of the view. */
+  showAt: (_p: Pt) => {},
+  /** Page point at the top left of the view. */
+  topLeft: (): Pt => ({ x: 0, y: 0 }),
 };
 
 type Draft = { tool: ToolId; points: Pt[]; cursor: Pt | null; dragFrom?: { x: number; y: number }; target?: string;
@@ -203,6 +207,19 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       const q = outPt(p.x * zoom, p.y * zoom);
       el.scrollLeft = q.x - el.clientWidth / 2;
       el.scrollTop = q.y - el.clientHeight / 2;
+    };
+    viewerApi.showAt = (p) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const q = outPt(p.x * zoom, p.y * zoom);
+      el.scrollLeft = q.x;
+      el.scrollTop = q.y;
+    };
+    viewerApi.topLeft = () => {
+      const el = scrollRef.current;
+      if (!el) return { x: 0, y: 0 };
+      const c = rotateIn(Math.max(left, el.scrollLeft) - left, Math.max(top, el.scrollTop) - top, pw, ph, rot);
+      return { x: c.x / zoom, y: c.y / zoom };
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitPage, fitWidth, zoomAt, left, top, zoom, isActivePane, rot]);

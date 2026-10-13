@@ -170,7 +170,10 @@ filling, image signatures, redaction and OCR.
   print when shown and their Print usage is on
 - [x] Rulers (Ctrl+R, units by right-click), Full-Screen Crosshair, Dimmer
   (Ctrl+F5, 25/50/75%), Previous/Next View (Alt+Left/Right)
-- [ ] Bookmarks editing (create, rename, nest, reorder, delete; /Outlines)
+- [x] Bookmarks editing: Add Bookmark (Ctrl+B) at the current view, before/
+  after/child, rename, delete, drag to reorder or nest (Ctrl+drag copies),
+  Set to Current View, Properties, from page labels, Audit, Export CSV;
+  saved to /Outlines keeping untouched items and actions
 - [ ] Line styles and hatch patterns
 - [ ] Spell check in text markups and comments
 - [ ] Visual Search

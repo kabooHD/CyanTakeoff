@@ -258,6 +258,18 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - With the Area or Volume tool, clicking a cutout converts it into its own
   measurement (Shift: all cutouts of that markup); the cutout stays.
 
+## Bookmarks (Alt+B)
+Add Bookmark goes to the current view of the active page and is named after
+the page label, ready to type over; it goes below the selected bookmark
+(or at the end), or Add Before / After / Child. Rename by double-click, F2
+or right-click; delete with Delete. Drag to reorder, drag inward to nest,
+Ctrl+drag to copy. Right-click: Set to Current View, Properties (title,
+colour, bold, italic; several at once). Bookmarks menu: Create Bookmarks
+(page labels, or AutoMark from a page region), Audit Bookmarks (flags ones
+pointing at pages no longer in the file), Export Bookmarks (CSV or PDF).
+Ours: Export is CSV; the Action dialog (jump to another file, web link) is
+not editable yet, but such actions are kept as they were.
+
 ## Rulers, crosshair, Dimmer, Previous/Next View (View menu)
 Rulers (Ctrl+R) run along the top and left of the workspace: they show the
 active page's bounds, the extent of the selection, the pointer position,
