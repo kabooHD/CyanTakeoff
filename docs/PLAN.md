@@ -178,7 +178,10 @@ filling, image signatures, redaction and OCR.
   utility lines with text; Line Style Editor: lines, offsets, dash/space/
   dot/text) and hatch patterns (10 standard; Hatch Pattern Editor; saved as
   PDF tiling patterns); custom sets import/export as JSON
-- [ ] Spell check in text markups and comments
+- [x] Spell check: underline while typing (browser), Check Spelling (F7)
+  through markup text, comments, replies and text fields (Ignore Once/All,
+  Add to Dictionary, Change/Change All), Markup Spelling Mistakes on PDF
+  text (Squiggly markups, suggestions in the comment); English dictionary
 - [ ] Visual Search
 - [ ] Sequences (auto-numbered markups)
 - [ ] Quantity Link (measurement totals into Excel)

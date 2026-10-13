@@ -11,6 +11,7 @@ import { combineFiles, openPagesDialog } from './PagesDialog';
 import { openCompare } from './Compare';
 import { openPrint } from './Print';
 import { addBookmark } from './BookmarksPanel';
+import { checkSpelling, useSpellContent } from './Spell';
 import { stepView, viewHistory } from './Rulers';
 import { openSignDialog } from './DigitalSignature';
 import { useFormsDialog } from './FormsEditor';
@@ -69,6 +70,9 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Copy', shortcut: 'Ctrl+C', disabled: !doc?.selection.length, action: s.copy },
       { label: 'Paste', shortcut: 'Ctrl+V', disabled: !s.clipboard.length || noDoc, action: () => s.paste() },
       { label: 'Paste in Place', shortcut: 'Ctrl+Shift+V', disabled: !s.clipboard.length || noDoc, action: () => s.paste(true) },
+      { label: 'Check Spelling in Markups and Form Fields', shortcut: 'F7', disabled: noDoc, action: checkSpelling },
+      { label: 'Markup Spelling Mistakes…', disabled: noDoc, action: () => useSpellContent.setState({ open: true }) },
+      { sep: true },
       { label: 'Delete', shortcut: 'Del', disabled: !doc?.selection.length, action: () => doc && s.deleteMarkups(doc.selection) },
       { label: 'Select All', shortcut: 'Ctrl+A', disabled: noDoc, action: () => doc && s.select(doc.markups.filter((m) => m.page === doc.page).map((m) => m.id)) },
       { sep: true },

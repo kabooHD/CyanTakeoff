@@ -25,6 +25,7 @@ import { PrintDialog, openPrint } from './ui/Print';
 import { stepView } from './ui/Rulers';
 import { addBookmark } from './ui/BookmarksPanel';
 import { StyleManagerDialog } from './ui/LineStyles';
+import { SpellContentDialog, SpellDialog, checkSpelling } from './ui/Spell';
 import { SheetsDialog } from './ui/Sheets';
 import { PrefsDialogs } from './ui/Prefs';
 import { SignatureDialog } from './ui/Signature';
@@ -115,6 +116,7 @@ export function App() {
         case 'Shift+F9': return run(() => s.toggle('grid'));
         case 'Ctrl+R': return run(() => s.toggle('rulers'));
         case 'Ctrl+B': return run(() => d && addBookmark());
+        case 'F7': return run(() => d && checkSpelling());
         case 'Ctrl+F5': return run(() => s.toggle('dimmer'));
         case 'Alt+ArrowLeft': return run(() => stepView(-1, viewerApi.centerOn));
         case 'Alt+ArrowRight': return run(() => stepView(1, viewerApi.centerOn));
@@ -221,6 +223,8 @@ export function App() {
       <CompareDialog />
       <PrintDialog />
       <StyleManagerDialog />
+      <SpellDialog />
+      <SpellContentDialog />
       <SheetsDialog />
       <PrefsDialogs />
       <SignatureDialog />

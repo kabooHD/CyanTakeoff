@@ -258,6 +258,17 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - With the Area or Volume tool, clicking a cutout converts it into its own
   measurement (Shift: all cutouts of that markup); the cutout stays.
 
+## Spell check (Edit > Check Spelling, F7)
+While editing text in a markup or form field, unknown words get a squiggly
+underline; right-click offers suggestions and Add to Dictionary. F7 checks
+markups and form fields one word at a time in context: Ignore Once, Ignore
+All (this run), Add to Dictionary, Change, Change All. Markup Spelling
+Mistakes checks the PDF's own text over a page range and puts a Squiggly
+markup (chosen colour) under each mistake, optionally with the suggestions
+in its comment. Ours: the dictionary is English (Hunspell); words added
+are kept in the browser; codes like A-101 and web/email addresses are
+skipped.
+
 ## Line styles and hatch patterns
 A line style is one or more lines, each offset from the middle (-10..10),
 made of components: dash and space (adjustable width), dot, and text. "Scale

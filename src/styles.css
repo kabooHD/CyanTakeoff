@@ -422,3 +422,8 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
 .component { display: flex; gap: 4px; align-items: center; }
 .component input { width: 64px; }
 button.active { background: #d6e4fa; }
+
+/* Spell check */
+.spell-dialog { width: min(520px, calc(100vw - 32px)); }
+.spell-context { border: 1px solid var(--border); padding: 6px 8px; background: #fff; white-space: pre-wrap; max-height: 90px; overflow: auto; }
+.spell-context mark { background: #ffd6d6; color: #c00; }

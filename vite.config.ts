@@ -16,6 +16,9 @@ const OCR_FILES: Record<string, string> = {
   ...Object.fromEntries(['eng', 'fra', 'deu', 'spa', 'ita', 'por', 'nld'].map((l) => [
     `ocr/lang/${l}.traineddata.gz`, `node_modules/@tesseract.js-data/${l}/4.0.0_best_int/${l}.traineddata.gz`,
   ])),
+  // Spell check dictionary (Hunspell English, MIT/BSD), loaded on first use.
+  'dict/en.aff': 'node_modules/dictionary-en/index.aff',
+  'dict/en.dic': 'node_modules/dictionary-en/index.dic',
 };
 
 function ocrAssets(): Plugin {

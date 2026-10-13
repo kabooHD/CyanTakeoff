@@ -1390,6 +1390,39 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert(aps.some((t) => (t.match(/ Tj ET/g) ?? []).length >= 3 && t.includes(' Tm ')), 'saved: the line style text is in the appearance');
 }
 
+// Spell check (F7) through markup comments; Markup Spelling Mistakes on the PDF text.
+{
+  // Give a markup a misspelt comment.
+  await page.locator('.ml-table tbody tr').first().click();
+  await page.waitForTimeout(300);
+  if (!(await page.locator('.props textarea').count())) await page.keyboard.press('Alt+P');
+  await page.locator('.props textarea').first().fill('Verify the hardwre here');
+  await page.locator('.viewer').first().click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('F7');
+  const dlg = page.locator('[role=dialog][aria-label="Check Spelling"]');
+  await dlg.waitFor();
+  await dlg.locator('mark').waitFor({ timeout: 20000 });
+  assert(await dlg.locator('mark').innerText() === 'hardwre', 'F7 finds the misspelt word in a comment');
+  assert(await dlg.locator('[aria-label="Change to"]').inputValue() === 'hardware', 'the first suggestion is the right word');
+  await page.screenshot({ path: `${OUT}/spell-check.png` });
+  await dlg.getByRole('button', { name: 'Change', exact: true }).click();
+  // Other words in markups may be flagged too (e.g. names): ignore them all.
+  for (let i = 0; i < 30 && !(await dlg.getByText('Spell check complete.').count()); i++) {
+    await dlg.getByRole('button', { name: 'Ignore All' }).click().catch(() => {});
+    await page.waitForTimeout(100);
+  }
+  await dlg.getByRole('button', { name: 'Close' }).click();
+  const comments = await page.evaluate(() => [...document.querySelectorAll('.ml-table tbody td')].map((td) => td.textContent).join('|'));
+  assert(comments.includes('Verify the hardware here'), 'Change corrected the comment');
+  await page.locator('.menubar-item > button', { hasText: /^Edit$/ }).click();
+  await page.getByRole('menuitem', { name: 'Markup Spelling Mistakes…' }).click();
+  const md = page.locator('[role=dialog][aria-label="Markup Spelling Mistakes"]');
+  await md.locator('[aria-label="Pages"]').selectOption('current');
+  await md.getByRole('button', { name: 'OK' }).click();
+  await page.getByText(/Markup Spelling Mistakes: /).waitFor({ timeout: 20000 });
+  assert(true, `Markup Spelling Mistakes ran (${await page.getByText(/Markup Spelling Mistakes: /).innerText()})`);
+}
+
 // Print (Ctrl+P): sheets are prepared in the page, then the browser's print dialog opens.
 {
   await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });

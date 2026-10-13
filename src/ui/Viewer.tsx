@@ -1464,7 +1464,7 @@ function TextEditor({ m, zoom, onDone }: { m: Markup; zoom: number; onDone: (t: 
   const x = Math.min(box[0].x, box[1].x), y = Math.min(box[0].y, box[1].y);
   const w = Math.abs(box[1].x - box[0].x), h = Math.abs(box[1].y - box[0].y);
   return (
-    <textarea className="text-editor" autoFocus value={text}
+    <textarea className="text-editor" spellCheck lang="en" autoFocus value={text}
       style={{ left: x * zoom, top: y * zoom, width: w * zoom, height: h * zoom, fontSize: m.style.fontSize * zoom, color: m.style.color }}
       onChange={(e) => setText(e.target.value)}
       onBlur={() => onDone(text)}

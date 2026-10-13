@@ -206,9 +206,9 @@ function Properties() {
       <div className="prop-section">General</div>
       <Row label="Subject"><input value={m.subject} onChange={(e) => upd(() => ({ subject: e.target.value }))} /></Row>
       <Row label="Label"><input value={m.label} onChange={(e) => upd(() => ({ label: e.target.value }))} /></Row>
-      <Row label="Comments"><textarea rows={3} value={m.comment} onChange={(e) => upd(() => ({ comment: e.target.value }))} /></Row>
+      <Row label="Comments"><textarea rows={3} spellCheck lang="en" value={m.comment} onChange={(e) => upd(() => ({ comment: e.target.value }))} /></Row>
       {(m.type === 'textbox' || m.type === 'callout') && sel.length === 1 && (
-        <Row label="Text"><textarea rows={3} value={m.text ?? ''} onChange={(e) => upd(() => ({ text: e.target.value }))} /></Row>
+        <Row label="Text"><textarea rows={3} spellCheck lang="en" value={m.text ?? ''} onChange={(e) => upd(() => ({ text: e.target.value }))} /></Row>
       )}
       <Row label="Status">
         <select value={m.status} onChange={(e) => upd(() => ({ status: e.target.value as Markup['status'] }))}>
