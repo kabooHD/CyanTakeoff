@@ -24,6 +24,7 @@ import { CURVABLE, arcSegment, bezierAt, closedType, flatPoints, hasCurves, inse
 import { MarkupShape, handlePoints } from './renderMarkup';
 import { cutoutAt, hitTest, markupBounds, outline } from './hit';
 import { setCursor } from './cursor';
+import { ViewOverlays, recordView } from './Rulers';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { snapGeometry, snapToContent, type SnapGeometry } from '../pdf/geometry';
 import { layoutPages, rotateCss, rotateIn, rotateOut, rotatedSize, slotAt, type Slot, type ViewRotation } from '../model/layout';
@@ -112,6 +113,35 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   /** Scale a measurement starting at `p` would use (viewport, else page). */
   const scaleFor = (p: Pt | undefined) => scaleAt(doc.calibrations[pageIdx], viewports, p);
   const selected = new Set(doc.selection);
+
+  // Selected markups' extent on the rulers (scroll-area pixels).
+  const selectionBox = (() => {
+    const sel = markups.filter((m) => selected.has(m.id));
+    if (!s.toggles.rulers || !sel.length) return null;
+    const qs = sel.flatMap((m) => {
+      const b = markupBounds(m);
+      return [outPt(b.minX * zoom, b.minY * zoom), outPt(b.maxX * zoom, b.maxY * zoom)];
+    });
+    return { x0: Math.min(...qs.map((q) => q.x)), x1: Math.max(...qs.map((q) => q.x)), y0: Math.min(...qs.map((q) => q.y)), y1: Math.max(...qs.map((q) => q.y)) };
+  })();
+
+  // Previous / Next View: record where the view settles.
+  useEffect(() => {
+    if (!isActivePane) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    let t = 0;
+    const rec = () => {
+      clearTimeout(t);
+      t = window.setTimeout(() => {
+        const c = rotateIn(el.scrollLeft + el.clientWidth / 2 - left, el.scrollTop + el.clientHeight / 2 - top, pw, ph, rot);
+        recordView({ docId: doc.id, page: pageIdx, zoom, cx: c.x / zoom, cy: c.y / zoom });
+      }, 400);
+    };
+    rec();
+    el.addEventListener('scroll', rec);
+    return () => { clearTimeout(t); el.removeEventListener('scroll', rec); };
+  }, [isActivePane, doc.id, pageIdx, zoom, left, top, pw, ph, rot]);
 
   // ----- container size -----
   useEffect(() => {
@@ -1136,7 +1166,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     : tool === 'select' ? 'default' : tool === 'zoom' ? 'zoom-in' : 'crosshair';
 
   return (
-    <div className={`viewer-wrap ${split ? (isActivePane ? 'pane-active' : 'pane-inactive') : ''}`}
+    <div className={`viewer-wrap ${split ? (isActivePane ? 'pane-active' : 'pane-inactive') : ''} ${s.toggles.rulers ? 'with-rulers' : ''}`}
       onPointerDownCapture={() => { if (split && !isActivePane) s.focusPane(pane); }}>
     <div className="viewer" ref={scrollRef} onScroll={onScroll} onPointerLeave={() => { pointerIn.current = false; }}>
       <div style={{ width: innerW, height: innerH, position: 'relative' }} onPointerMove={onLayoutMove}>
@@ -1156,6 +1186,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
           <canvas ref={detailRef} style={detail ? {
             left: detail.x * zoom, top: detail.y * zoom, width: detail.w * zoom, height: detail.h * zoom,
           } : { display: 'none' }} />
+          {s.toggles.dimmer && <div className="dimmer" style={{ opacity: 1 - s.dimLevel / 100 }} />}
           {s.tool === 'dynamic-fill' && <FillOverlay width={pw} height={ph} pageW={page.width} pageH={page.height} cursor={fillCursor} />}
           <svg ref={svgRef} className="markup-layer" width={pw} height={ph}
             viewBox={`0 0 ${page.width} ${page.height}`} style={{ cursor }}
@@ -1256,6 +1287,10 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       </div>
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
     </div>
+      {(s.toggles.rulers || s.toggles.crosshair) && (
+        <ViewOverlays scrollRef={scrollRef} zoom={zoom} rulers={s.toggles.rulers} crosshair={s.toggles.crosshair}
+          page={{ x0: left, x1: left + slot.w, y0: top, y1: top + slot.h }} selection={selectionBox} />
+      )}
       {s.tool === 'dynamic-fill' && <DynamicFillBar />}
       {align && isActivePane && (
         <div className="fill-bar" role="status" aria-label="Alignment points">
@@ -1313,10 +1348,12 @@ function PageTile({ doc, slot, zoom, rot, active, onActivate }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc.loaded.pdf, slot.index, Math.round(sc * 20), visibilityKey(doc, zoom)]);
   const markups = active ? [] : doc.markups.filter((m) => m.page === slot.index && markupShown(doc, m, zoom));
+  const dim = useApp((s) => (s.toggles.dimmer ? 1 - s.dimLevel / 100 : 0));
   return (
     <div className="page-tile" data-page={slot.index + 1} onPointerDown={onActivate}
       style={{ left: slot.x, top: slot.y, width: pw, height: ph, transform: rotateCss(pw, ph, rot), transformOrigin: '0 0' }}>
       <canvas ref={ref} style={{ width: pw, height: ph }} />
+      {dim > 0 && <div className="dimmer" style={{ opacity: dim }} />}
       {markups.length > 0 && (
         <svg width={pw} height={ph} viewBox={`0 0 ${pg.width} ${pg.height}`} pointerEvents="none">
           {markups.map((m) => <MarkupShape key={m.id} m={m} />)}

@@ -8,6 +8,7 @@ import { MEASURE_TYPES, scaleAt } from './measure';
 import { translated } from './markup';
 import { expandGroups } from './arrange';
 import { columnDefaults } from './columns';
+import type { RulerUnit } from './rulers';
 import type { LayerSet } from '../pdf/layers';
 import { hasSignatures, incrementalUpdate, loadForUpdate } from '../pdf/incremental';
 import type { ViewMode, ViewRotation } from './layout';
@@ -183,6 +184,11 @@ interface AppState {
   removeSavedScale(label: string): void;
   setToolDefault(type: MarkupType, patch: Partial<MarkupStyle>): void;
   toggle(key: keyof Toggles): void;
+  /** Dimmer strength: how strongly page content shows, in percent (Revu's Dimmer menu). */
+  dimLevel: number;
+  /** Units of the rulers (right-click a ruler). */
+  rulerUnit: RulerUnit;
+  setView(p: Partial<Pick<AppState, 'dimLevel' | 'rulerUnit'>>): void;
   setPanels(p: Partial<Pick<AppState, 'left' | 'right' | 'markupsList'>>): void;
   setAuthor(a: string): void;
   /** Add a markup as a tool (to the first set, or `setId`). */
@@ -233,7 +239,7 @@ function savePrefs(s: AppState) {
     localStorage.setItem(LS, JSON.stringify({
       toolDefaults: s.toolDefaults, toggles: s.toggles, author: s.author,
       toolSets: s.toolSets, customKeys: s.customKeys, recentTools: s.recentTools, savedScales: s.savedScales,
-      left: s.left, right: s.right, markupsList: s.markupsList,
+      left: s.left, right: s.right, markupsList: s.markupsList, dimLevel: s.dimLevel, rulerUnit: s.rulerUnit,
     }));
   } catch { /* storage unavailable */ }
 }
@@ -341,7 +347,10 @@ export const useApp = create<AppState>((set, get) => {
     toolLocked: false,
     preset: null,
     toolDefaults: { ...DEFAULT_STYLES, ...(prefs.toolDefaults ?? {}) },
-    toggles: { snap: false, grid: false, content: true, markup: true, reuse: false, sync: false, ...(prefs.toggles ?? {}) },
+    toggles: { snap: false, grid: false, content: true, markup: true, reuse: false, sync: false, rulers: false, dimmer: false, crosshair: false, ...(prefs.toggles ?? {}) },
+    dimLevel: prefs.dimLevel ?? 50,
+    rulerUnit: prefs.rulerUnit ?? 'in',
+    setView(p) { set(p); savePrefs(get()); },
     left: prefs.left === undefined ? 'thumbnails' : prefs.left,
     right: prefs.right === undefined ? 'properties' : prefs.right,
     markupsList: prefs.markupsList ?? true,

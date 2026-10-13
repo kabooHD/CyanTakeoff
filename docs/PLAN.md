@@ -168,7 +168,8 @@ filling, image signatures, redaction and OCR.
   Markups Only, paper size (Auto or fixed), scaling, pages per sheet,
   auto-rotate, copies/collate/reverse, Dim Page Content, preview; layers
   print when shown and their Print usage is on
-- [ ] Rulers (Ctrl+R), Dimmer (Ctrl+F5), Previous/Next View (Alt+Left/Right)
+- [x] Rulers (Ctrl+R, units by right-click), Full-Screen Crosshair, Dimmer
+  (Ctrl+F5, 25/50/75%), Previous/Next View (Alt+Left/Right)
 - [ ] Bookmarks editing (create, rename, nest, reorder, delete; /Outlines)
 - [ ] Line styles and hatch patterns
 - [ ] Spell check in text markups and comments

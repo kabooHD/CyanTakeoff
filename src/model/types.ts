@@ -212,4 +212,10 @@ export interface Toggles {
   markup: boolean;
   reuse: boolean;
   sync: boolean;
+  /** View > Rulers (Ctrl+R). */
+  rulers: boolean;
+  /** View > Dimmer (Ctrl+F5): page content faded so markups stand out. */
+  dimmer: boolean;
+  /** View > Full-Screen Crosshair. */
+  crosshair: boolean;
 }

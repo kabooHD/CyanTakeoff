@@ -10,6 +10,7 @@ import { viewerApi } from './Viewer';
 import { combineFiles, openPagesDialog } from './PagesDialog';
 import { openCompare } from './Compare';
 import { openPrint } from './Print';
+import { stepView, viewHistory } from './Rulers';
 import { openSignDialog } from './DigitalSignature';
 import { useFormsDialog } from './FormsEditor';
 import { useSheetsDialog } from './Sheets';
@@ -86,6 +87,13 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Rotate View Clockwise', shortcut: 'Ctrl+Shift+Plus', disabled: noDoc, action: () => s.rotateView(90) },
       { label: 'Rotate View Counterclockwise', shortcut: 'Ctrl+Shift+Minus', disabled: noDoc, action: () => s.rotateView(-90) },
       { sep: true },
+      { label: 'Previous View', shortcut: 'Alt+Left', disabled: !viewHistory.canBack, action: () => stepView(-1, viewerApi.centerOn) },
+      { label: 'Next View', shortcut: 'Alt+Right', disabled: !viewHistory.canForward, action: () => stepView(1, viewerApi.centerOn) },
+      { sep: true },
+      { label: 'Rulers', shortcut: 'Ctrl+R', checked: s.toggles.rulers, action: () => s.toggle('rulers') },
+      { label: 'Full-Screen Crosshair', checked: s.toggles.crosshair, action: () => s.toggle('crosshair') },
+      { label: 'Dimmer', shortcut: 'Ctrl+F5', checked: s.toggles.dimmer, action: () => s.toggle('dimmer') },
+      ...[25, 50, 75].map((n) => ({ label: `    Dimmer ${n}%`, checked: s.dimLevel === n, action: () => { s.setView({ dimLevel: n }); if (!s.toggles.dimmer) s.toggle('dimmer'); } })),
       { label: 'Show Grid', shortcut: 'Shift+F9', checked: s.toggles.grid, action: () => s.toggle('grid') },
       { label: 'Snap to Grid', shortcut: 'Ctrl+Shift+F9', checked: s.toggles.snap, action: () => s.toggle('snap') },
     ],

@@ -1246,6 +1246,48 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Control+z');
 }
 
+// Rulers (Ctrl+R), Dimmer (Ctrl+F5), Previous / Next View (Alt+Left / Alt+Right).
+{
+  await page.locator('.doc-tab').first().click();
+  await page.mouse.click(5, 500);
+  const nav = page.locator('.sb-nav > span').first();
+  await page.keyboard.press('Control+4');
+  await page.keyboard.press('Home');
+  await page.waitForTimeout(600);
+  await page.keyboard.press('Control+ArrowRight');
+  await page.waitForTimeout(600);
+  await page.keyboard.press('Control+8');
+  await page.waitForTimeout(600);
+  await page.keyboard.press('Alt+ArrowLeft');
+  await page.waitForTimeout(500);
+  assert((await nav.innerText()).startsWith('(2 of') && (await page.locator('.sb-zoom').first().innerText()) !== '100%', 'Previous View: back to the fitted view of page 2');
+  await page.keyboard.press('Alt+ArrowLeft');
+  await page.waitForTimeout(500);
+  assert((await nav.innerText()).startsWith('(1 of'), 'Previous View: back to page 1');
+  await page.keyboard.press('Alt+ArrowRight');
+  await page.waitForTimeout(500);
+  assert((await nav.innerText()).startsWith('(2 of'), 'Next View: forward to page 2');
+  await page.keyboard.press('Control+r');
+  await page.keyboard.press('Control+F5');
+  const vb = await page.locator('.viewer').first().boundingBox();
+  await page.mouse.move(vb.x + vb.width / 2, vb.y + vb.height / 2);
+  await page.waitForTimeout(300);
+  assert(await page.locator('.ruler-top').count() === 1 && await page.locator('.ruler-left').count() === 1, 'rulers shown (Ctrl+R)');
+  assert(await page.locator('.page .dimmer').count() === 1, 'page content dimmed (Ctrl+F5)');
+  // The ruler shows page bounds: its pixels under the page are white, the rest grey.
+  const px = await page.evaluate(() => {
+    const c = document.querySelector('.ruler-top');
+    const d = c.getContext('2d').getImageData(0, 2, c.width, 1).data;
+    let white = 0; for (let i = 0; i < d.length; i += 4) if (d[i] === 255 && d[i + 1] === 255) white++;
+    return white / (d.length / 4);
+  });
+  assert(px > 0.2 && px < 0.99, `the ruler marks the page extent (${px.toFixed(2)} white)`);
+  await page.screenshot({ path: `${OUT}/rulers-dimmer.png` });
+  await page.keyboard.press('Control+r');
+  await page.keyboard.press('Control+F5');
+  assert(await page.locator('.ruler-top').count() === 0 && await page.locator('.dimmer').count() === 0, 'rulers and dimmer toggle off');
+}
+
 // Print (Ctrl+P): sheets are prepared in the page, then the browser's print dialog opens.
 {
   await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });

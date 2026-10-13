@@ -382,3 +382,14 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
   .print-sheet:last-child { break-after: auto; }
   .print-sheet img { position: absolute; }
 }
+
+/* Rulers (Ctrl+R), Full-Screen Crosshair, Dimmer (Ctrl+F5) */
+.viewer-wrap.with-rulers { padding: 20px 0 0 20px; }
+.ruler { position: absolute; z-index: 3; --ruler-bg: #e4e4e4; }
+.ruler-top { left: 20px; top: 0; }
+.ruler-left { left: 0; top: 20px; }
+.ruler-corner { position: absolute; left: 0; top: 0; width: 20px; height: 20px; z-index: 3; background: #d6d6d6; font-size: 9px; display: grid; place-items: center; color: #333; cursor: context-menu; }
+.crosshair { position: absolute; pointer-events: none; z-index: 3; background: #00b050; }
+.crosshair-h { left: 0; right: 0; height: 1px; }
+.crosshair-v { top: 0; bottom: 0; width: 1px; }
+.dimmer { position: absolute; inset: 0; background: #fff; pointer-events: none; }

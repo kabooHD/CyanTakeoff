@@ -18,6 +18,7 @@ export const APP_COMMANDS: Command[] = [
   c('Markup', 'Align Top', 'Ctrl+Alt+T'), c('Markup', 'Align Middle', 'Ctrl+Alt+M'), c('Markup', 'Align Bottom', 'Ctrl+Alt+B'),
   c('Markup', 'Flip Horizontal', 'Ctrl+Alt+H'), c('Markup', 'Flip Vertical', 'Ctrl+Alt+V'),
   c('View', 'Fit Page', 'Ctrl+9'), c('View', 'Fit Width', 'Ctrl+0'), c('View', 'Actual Size', 'Ctrl+8'), c('View', 'Zoom In', '+'), c('View', 'Zoom Out', '-'),
+  c('View', 'Rulers', 'Ctrl+R'), c('View', 'Dimmer', 'Ctrl+F5'), c('View', 'Previous View', 'Alt+ArrowLeft'), c('View', 'Next View', 'Alt+ArrowRight'),
   c('View', 'Show Grid', 'Shift+F9'), c('View', 'Snap to Grid', 'Ctrl+Shift+F9'), c('View', 'Snap to Content', 'Ctrl+Shift+F8'), c('View', 'Snap to Markup', 'Ctrl+Shift+F7'),
   c('View', 'Single Page', 'Ctrl+4'), c('View', 'Continuous', 'Ctrl+5'), c('View', 'Side by Side', 'Ctrl+6'), c('View', 'Continuous Side by Side', 'Ctrl+7'),
   c('View', 'Rotate View Clockwise', 'Ctrl+Shift++'), c('View', 'Rotate View Counterclockwise', 'Ctrl+Shift+-'),

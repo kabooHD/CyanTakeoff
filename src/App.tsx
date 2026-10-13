@@ -22,6 +22,7 @@ import { PagesDialog, openPagesDialog } from './ui/PagesDialog';
 import { rotatePages } from './pdf/pages';
 import { CompareDialog } from './ui/Compare';
 import { PrintDialog, openPrint } from './ui/Print';
+import { stepView } from './ui/Rulers';
 import { SheetsDialog } from './ui/Sheets';
 import { PrefsDialogs } from './ui/Prefs';
 import { SignatureDialog } from './ui/Signature';
@@ -110,6 +111,10 @@ export function App() {
         case 'Ctrl+Shift+-': case 'Ctrl+Shift+_': return run(() => s.rotateView(-90));
         case '-': case 'Ctrl+-': return run(() => viewerApi.zoomBy(0.8));
         case 'Shift+F9': return run(() => s.toggle('grid'));
+        case 'Ctrl+R': return run(() => s.toggle('rulers'));
+        case 'Ctrl+F5': return run(() => s.toggle('dimmer'));
+        case 'Alt+ArrowLeft': return run(() => stepView(-1, viewerApi.centerOn));
+        case 'Alt+ArrowRight': return run(() => stepView(1, viewerApi.centerOn));
         case 'Ctrl+Shift+F9': return run(() => s.toggle('snap'));
         case 'Ctrl+Shift+F8': return run(() => s.toggle('content'));
         case 'Ctrl+Shift+F7': return run(() => s.toggle('markup'));

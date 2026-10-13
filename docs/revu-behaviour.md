@@ -258,6 +258,16 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - With the Area or Volume tool, clicking a cutout converts it into its own
   measurement (Shift: all cutouts of that markup); the cutout stays.
 
+## Rulers, crosshair, Dimmer, Previous/Next View (View menu)
+Rulers (Ctrl+R) run along the top and left of the workspace: they show the
+active page's bounds, the extent of the selection, the pointer position,
+scale with zoom, and change units on right-click (inches, centimeters,
+millimeters, points, picas). Full-Screen Crosshair replaces the cursor with
+lines across the view. The Dimmer (Ctrl+F5) fades the page content so
+markups stand out; its percentage is how strongly the content still shows.
+Previous/Next View (Alt+Left/Right) step through the views visited (page
+and zoom; we also restore the position).
+
 ## Print (File > Print, Ctrl+P)
 Revu's Print dialog has a preview (red borders), printer, page range (All,
 Current (n), Selected, Custom "1-3, 5, 9"), paper size (Auto follows the
