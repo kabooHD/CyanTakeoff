@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { activeDoc, useApp, useActiveDoc } from './model/store';
 import { TOOLS, comboFromEvent } from './tools/tools';
+import { translated } from './model/markup';
 import { DocTabs, MenuBar, StatusBar, Toolbar } from './ui/Chrome';
 import { LeftPanel, RightPanel, SideTabs } from './ui/Panels';
 import { MarkupsList } from './ui/MarkupsList';
@@ -77,7 +78,7 @@ export function App() {
       if (arrows[key] && d?.selection.length) {
         const k = combo.startsWith('Shift+') ? 10 : 1;
         const [dx, dy] = arrows[key];
-        return run(() => s.updateMarkups(d.selection, (m) => ({ points: m.points.map((p) => ({ x: p.x + dx * k, y: p.y + dy * k })) })));
+        return run(() => s.updateMarkups(d.selection, (m) => translated(m, dx * k, dy * k)));
       }
       const tool = TOOLS.find((t) => t.shortcut === combo);
       if (tool && d) run(() => s.setTool(tool.id));

@@ -9,6 +9,8 @@ export type Interaction =
   | 'point' // single click: note
   | 'count' // each click adds a point to the active count
   | 'callout' // click tip, then click box position
+  | 'cutout' // polygon cutout inside an Area/Volume: drag = rectangle, or click points
+  | 'cutout-ellipse' // ellipse cutout: drag
   | 'none';
 
 export interface ToolDef {
@@ -55,6 +57,8 @@ export const TOOLS: ToolDef[] = [
   { id: 'diameter', name: 'Diameter', group: 'measure', shortcut: 'Shift+Alt+D', interaction: 'two-point', subject: 'Diameter Measurement' },
   { id: 'radius', name: 'Radius', group: 'measure', shortcut: 'Shift+Alt+U', interaction: 'two-point', subject: 'Radius Measurement' },
   { id: 'angle', name: 'Angle', group: 'measure', shortcut: 'Shift+Alt+G', interaction: 'poly', subject: 'Angle Measurement', maxPoints: 3 },
+  { id: 'cutout', name: 'Polygon Cutout', group: 'measure', interaction: 'cutout', subject: '' },
+  { id: 'ellipse-cutout', name: 'Ellipse Cutout', group: 'measure', interaction: 'cutout-ellipse', subject: '' },
   { id: 'count', name: 'Count', group: 'measure', shortcut: 'Shift+Alt+C', interaction: 'count', subject: 'Count Measurement' },
 ];
 

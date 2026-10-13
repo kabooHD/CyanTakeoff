@@ -185,6 +185,32 @@ assert(list.includes('432 sf') && list.includes(`60'-0"`) && list.includes('Veri
 assert((await page.locator('.sb-scale').innerText()).includes(`1/4"`), 'page scale round-trips');
 await page.screenshot({ path: `${OUT}/04-reopened.png` });
 
+// Cutouts: 4x4 ft rectangle (16 sf) and a 4 ft circle (12.57 sf) out of the 432 sf office.
+await page.keyboard.press('Control+Shift+F8'); await page.keyboard.press('Control+Shift+F7'); // exact drags
+await page.locator('.tb-btn[title^="Polygon Cutout"]').click();
+{ const a = await toScreen(2, 25), b = await toScreen(6, 29); await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up(); }
+await page.locator('.tb-btn[title^="Ellipse Cutout"]').click();
+{ const a = await toScreen(10, 30), b = await toScreen(14, 34); await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up(); }
+await page.keyboard.press('Escape');
+list = await page.locator('.ml-table tbody').innerText();
+assert(list.includes('403.43 sf'), 'two cutouts reduce 432 sf to 403.43 sf');
+await page.screenshot({ path: `${OUT}/07-cutouts.png` });
+{ const p = await toScreen(4, 27); await page.mouse.click(p.x, p.y, { button: 'right' }); }
+await page.getByRole('menuitem', { name: 'Delete Cutout' }).click();
+list = await page.locator('.ml-table tbody').innerText();
+assert(list.includes('419.43 sf'), 'Delete Cutout restores 16 sf (419.43 sf)');
+await page.keyboard.press('Control+Shift+F8'); await page.keyboard.press('Control+Shift+F7');
+{
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
+  await dl.saveAs(`${OUT}/saved-cutouts.pdf`);
+  await page.waitForTimeout(800);
+  const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('Control+O')]);
+  await fc.setFiles(`${OUT}/saved-cutouts.pdf`);
+  await page.waitForFunction(() => document.querySelectorAll('.doc-tab').length === 3);
+  await page.waitForTimeout(1200);
+  assert((await page.locator('.ml-table tbody').innerText()).includes('419.43 sf'), 'cutouts survive save and reopen');
+}
+
 // Zoom in and check the detail canvas kicks in.
 const c = await toScreen(30, 20);
 await page.mouse.move(c.x, c.y);

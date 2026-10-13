@@ -2,7 +2,7 @@ import {
   PDFArray, PDFDict, PDFDocument, PDFHexString, PDFString, StandardFonts,
   type PDFFont, type PDFRef,
 } from 'pdf-lib';
-import type { Markup, Pt, Scale } from '../model/types';
+import type { Cutout, Markup, Pt, Scale } from '../model/types';
 import { centroid, cloudSegments, measure } from '../model/measure';
 import { refKey, removeAnnots, type CTData, type PageInfo } from './document';
 import { N, hexToRgb, pdfDate, writeMeasure } from './pdfutil';
@@ -93,7 +93,7 @@ function textAt(o: Ops, font: PDFFont, s: string, size: number, x: number, y: nu
   return w;
 }
 
-function buildAppearance(m: Markup, P: Pt[], font: PDFFont) {
+function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[]) {
   const o = new Ops();
   const st = m.style;
   const [r, g, b] = hexToRgb(st.color).map(f);
@@ -132,7 +132,15 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont) {
       break;
     }
     case 'polygon': case 'area': case 'volume':
-      o.poly(P, true); o.add(paint);
+      o.poly(P, true);
+      if (cutouts?.length) {
+        // Holes: extra subpaths painted with the even-odd rule.
+        for (const c of cutouts) {
+          if (c.kind === 'polygon') o.poly(c.points, true);
+          else o.ellipse(c.points[0], c.points[1]);
+        }
+        o.add(paint === 'S' ? 'S' : paint + '*');
+      } else o.add(paint);
       break;
     case 'cloud': {
       const segs = cloudSegments(P, Math.max(14, st.width * 8));
@@ -213,10 +221,11 @@ const INTENT: Partial<Record<Markup['type'], string>> = {
   angle: 'PolyLineAngle', radius: 'PolygonRadius', diameter: 'CircleDimension',
 };
 
-const toPdf = (m: Markup, page: PageInfo) => m.points.map((p) => {
+const toPdfPt = (p: Pt, page: PageInfo) => {
   const [x, y] = page.viewport.convertToPdfPoint(p.x, p.y);
   return { x, y };
-});
+};
+const toPdf = (m: Markup, page: PageInfo) => m.points.map((p) => toPdfPt(p, page));
 
 function ctData(m: Markup, P: Pt[]): CTData {
   return {
@@ -274,7 +283,10 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo):
   if (m.type === 'count') return buildCount(doc, m, page);
   const ctx = doc.context;
   const P = toPdf(m, page);
-  const { ops, bbox } = buildAppearance(m, P, font);
+  const ct = ctData(m, P);
+  const cutouts = m.cutouts?.map((c) => ({ ...c, points: c.points.map((q) => toPdfPt(q, page)) }));
+  const { ops, bbox } = buildAppearance(m, P, font, cutouts);
+  if (cutouts?.length) ct.cutouts = cutouts.map((c) => ({ kind: c.kind, points: c.points.flatMap((q) => [q.x, q.y]) }));
   const st = m.style;
   const gs = ctx.obj({
     CA: st.opacity,
@@ -286,7 +298,6 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo):
     Resources: { Font: { Helv: font.ref }, ExtGState: { GS0: gs } },
   });
   const flat = (pts: Pt[]) => pts.flatMap((p) => [p.x, p.y]);
-  const ct = ctData(m, P);
   const meas = measure(m);
   const now = pdfDate(new Date(m.modified));
   const entries: Record<string, unknown> = {

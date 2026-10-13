@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PDFPageProxy, RenderTask } from 'pdfjs-dist';
 import { useApp, type DocState } from '../model/store';
-import { MEASURE_TYPES, dist, formatLength, formatNumber, measure, ortho, rectCorners, resolveFormat } from '../model/measure';
+import { MEASURE_TYPES, dist, pointInPolygon, formatLength, formatNumber, measure, ortho, rectCorners, resolveFormat } from '../model/measure';
 import { Icon } from './icons';
+import { translated } from '../model/markup';
 import type { Markup, MarkupType, Pt, ToolId } from '../model/types';
 import { toolById } from '../tools/tools';
 import { MarkupShape, handlePoints } from './renderMarkup';
-import { hitTest, markupBounds } from './hit';
+import { cutoutAt, hitTest, markupBounds } from './hit';
 import { setCursor } from './cursor';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { snapGeometry, snapToContent, type SnapGeometry } from '../pdf/geometry';
@@ -21,7 +22,7 @@ export const viewerApi = {
   zoomBy: (_f: number) => {},
 };
 
-type Draft = { tool: ToolId; points: Pt[]; cursor: Pt | null; dragFrom?: { x: number; y: number } };
+type Draft = { tool: ToolId; points: Pt[]; cursor: Pt | null; dragFrom?: { x: number; y: number }; target?: string };
 type Drag =
   | { kind: 'pan'; sx: number; sy: number; left: number; top: number }
   | { kind: 'move'; start: Pt; snapshot: Markup[]; ids: string[]; moved: boolean }
@@ -51,9 +52,11 @@ export function Viewer({ doc }: { doc: DocState }) {
   const spaceDown = useRef(false);
   const countId = useRef<string | null>(null);
   const lastMiddle = useRef(0);
+  const buttonDown = useRef(false);
   const rightDown = useRef<{ x: number; y: number } | null>(null);
   const [, force] = useState(0);
   const [geom, setGeom] = useState<SnapGeometry | null>(null);
+  const [hover, setHover] = useState<string | null>(null);
 
   const pw = page.width * zoom, ph = page.height * zoom;
   const innerW = Math.max(size.w, pw + PAD * 2), innerH = Math.max(size.h, ph + PAD * 2);
@@ -199,6 +202,9 @@ export function Viewer({ doc }: { doc: DocState }) {
       if (draft) {
         if (e.key === 'Escape') { setDraft(null); e.stopImmediatePropagation(); }
         else if (e.key === 'Enter') { finishPoly(); e.stopImmediatePropagation(); }
+        else if (draft.tool === 'cutout' && e.key.toLowerCase() === 'c' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          finishPoly(); e.stopImmediatePropagation(); e.preventDefault();
+        }
         else if (e.key === 'Backspace') {
           setDraft({ ...draft, points: draft.points.slice(0, -1) });
           e.stopImmediatePropagation(); e.preventDefault();
@@ -278,8 +284,24 @@ export function Viewer({ doc }: { doc: DocState }) {
     return m;
   };
 
+  /** Area or Volume measurement under `p` that a cutout would subtract from. */
+  const cutoutTarget = (p: Pt) => [...markups].reverse().find((m) => (m.type === 'area' || m.type === 'volume') && pointInPolygon(p, m.points));
+
+  const finishCutout = (pts: Pt[], kind: 'polygon' | 'ellipse') => {
+    const id = draft?.target;
+    setDraft(null);
+    if (!id) return;
+    // The cutout tool stays active for further cutouts until Esc (Revu).
+    s.updateMarkups([id], (m) => ({ cutouts: [...(m.cutouts ?? []), { kind, points: pts }] }));
+  };
+
   const finishPoly = () => {
     if (!draft) return;
+    if (draft.tool === 'cutout') {
+      if (draft.points.length >= 3) finishCutout(draft.points, 'polygon');
+      else setDraft(null);
+      return;
+    }
     const t = toolById(draft.tool);
     const min = t.closed ? 3 : 2;
     if (draft.points.length >= min) finish(draft.tool as MarkupType, draft.points);
@@ -289,6 +311,7 @@ export function Viewer({ doc }: { doc: DocState }) {
   // ----- pointer handlers -----
   const onPointerDown = (e: React.PointerEvent) => {
     setMenu(null);
+    buttonDown.current = e.button === 0;
     // No text selection or native drag on the drawing surface: a native drag
     // would swallow the pointer-up and leave a markup half-drawn.
     window.getSelection()?.removeAllRanges();
@@ -376,6 +399,20 @@ export function Viewer({ doc }: { doc: DocState }) {
         else setDraft({ tool: s.tool, points: pts, cursor: p });
         break;
       }
+      case 'cutout': case 'cutout-ellipse': {
+        if (!draft) {
+          const t = cutoutTarget(p);
+          if (!t) { s.setStatus('Click inside an Area or Volume measurement to cut out from it.'); return; }
+          setDraft({ tool: s.tool, points: [p], cursor: p, dragFrom: { x: e.clientX, y: e.clientY }, target: t.id });
+        } else if (def.interaction === 'cutout-ellipse') {
+          completeTwoPoint(p);
+        } else if (draft.points.length >= 3 && dist(p, draft.points[0]) * zoom < 8) {
+          finishCutout(draft.points, 'polygon'); // clicked the first point again
+        } else {
+          setDraft({ ...draft, points: [...draft.points, p] });
+        }
+        break;
+      }
       case 'freehand':
         setDraft({ tool: s.tool, points: [raw], cursor: raw });
         (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -403,6 +440,8 @@ export function Viewer({ doc }: { doc: DocState }) {
     if (!draft) return;
     const a = draft.points[0];
     if (dist(a, p) * zoom < 2) return;
+    if (draft.tool === 'ellipse-cutout') { finishCutout([a, p], 'ellipse'); return; }
+    if (draft.tool === 'cutout') { finishCutout(rectCorners(a, p), 'polygon'); return; }
     if (draft.tool === 'calibrate') {
       setDraft(null);
       s.openScaleDialog({ page: doc.page, pagePts: dist(a, p) });
@@ -422,7 +461,7 @@ export function Viewer({ doc }: { doc: DocState }) {
       } else if (drag.kind === 'move') {
         const dx = raw.x - drag.start.x, dy = raw.y - drag.start.y;
         const orig = new Map(drag.snapshot.map((m) => [m.id, m]));
-        s.updateMarkups(drag.ids, (m) => ({ points: orig.get(m.id)!.points.map((q) => ({ x: q.x + dx, y: q.y + dy })) }), { history: false });
+        s.updateMarkups(drag.ids, (m) => translated(orig.get(m.id)!, dx, dy), { history: false });
         if (!drag.moved) setDrag({ ...drag, moved: true });
       } else if (drag.kind === 'vertex') {
         const p = snap(raw, drag.id);
@@ -449,10 +488,12 @@ export function Viewer({ doc }: { doc: DocState }) {
     } else if (s.tool !== 'select' && s.tool !== 'pan') {
       const p = snap(raw);
       setSnapPt(p !== raw ? p : null);
+      if (def.interaction === 'cutout' || def.interaction === 'cutout-ellipse') setHover(cutoutTarget(raw)?.id ?? null);
     }
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
+    buttonDown.current = false;
     if (e.button === 2) {
       const start = rightDown.current;
       rightDown.current = null;
@@ -479,7 +520,7 @@ export function Viewer({ doc }: { doc: DocState }) {
       return;
     }
     // Drag-to-draw for two-point and box tools; click-click otherwise.
-    if ((def.interaction === 'two-point' || def.interaction === 'box') && draft.dragFrom && draft.points.length === 1) {
+    if (['two-point', 'box', 'cutout', 'cutout-ellipse'].includes(def.interaction) && draft.dragFrom && draft.points.length === 1) {
       const moved = Math.hypot(e.clientX - draft.dragFrom.x, e.clientY - draft.dragFrom.y) > 4;
       if (moved) completeTwoPoint(constrain(toPage(e), e, draft.points[0]));
     }
@@ -496,6 +537,11 @@ export function Viewer({ doc }: { doc: DocState }) {
   };
 
   const onDoubleClick = (e: React.MouseEvent) => {
+    if (draft && draft.tool === 'cutout') {
+      const pts = draft.points.slice(0, -1); // the double-click's second click added a point
+      if (pts.length >= 3) finishCutout(pts, 'polygon');
+      return;
+    }
     if (draft && def.interaction === 'poly') {
       // the second click of the double-click added a duplicate point
       const pts = draft.points.slice(0, -1);
@@ -524,7 +570,11 @@ export function Viewer({ doc }: { doc: DocState }) {
     const raw = toPage(e);
     const hit = [...markups].reverse().find((m) => hitTest(m, raw, 5 / zoom));
     const items: MenuItem[] = [];
-    if (hit) {
+    const holeOwner = !hit && [...markups].reverse().find((m) => m.cutouts?.length && pointInPolygon(raw, m.points) && cutoutAt(m, raw) >= 0);
+    if (holeOwner) {
+      const i = cutoutAt(holeOwner, raw);
+      items.push({ label: 'Delete Cutout', action: () => s.updateMarkups([holeOwner.id], (m) => ({ cutouts: m.cutouts!.filter((_, k) => k !== i) })) });
+    } else if (hit) {
       if (!selected.has(hit.id)) s.select([hit.id]);
       const ids = selected.has(hit.id) ? doc.selection : [hit.id];
       items.push(
@@ -552,7 +602,16 @@ export function Viewer({ doc }: { doc: DocState }) {
 
   // ----- draft preview -----
   let preview: Markup | null = null;
-  if (draft && draft.cursor) {
+  if (draft && draft.cursor && (draft.tool === 'cutout' || draft.tool === 'ellipse-cutout')) {
+    const target = markups.find((m) => m.id === draft.target);
+    const pts = [...draft.points, draft.cursor];
+    preview = {
+      id: 'draft', type: draft.tool === 'cutout' ? 'polyline' : 'ellipse', page: doc.page,
+      points: draft.tool === 'cutout' && pts.length === 2 && buttonDown.current ? [...rectCorners(pts[0], pts[1]), pts[0]] : pts,
+      style: { ...(target?.style ?? s.toolDefaults.area), fill: null, lineStyle: 'dashed' },
+      subject: '', label: '', comment: '', author: '', created: '', modified: '', status: 'None',
+    };
+  } else if (draft && draft.cursor) {
     const pts = def.interaction === 'freehand' ? draft.points : [...draft.points, draft.cursor];
     const type = (draft.tool === 'calibrate' ? 'length' : draft.tool) as MarkupType;
     let P = pts;
@@ -596,6 +655,11 @@ export function Viewer({ doc }: { doc: DocState }) {
             )}
             {markups.map((m) => <MarkupShape key={m.id} m={m} />)}
             {preview && <g pointerEvents="none"><MarkupShape m={preview} ghost /></g>}
+            {hover && !draft && (s.tool === 'cutout' || s.tool === 'ellipse-cutout') && (() => {
+              const m = markups.find((x) => x.id === hover);
+              return m ? <polygon points={m.points.map((q) => `${q.x},${q.y}`).join(' ')} fill="#1a73e8" fillOpacity={0.12}
+                stroke="#1a73e8" strokeWidth={2 / zoom} pointerEvents="none" /> : null;
+            })()}
             {markups.filter((m) => selected.has(m.id)).map((m) => {
               const b = markupBounds(m);
               const pad = 3 / zoom + m.style.width / 2;

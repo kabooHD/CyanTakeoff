@@ -1,6 +1,6 @@
 import { calloutAttach } from '../pdf/save';
 import { bounds, centroid, cloudSegments, measure } from '../model/measure';
-import type { Markup, Pt } from '../model/types';
+import type { Cutout, Markup, Pt } from '../model/types';
 
 const pts = (p: Pt[]) => p.map((q) => `${q.x},${q.y}`).join(' ');
 
@@ -16,6 +16,17 @@ function arrowHead(from: Pt, to: Pt, size: number) {
   const a = { x: to.x - size * Math.cos(ang - s), y: to.y - size * Math.sin(ang - s) };
   const b = { x: to.x - size * Math.cos(ang + s), y: to.y - size * Math.sin(ang + s) };
   return `${a.x},${a.y} ${to.x},${to.y} ${b.x},${b.y}`;
+}
+
+const polyPath = (P: Pt[]) => P.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join('') + 'Z';
+
+/** SVG subpath for a cutout (polygon or ellipse). */
+export function cutoutPath(c: Cutout): string {
+  if (c.kind === 'polygon') return polyPath(c.points);
+  const [a, b] = c.points;
+  const rx = Math.abs(b.x - a.x) / 2, ry = Math.abs(b.y - a.y) / 2;
+  const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+  return `M${cx - rx},${cy}A${rx},${ry} 0 1 0 ${cx + rx},${cy}A${rx},${ry} 0 1 0 ${cx - rx},${cy}Z`;
 }
 
 /** Points shown as edit handles for a markup. */
@@ -71,7 +82,9 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
       shape = <polyline {...c} fill="none" points={pts(P)} />;
       break;
     case 'polygon': case 'area': case 'volume':
-      shape = <polygon {...c} points={pts(P)} />;
+      shape = m.cutouts?.length
+        ? <path {...c} fillRule="evenodd" d={polyPath(P) + m.cutouts.map(cutoutPath).join('')} />
+        : <polygon {...c} points={pts(P)} />;
       break;
     case 'cloud':
       shape = <path {...c} d={cloudPath(P, st.width)} />;

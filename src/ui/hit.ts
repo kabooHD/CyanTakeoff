@@ -25,12 +25,26 @@ export function outline(m: Markup): { pts: Pt[]; closed: boolean } {
   }
 }
 
+/** Index of the cutout of `m` containing `p`, or -1. */
+export function cutoutAt(m: Markup, p: Pt): number {
+  return (m.cutouts ?? []).findIndex((c) => {
+    if (c.kind === 'polygon') return pointInPolygon(p, c.points);
+    const [a, b] = c.points;
+    const rx = Math.abs(b.x - a.x) / 2, ry = Math.abs(b.y - a.y) / 2;
+    if (!rx || !ry) return false;
+    const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+    return ((p.x - cx) / rx) ** 2 + ((p.y - cy) / ry) ** 2 <= 1;
+  });
+}
+
+const inCutout = (m: Markup, p: Pt) => cutoutAt(m, p) >= 0;
+
 export function hitTest(m: Markup, p: Pt, tol: number): boolean {
   const { pts, closed } = outline(m);
   const t = tol + m.style.width / 2;
   if (m.type === 'count') return pts.some((q) => Math.hypot(q.x - p.x, q.y - p.y) <= 5 + t);
   if (m.type === 'callout' && distToSegment(p, m.points[0], m.points[1]) <= t) return true;
-  if (closed && pointInPolygon(p, pts)) return true;
+  if (closed && pointInPolygon(p, pts) && !inCutout(m, p)) return true;
   for (let i = 1; i < pts.length; i++) if (distToSegment(p, pts[i - 1], pts[i]) <= t) return true;
   if (closed && pts.length > 2 && distToSegment(p, pts[pts.length - 1], pts[0]) <= t) return true;
   return pts.length === 1 && Math.hypot(pts[0].x - p.x, pts[0].y - p.y) <= t;

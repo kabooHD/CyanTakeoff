@@ -27,7 +27,10 @@ export type MarkupType =
   | 'radius'
   | 'diameter';
 
-export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom';
+export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cutout' | 'ellipse-cutout';
+
+/** A hole subtracted from an Area or Volume measurement. Ellipse: two opposite corners. */
+export interface Cutout { kind: 'polygon' | 'ellipse'; points: Pt[] }
 
 export type LengthUnit = 'in' | 'ft' | 'ft-in' | 'yd' | 'mm' | 'cm' | 'm';
 
@@ -86,6 +89,8 @@ export interface Markup {
   scale?: Scale;
   /** Depth for volume, in scale units (ft or m). */
   depth?: number;
+  /** Holes cut out of an Area or Volume measurement. */
+  cutouts?: Cutout[];
   /** Original PDF annotation reference when imported from the file. */
   source?: {
     objectNumber: number;

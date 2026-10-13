@@ -4,6 +4,7 @@ import { openPdf } from '../pdf/document';
 import { savePdf } from '../pdf/save';
 import { DEFAULT_STYLES, toolById } from '../tools/tools';
 import { MEASURE_TYPES } from './measure';
+import { translated } from './markup';
 import type {
   Markup, MarkupStyle, MarkupType, Scale, ToolId, ToolPreset, Toggles,
 } from './types';
@@ -270,7 +271,7 @@ export const useApp = create<AppState>((set, get) => {
       const t = now();
       const copies = clip.map((m) => ({
         ...m, id: crypto.randomUUID(), page: d.page, created: t, modified: t, source: undefined,
-        points: m.points.map((p) => ({ x: p.x + off, y: p.y + off })),
+        ...translated(m, off, off),
       }));
       withDoc((doc) => ({
         markups: [...doc.markups, ...copies], selection: copies.map((c) => c.id),

@@ -30,6 +30,7 @@ export interface CTData {
   lineStyle?: MarkupStyle['lineStyle'];
   points?: number[]; // PDF-space points for types whose geometry is not standard (count)
   comment?: string; // measurement comments (/Contents holds the value, as in Revu)
+  cutouts?: { kind: 'polygon' | 'ellipse'; points: number[] }[]; // PDF-space holes in an area/volume
 }
 
 export const CT_KEY = 'CTData';
@@ -262,7 +263,10 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
   if (ct?.type) type = ct.type;
   if (ct?.points) pts = pairs(ct.points);
   if (!type || pts.length === 0) return null;
-  const markup = { ...baseMarkup(doc, dict, ref, page, type, ct), text };
+  const markup = {
+    ...baseMarkup(doc, dict, ref, page, type, ct), text,
+    cutouts: ct?.cutouts?.map((c) => ({ kind: c.kind, points: pairs(c.points) })),
+  };
   if (type === 'volume' && markup.depth === undefined) markup.depth = 0;
   return { markup, pdfPoints: pts, displayed: getText(doc, dict, 'Contents') };
 }

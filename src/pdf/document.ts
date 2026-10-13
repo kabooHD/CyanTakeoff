@@ -3,7 +3,7 @@ import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { PDFDocument } from 'pdf-lib';
 import type { PDFDocumentProxy, PageViewport } from 'pdfjs-dist';
-import type { Markup, Scale } from '../model/types';
+import type { Markup, Pt, Scale } from '../model/types';
 import { importAnnotations, removeAnnots } from './importAnnots';
 
 export { refKey, removeAnnots, type CTData } from './importAnnots';
@@ -58,12 +58,14 @@ export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
 
   const markups: Markup[] = result.raws.map(({ markup, pdfPoints }) => {
     const vp = pages[markup.page].viewport;
+    const toPage = (p: Pt) => {
+      const [x, y] = vp.convertToViewportPoint(p.x, p.y);
+      return { x, y };
+    };
     return {
       ...markup,
-      points: pdfPoints.map((p) => {
-        const [x, y] = vp.convertToViewportPoint(p.x, p.y);
-        return { x, y };
-      }),
+      points: pdfPoints.map(toPage),
+      cutouts: markup.cutouts?.map((c) => ({ ...c, points: c.points.map(toPage) })),
     };
   });
 

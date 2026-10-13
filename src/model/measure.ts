@@ -1,4 +1,4 @@
-import type { LengthUnit, Markup, Pt, Scale, ScaleFormat } from './types';
+import type { Cutout, LengthUnit, Markup, Pt, Scale, ScaleFormat } from './types';
 
 // ---------- geometry ----------
 
@@ -296,7 +296,18 @@ export function resolveFormat(s: Scale): Required<ScaleFormat> {
   };
 }
 
-export function measure(m: Pick<Markup, 'type' | 'points' | 'scale' | 'depth'>): Measurement | null {
+export function cutoutArea(c: Cutout): number {
+  if (c.kind === 'polygon') return polygonArea(c.points);
+  const b = bounds(c.points);
+  return (Math.PI * b.w * b.h) / 4;
+}
+
+/** Area of the shape minus its cutouts, in square points. */
+export function netArea(m: Pick<Markup, 'points' | 'cutouts'>): number {
+  return Math.max(0, polygonArea(m.points) - (m.cutouts ?? []).reduce((t, c) => t + cutoutArea(c), 0));
+}
+
+export function measure(m: Pick<Markup, 'type' | 'points' | 'scale' | 'depth' | 'cutouts'>): Measurement | null {
   if (!MEASURE_TYPES.has(m.type)) return null;
   const s = m.scale ?? DEFAULT_SCALE;
   const f = s.factor;
@@ -312,12 +323,12 @@ export function measure(m: Pick<Markup, 'type' | 'points' | 'scale' | 'depth'>):
       return { length, text: len(length) };
     }
     case 'area': {
-      const area = polygonArea(m.points) * f * f;
+      const area = netArea(m) * f * f;
       const length = pathLength(m.points, true) * f;
       return { area, length, text: `${formatNumber(area, fmt.decimals, fmt.trim)} ${fmt.areaLabel}` };
     }
     case 'volume': {
-      const area = polygonArea(m.points) * f * f;
+      const area = netArea(m) * f * f;
       const volume = area * (m.depth ?? 0);
       return { area, volume, text: `${formatNumber(volume, fmt.decimals, fmt.trim)} ${fmt.volumeLabel}` };
     }

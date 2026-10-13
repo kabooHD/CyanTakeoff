@@ -90,3 +90,20 @@ describe('scale dialog helpers', async () => {
     expect(formatLength(10 + 3.0625 / 12, s.unit, 2, s.format!.den)).toBe(`10'-3 1/16"`);
   });
 });
+
+describe('cutouts', async () => {
+  const { netArea } = await import('../src/model/measure');
+  const sq = (x: number, y: number, w: number) => [{ x, y }, { x: x + w, y }, { x: x + w, y: y + w }, { x, y: y + w }];
+  it('polygon cutout subtracts its area', () => {
+    expect(netArea({ points: sq(0, 0, 100), cutouts: [{ kind: 'polygon', points: sq(10, 10, 20) }] })).toBeCloseTo(10000 - 400);
+  });
+  it('ellipse cutout subtracts pi*a*b', () => {
+    expect(netArea({ points: sq(0, 0, 100), cutouts: [{ kind: 'ellipse', points: [{ x: 10, y: 10 }, { x: 50, y: 30 }] }] }))
+      .toBeCloseTo(10000 - Math.PI * 20 * 10);
+  });
+  it('area measurement uses net area', () => {
+    const scale = { factor: 1 / 72, unit: 'ft' as const, label: '' };
+    const m = measure({ type: 'area', points: sq(0, 0, 720), scale, cutouts: [{ kind: 'polygon', points: sq(0, 0, 360) }] });
+    expect(m!.area).toBeCloseTo(75);
+  });
+});
