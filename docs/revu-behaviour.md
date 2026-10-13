@@ -323,6 +323,10 @@ Ctrl+drag to copy. Right-click: Set to Current View, Properties (title,
 colour, bold, italic; several at once). Bookmarks menu: Create Bookmarks
 (page labels, or AutoMark from a page region), Audit Bookmarks (flags ones
 pointing at pages no longer in the file), Export Bookmarks (CSV or PDF).
+Create Bookmarks: Page Labels, or Page Region (AutoMark): Select drags a
+region whose text names the bookmark (Add for more regions, e.g. number and
+title), over All/Current/Custom pages. Ours keeps regions as fractions of
+the page so they fit sheets of other sizes.
 Ours: Export is CSV; the Action dialog (jump to another file, web link) is
 not editable yet, but such actions are kept as they were.
 

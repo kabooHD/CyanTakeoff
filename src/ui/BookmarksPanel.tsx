@@ -10,6 +10,7 @@ import type { Bookmark } from '../pdf/bookmarks';
 import { findBookmark, flatten, insertBookmarks, moveBookmarks, removeBookmarks, updateBookmark, type Where } from '../model/bookmarkTree';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { viewerApi } from './Viewer';
+import { openAutoMark } from './AutoMark';
 
 const active = () => { const s = useApp.getState(); return s.docs.find((d) => d.id === s.activeId); };
 
@@ -108,11 +109,6 @@ export function BookmarksPanel({ doc }: { doc: DocState }) {
     const broken = flatten(list).filter((x) => x.b.broken).length;
     s.setStatus(broken ? `Audit Bookmarks: ${broken} broken bookmark${broken === 1 ? '' : 's'} (marked ⚠)` : 'Audit Bookmarks: no broken bookmarks');
   };
-  const fromLabels = () => {
-    const made: Bookmark[] = doc.loaded.pages.map((p, i) => ({ id: crypto.randomUUID(), title: p.label, page: i, fit: 'Fit', args: [], destEdited: true, open: false, kids: [] }));
-    if (list.length && !confirm('Replace the existing bookmarks? (Cancel adds the new ones after them.)')) edit([...list, ...made]);
-    else edit(made);
-  };
   const add = (where: Where) => addBookmark(where, sel.at(-1) ?? null);
   const items = (b?: Bookmark): MenuItem[] => {
     const ids = b && !sel.includes(b.id) ? [b.id] : sel;
@@ -145,7 +141,7 @@ export function BookmarksPanel({ doc }: { doc: DocState }) {
           { label: 'Expand All', action: () => setAll(true) },
           { label: 'Collapse All', action: () => setAll(false) },
           { sep: true },
-          { label: 'Create Bookmarks from Page Labels', action: fromLabels },
+          { label: 'Create Bookmarks…', action: openAutoMark },
           { label: 'Audit Bookmarks', disabled: !list.length, action: audit },
           { label: 'Export Bookmarks (CSV)', disabled: !list.length, action: () => exportCsv(doc) },
         ] })}>Bookmarks ▾</button>

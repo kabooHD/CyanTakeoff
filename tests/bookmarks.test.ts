@@ -79,3 +79,13 @@ describe('bookmark tree edits', () => {
     expect(ids(removeBookmarks(tree(), new Set(['A1', 'B'])))).toEqual(['A', '-A2']);
   });
 });
+
+describe('AutoMark', async () => {
+  const { textInRegion } = await import('../src/model/sheets');
+  const box = (str: string, x0: number, y0: number, w = 40, h = 10) => ({ str, x0, y0, x1: x0 + w, y1: y0 + h });
+  it('reads the text in a page region, line by line', () => {
+    const boxes = [box('FLOOR', 800, 700), box('PLAN', 845, 701), box('LEVEL 1', 800, 714), box('A-101', 900, 760), box('elsewhere', 10, 10)];
+    expect(textInRegion(boxes, { x0: 0.75, y0: 0.8, x1: 0.95, y1: 0.87 }, 1000, 850)).toBe('FLOOR PLAN LEVEL 1');
+    expect(textInRegion(boxes, { x0: 0.88, y0: 0.88, x1: 1, y1: 1 }, 1000, 850)).toBe('A-101');
+  });
+});

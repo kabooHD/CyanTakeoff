@@ -28,6 +28,7 @@ import { StyleManagerDialog } from './ui/LineStyles';
 import { SpellContentDialog, SpellDialog, checkSpelling } from './ui/Spell';
 import { SequenceDialog } from './ui/SequenceDialog';
 import { QuantityLinkDialog } from './ui/QuantityLink';
+import { AutoMarkDialog } from './ui/AutoMark';
 import { SheetsDialog } from './ui/Sheets';
 import { PrefsDialogs } from './ui/Prefs';
 import { SignatureDialog } from './ui/Signature';
@@ -228,6 +229,7 @@ export function App() {
       <SpellDialog />
       <SequenceDialog />
       <QuantityLinkDialog />
+      <AutoMarkDialog />
       <SpellContentDialog />
       <SheetsDialog />
       <PrefsDialogs />

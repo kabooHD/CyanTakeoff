@@ -444,3 +444,4 @@ button.active { background: #d6e4fa; }
 .ql-table input.invalid { border-color: #c00; }
 .ql-filter { display: flex; gap: 2px; align-items: center; margin-bottom: 2px; }
 .ql-value { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.am-preview { margin: 0; padding-left: 20px; max-height: 160px; overflow: auto; font-size: 12px; }

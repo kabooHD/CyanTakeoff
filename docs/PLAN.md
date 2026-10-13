@@ -192,7 +192,9 @@ filling, image signatures, redaction and OCR.
   volume) + filters on Markups List columns; live values; Update Workbook
   writes the cells into an existing .xlsx (in place in Chromium, with
   optional automatic updates; else download), or creates Quantities.xlsx
-- [ ] AutoMark (bookmarks from title blocks)
+- [x] AutoMark: Create Bookmarks from page labels or from text in page
+  regions (sheet number, sheet title...), page range, preview, replace or
+  append
 - [ ] Header/Footer, Watermark, Bates numbering
 - [ ] Password protection, Reduce file size, XFDF import/export
 - [ ] Edit Text / Edit Content

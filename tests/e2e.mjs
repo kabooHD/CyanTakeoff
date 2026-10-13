@@ -1529,6 +1529,37 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await dlg.getByRole('button', { name: 'Close', exact: true }).last().click();
 }
 
+// AutoMark: Create Bookmarks from title-block regions (sheet title, sheet number).
+{
+  await page.keyboard.press('Control+4');
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(500);
+  if (!(await page.locator('.bookmarks-panel').count())) await page.keyboard.press('Alt+B');
+  const pick = async (fx0, fy0, fx1, fy1) => {
+    const lb = await page.locator('.page .markup-layer').boundingBox();
+    await page.mouse.move(lb.x + lb.width * fx0, lb.y + lb.height * fy0);
+    await page.mouse.down();
+    await page.mouse.move(lb.x + lb.width * fx1, lb.y + lb.height * fy1, { steps: 4 });
+    await page.mouse.up();
+  };
+  await page.getByRole('button', { name: 'Bookmarks ▾' }).click();
+  await page.getByRole('menuitem', { name: 'Create Bookmarks…' }).click();
+  const dlg = page.locator('[role=dialog][aria-label="Create Bookmarks"]');
+  await dlg.getByRole('button', { name: /Select Region|Add Region/ }).click();
+  await pick(0.84, 0.906, 0.95, 0.93);
+  await dlg.getByRole('button', { name: 'Add Region…' }).click();
+  await pick(0.935, 0.935, 0.999, 0.975);
+  await dlg.locator('[aria-label="Bookmark preview"] li').first().waitFor();
+  await page.waitForTimeout(500);
+  const preview = await dlg.locator('[aria-label="Bookmark preview"] li').allInnerTexts();
+  assert(preview.join('|') === 'FLOOR PLAN - A-101|SITE PLAN - C-101', `AutoMark reads the title block regions (${preview.join('|')})`);
+  await dlg.getByRole('button', { name: 'OK' }).click();
+  await page.waitForTimeout(300);
+  assert((await page.locator('.bookmark-row .bm-title').allInnerTexts()).join('|') === 'FLOOR PLAN - A-101|SITE PLAN - C-101', 'bookmarks created, one per page');
+  await page.screenshot({ path: `${OUT}/automark.png` });
+}
+
 // Print (Ctrl+P): sheets are prepared in the page, then the browser's print dialog opens.
 {
   await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });
