@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PDFPageProxy, RenderTask } from 'pdfjs-dist';
 import { useApp, type DocState } from '../model/store';
-import { MEASURE_TYPES, dist, pointInPolygon, formatLength, formatNumber, measure, ortho, rectCorners, resolveFormat, scaleAt } from '../model/measure';
+import { MEASURE_TYPES, dist, distToSegment, pointInPolygon, formatLength, formatNumber, measure, ortho, rectCorners, resolveFormat, scaleAt } from '../model/measure';
 import { Icon } from './icons';
 import { translated } from '../model/markup';
 import type { Markup, MarkupType, Pt, ToolId, Viewport } from '../model/types';
@@ -27,7 +27,9 @@ type Drag =
   | { kind: 'pan'; sx: number; sy: number; left: number; top: number }
   | { kind: 'move'; start: Pt; snapshot: Markup[]; ids: string[]; moved: boolean }
   | { kind: 'vertex'; id: string; index: number; snapshot: Markup[]; moved: boolean }
-  | { kind: 'band'; start: Pt; cur: Pt; add: boolean; right?: { x: number; y: number } };
+  | { kind: 'band'; start: Pt; cur: Pt; add: boolean; right?: { x: number; y: number } }
+  /** Move (corner -1) or resize (corner 0..3) the highlighted viewport. */
+  | { kind: 'viewport'; id: string; corner: number; start: Pt; orig: [Pt, Pt]; rect: [Pt, Pt] };
 
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
@@ -362,6 +364,17 @@ export function Viewer({ doc }: { doc: DocState }) {
 
     if (tool === 'select') {
       const tol = 5 / zoom;
+      // The viewport highlighted in the Measurements panel: drag its edge to move, a corner to resize.
+      const av = viewports.find((v) => v.id === s.activeViewport);
+      if (av) {
+        const cs = viewportCorners(av.rect);
+        const corner = cs.findIndex((c) => dist(c, raw) <= 6 / zoom);
+        const onEdge = cs.some((c, i) => distToSegment(raw, c, cs[(i + 1) % 4]) <= tol);
+        if (corner >= 0 || onEdge) {
+          setDrag({ kind: 'viewport', id: av.id, corner, start: raw, orig: av.rect, rect: av.rect });
+          return;
+        }
+      }
       // vertex handles of a single selected markup
       if (doc.selection.length === 1) {
         const m = markups.find((x) => x.id === doc.selection[0]);
@@ -490,6 +503,17 @@ export function Viewer({ doc }: { doc: DocState }) {
         if (!drag.moved) setDrag({ ...drag, moved: true });
       } else if (drag.kind === 'band') {
         setDrag({ ...drag, cur: raw });
+      } else if (drag.kind === 'viewport') {
+        const [a, b] = drag.orig;
+        const dx = raw.x - drag.start.x, dy = raw.y - drag.start.y;
+        if (drag.corner < 0) {
+          setDrag({ ...drag, rect: [{ x: a.x + dx, y: a.y + dy }, { x: b.x + dx, y: b.y + dy }] });
+        } else {
+          // Corners 0..3 = top-left, top-right, bottom-right, bottom-left; the opposite one stays.
+          const opp = viewportCorners(drag.orig)[(drag.corner + 2) % 4];
+          const p = snap(raw);
+          setDrag({ ...drag, rect: [{ x: Math.min(opp.x, p.x), y: Math.min(opp.y, p.y) }, { x: Math.max(opp.x, p.x), y: Math.max(opp.y, p.y) }] });
+        }
       }
       return;
     }
@@ -527,6 +551,11 @@ export function Viewer({ doc }: { doc: DocState }) {
     if (drag) {
       if ((drag.kind === 'move' || drag.kind === 'vertex') && drag.moved) s.pushUndo(drag.snapshot);
       if (drag.kind === 'band') selectInBand(drag);
+      if (drag.kind === 'viewport' && drag.rect !== drag.orig) {
+        const v = viewports.find((x) => x.id === drag.id);
+        const [a, b] = drag.rect;
+        if (v && b.x - a.x > 2 && b.y - a.y > 2) s.setViewport(doc.page, { ...v, rect: drag.rect });
+      }
       setDrag(null);
       return;
     }
@@ -676,7 +705,8 @@ export function Viewer({ doc }: { doc: DocState }) {
               <ViewportBox key={v.id} v={v} zoom={zoom} />
             ))}
             {s.activeViewport && !MEASURE_TYPES.has(s.tool) && viewports.filter((v) => v.id === s.activeViewport).map((v) => (
-              <ViewportBox key={v.id} v={v} zoom={zoom} active />
+              <ViewportBox key={v.id} v={drag?.kind === 'viewport' && drag.id === v.id ? { ...v, rect: drag.rect } : v}
+                zoom={zoom} active handles={s.tool === 'select'} />
             ))}
             {markups.map((m) => <MarkupShape key={m.id} m={m} />)}
             {preview && <g pointerEvents="none"><MarkupShape m={preview} ghost /></g>}
@@ -724,15 +754,21 @@ export function Viewer({ doc }: { doc: DocState }) {
   );
 }
 
+/** Corners of a viewport rectangle: top-left, top-right, bottom-right, bottom-left. */
+const viewportCorners = ([a, b]: [Pt, Pt]): Pt[] => [a, { x: b.x, y: a.y }, b, { x: a.x, y: b.y }];
+
 /**
  * A viewport outline with its name and scale. Revu highlights viewports
  * while measuring, and the one picked in the Measurements panel.
  */
-function ViewportBox({ v, zoom, active }: { v: Viewport; zoom: number; active?: boolean }) {
+function ViewportBox({ v, zoom, active, handles }: { v: Viewport; zoom: number; active?: boolean; handles?: boolean }) {
   const [a, b] = v.rect;
   const fs = 11 / zoom;
   return (
     <g className="viewport-box" pointerEvents="none">
+      {handles && viewportCorners(v.rect).map((h, i) => (
+        <rect key={i} x={h.x - 3.5 / zoom} y={h.y - 3.5 / zoom} width={7 / zoom} height={7 / zoom} fill="#fff" stroke="#1a73e8" strokeWidth={1 / zoom} />
+      ))}
       <rect x={a.x} y={a.y} width={b.x - a.x} height={b.y - a.y} fill="#1a73e8" fillOpacity={active ? 0.1 : 0.04}
         stroke="#1a73e8" strokeWidth={(active ? 2 : 1) / zoom} strokeDasharray={`${6 / zoom} ${3 / zoom}`} />
       <text x={a.x + 4 / zoom} y={a.y + fs + 3 / zoom} fontSize={fs} fill="#1a73e8" fontFamily="sans-serif">

@@ -82,6 +82,5 @@ Next (from `docs/PLAN.md`):
 3. Compare versions, Sets, slip sheets, Spaces, Legends, Dynamic Fill, XLSX
 
 Known gaps: Revu cutout storage unknown (ours in CTData); overlapping
-cutouts not merged; separate X/Y scales (pages and viewports); viewports
-can't be moved/resized after drawing; scale changes are not undoable; 3-point radius; partial-arc radius
+cutouts not merged; separate X/Y scales (pages and viewports); 3-point radius; partial-arc radius
 preserved but not editable; text in saved markups ignores page rotation.

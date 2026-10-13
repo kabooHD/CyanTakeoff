@@ -12,6 +12,11 @@ import type {
 export type LeftPanel = 'thumbnails' | 'bookmarks' | null;
 export type RightPanel = 'properties' | 'toolchest' | 'measurements' | null;
 
+/** Page scales and viewports, for undoing scale changes. */
+export interface ScaleSnapshot { markups: Markup[]; calibrations: (Scale | null)[]; viewports: Viewport[][] }
+/** An undo step: markups only, or markups with page scales and viewports. */
+export type UndoEntry = Markup[] | ScaleSnapshot;
+
 export interface DocState {
   id: string;
   name: string;
@@ -28,8 +33,8 @@ export interface DocState {
   page: number;
   zoom: number;
   selection: string[];
-  undo: Markup[][];
-  redo: Markup[][];
+  undo: UndoEntry[];
+  redo: UndoEntry[];
   dirty: boolean;
 }
 
@@ -151,6 +156,19 @@ const now = () => new Date().toISOString();
 /** Viewport id, in the style of Revu's /NM (16 capital letters). */
 export const newViewportId = () => Array.from({ length: 16 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
 
+/** State after applying an undo entry, plus the entry that reverses it. */
+function restore(d: DocState, e: UndoEntry): [Partial<DocState>, UndoEntry] {
+  if (Array.isArray(e)) return [{ markups: e }, d.markups];
+  const dirtyCalibrations = new Set(d.dirtyCalibrations);
+  d.loaded.pages.forEach((_, p) => {
+    if (e.calibrations[p] !== d.calibrations[p] || e.viewports[p] !== d.viewports[p]) dirtyCalibrations.add(p);
+  });
+  return [
+    { markups: e.markups, calibrations: e.calibrations, viewports: e.viewports, dirtyCalibrations },
+    { markups: d.markups, calibrations: d.calibrations, viewports: d.viewports },
+  ];
+}
+
 /**
  * Apply new page scales/viewports to `pages`, re-scaling the measurements
  * whose governing scale changed (as Revu does). Other markups are untouched,
@@ -168,7 +186,8 @@ function rescoped(d: DocState, pages: number[], calibrations: (Scale | null)[], 
   });
   const dirtyCalibrations = new Set(d.dirtyCalibrations);
   pages.forEach((p) => dirtyCalibrations.add(p));
-  return { calibrations, viewports, dirtyCalibrations, markups, undo: [...d.undo, d.markups], dirty: true };
+  const snap: ScaleSnapshot = { markups: d.markups, calibrations: d.calibrations, viewports: d.viewports };
+  return { calibrations, viewports, dirtyCalibrations, markups, undo: [...d.undo, snap], redo: [], dirty: true };
 }
 
 export const useApp = create<AppState>((set, get) => {
@@ -302,13 +321,15 @@ export const useApp = create<AppState>((set, get) => {
     undo() {
       withDoc((d) => {
         if (!d.undo.length) return {};
-        return { markups: d.undo[d.undo.length - 1], undo: d.undo.slice(0, -1), redo: [...d.redo, d.markups], selection: [], dirty: true };
+        const [state, current] = restore(d, d.undo[d.undo.length - 1]);
+        return { ...state, undo: d.undo.slice(0, -1), redo: [...d.redo, current], selection: [], dirty: true };
       });
     },
     redo() {
       withDoc((d) => {
         if (!d.redo.length) return {};
-        return { markups: d.redo[d.redo.length - 1], redo: d.redo.slice(0, -1), undo: [...d.undo, d.markups], selection: [], dirty: true };
+        const [state, current] = restore(d, d.redo[d.redo.length - 1]);
+        return { ...state, redo: d.redo.slice(0, -1), undo: [...d.undo, current], selection: [], dirty: true };
       });
     },
     copy() {

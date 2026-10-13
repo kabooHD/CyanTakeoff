@@ -288,6 +288,7 @@ function Viewports() {
           </tbody>
         </table>
       ) : <p className="muted small">No viewports on this page.</p>}
+      {sel && <p className="muted small">Drag the highlighted viewport's edge to move it, or a corner to resize it.</p>}
       <div className="prop-actions">
         <button onClick={() => { s.setTool('viewport'); s.setStatus('Add Viewport: drag a rectangle around the area that uses a different scale (Shift for a square).'); }}>Add Viewport</button>
         <button disabled={!sel} onClick={() => { if (sel) { s.deleteViewports([doc.page], [sel.id]); s.setActiveViewport(null); } }}>Delete Viewport</button>

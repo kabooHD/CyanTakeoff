@@ -265,6 +265,17 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await dlg.locator('select').first().selectOption(`1" = 10'`);
   await dlg.getByRole('button', { name: 'Apply' }).click();
   assert(await page.locator('.viewport-list input[aria-label="Viewport name"]').inputValue() === 'Detail A', 'viewport listed in the Measurements panel');
+  {
+    const x0 = await page.locator('.viewport-box > rect:not([width="7"])').last().getAttribute('x');
+    const e1 = site(500, 120), e2 = site(520, 120);
+    await page.mouse.move(e1.x, e1.y); await page.mouse.down();
+    await page.mouse.move(e2.x, e2.y, { steps: 5 }); await page.mouse.up();
+    const x1 = await page.locator('.viewport-box > rect').last().getAttribute('x');
+    assert(Number(x1) > Number(x0) + 60, `dragging the viewport edge moves it (${x0} -> ${x1})`);
+    await page.keyboard.press('Control+Z');
+    const x2 = await page.locator('.viewport-box > rect').last().getAttribute('x');
+    assert(Math.abs(Number(x2) - Number(x0)) < 0.01, 'undo restores the viewport');
+  }
   await page.keyboard.press('Control+Shift+F8'); // exact clicks: content snap off
   await page.keyboard.press('Shift+Alt+L');
   a = site(460, 20); await page.mouse.click(a.x, a.y);
