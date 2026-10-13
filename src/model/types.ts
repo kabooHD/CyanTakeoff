@@ -157,6 +157,8 @@ export interface Markup {
   rise?: number;
   /** Holes cut out of an Area or Volume measurement. */
   cutouts?: Cutout[];
+  /** Bézier handlebars per vertex (curved segments), offsets from the vertex; see model/curves.ts. */
+  handles?: ({ in: Pt; out: Pt } | null)[];
   /** Image markups (image, snapshot): a data: URL. */
   image?: string;
   /** File attachment: name, MIME type and base64 contents. */

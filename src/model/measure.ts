@@ -1,3 +1,4 @@
+import { flatPoints, hasCurves } from './curves';
 import type { Cutout, LengthUnit, Markup, Pt, Scale, ScaleFormat, Viewport } from './types';
 
 // ---------- geometry ----------
@@ -396,8 +397,10 @@ export function slopeFactor(slope: Markup['slope']): number {
   return Math.sqrt(1 + t * t);
 }
 
-export function measure(m: Pick<Markup, 'type' | 'points' | 'scale' | 'depth' | 'cutouts' | 'slope' | 'rise'>): Measurement | null {
+export function measure(m: Pick<Markup, 'type' | 'points' | 'scale' | 'depth' | 'cutouts' | 'slope' | 'rise' | 'handles'>): Measurement | null {
   if (!MEASURE_TYPES.has(m.type)) return null;
+  // Curved segments are measured along the curve.
+  if (hasCurves(m.handles)) m = { ...m, points: flatPoints(m), handles: undefined };
   const s = m.scale ?? DEFAULT_SCALE;
   if (s.yFactor) {
     // Separate X/Y scales: stretch the geometry, then measure with the X factor.

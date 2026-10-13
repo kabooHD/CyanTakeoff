@@ -1,5 +1,6 @@
 import { arcPoints, arcThrough, bounds, distToSegment, pointInPolygon, rectCorners, rectPairs } from '../model/measure';
 import type { Markup, Pt } from '../model/types';
+import { CURVABLE, flatPoints } from '../model/curves';
 
 /** Outline used for hit-testing and rubber-band selection. */
 export function outline(m: Markup): { pts: Pt[]; closed: boolean } {
@@ -37,9 +38,9 @@ export function outline(m: Markup): { pts: Pt[]; closed: boolean } {
     case 'note':
       return { pts: rectCorners(P[0], { x: P[0].x + 18, y: P[0].y + 18 }), closed: true };
     case 'polygon': case 'area': case 'volume': case 'cloud':
-      return { pts: P, closed: true };
+      return { pts: flatPoints(m), closed: true };
     default:
-      return { pts: P, closed: false };
+      return { pts: CURVABLE.has(m.type) ? flatPoints(m) : P, closed: false };
   }
 }
 

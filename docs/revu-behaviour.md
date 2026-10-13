@@ -192,6 +192,21 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - Markups List has a Space column (the Space each markup is in).
 - Dynamic Fill can create Spaces.
 
+## Curved segments
+- Polygon, Polyline, Area, Perimeter, Polylength and Volume can have
+  Bézier segments. While drawing, Ctrl+drag at a point pulls out its
+  handlebar (with the default "Drag Rectangle" preference).
+- On a selected markup: drag a handlebar end to reshape (the other side
+  turns with it); Ctrl+drag a handlebar moves one side only; Ctrl+click a
+  control point converts it straight <-> curve; Shift+click a line adds a
+  control point, Shift+click a point removes it. Right-click: Convert
+  Control Point to Curve/Straight, Convert to Arc, Add/Subtract Control
+  Point.
+- Measurements follow the curve.
+- Ours stores curves as PDF 2.0 `/Path` (m/l/c operands) with a flattened
+  `/Vertices` for older readers, and the exact handlebars in CTData. How
+  Revu itself stores curves is unknown (no sample).
+
 ## Cutouts
 - Polygon Cutout and Ellipse Cutout subtract from an existing Area or
   Volume; hovering the target measurement highlights it.

@@ -17,6 +17,7 @@ import { legendKey, legendLayout, legendRows, type LegendDef } from '../model/le
 import { DynamicFillBar, FillOverlay, buildMask, fillDown, fillMove, fillUp, finishBoundary, resetFill, useFill } from './DynamicFill';
 import type { Markup, MarkupType, Pt, ToolId, Viewport } from '../model/types';
 import { toolById } from '../tools/tools';
+import { CURVABLE, arcSegment, bezierAt, closedType, flatPoints, hasCurves, insertHandle, removeHandle, segments, toggleCurve, type Handles } from '../model/curves';
 import { MarkupShape, handlePoints } from './renderMarkup';
 import { cutoutAt, hitTest, markupBounds, outline } from './hit';
 import { setCursor } from './cursor';
@@ -38,14 +39,18 @@ export const viewerApi = {
   centerOn: (_p: Pt) => {},
 };
 
-type Draft = { tool: ToolId; points: Pt[]; cursor: Pt | null; dragFrom?: { x: number; y: number }; target?: string };
+type Draft = { tool: ToolId; points: Pt[]; cursor: Pt | null; dragFrom?: { x: number; y: number }; target?: string;
+  /** Curved segments drawn with Ctrl+drag: handlebars per point, and the point whose handlebar is being dragged. */
+  handles?: Handles; curving?: number };
 type Drag =
   | { kind: 'pan'; sx: number; sy: number; left: number; top: number }
   | { kind: 'move'; start: Pt; snapshot: Markup[]; ids: string[]; moved: boolean }
   | { kind: 'vertex'; id: string; index: number; snapshot: Markup[]; moved: boolean }
   | { kind: 'band'; start: Pt; cur: Pt; add: boolean; right?: { x: number; y: number } }
   /** Move (corner -1) or resize (corner 0..3) the highlighted viewport. */
-  | { kind: 'viewport'; id: string; corner: number; start: Pt; orig: [Pt, Pt]; rect: [Pt, Pt] };
+  | { kind: 'viewport'; id: string; corner: number; start: Pt; orig: [Pt, Pt]; rect: [Pt, Pt] }
+  /** Drag a curve handlebar of vertex `index` (Ctrl: the two sides move independently). */
+  | { kind: 'bezier'; id: string; index: number; side: 'in' | 'out'; snapshot: Markup[]; independent: boolean };
 
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
@@ -321,7 +326,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
           finishPoly(); e.stopImmediatePropagation(); e.preventDefault();
         }
         else if (e.key === 'Backspace') {
-          setDraft({ ...draft, points: draft.points.slice(0, -1) });
+          setDraft({ ...draft, points: draft.points.slice(0, -1), handles: draft.handles?.slice(0, -1) });
           e.stopImmediatePropagation(); e.preventDefault();
         }
       } else if (countId.current && (e.key === 'Enter' || e.key === 'Escape')) {
@@ -388,7 +393,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     let P = points;
     if (type === 'cloud' && points.length === 2) P = rectCorners(points[0], points[1]);
     if (type === 'callout') P = [points[0], points[1], { x: points[1].x + 144, y: points[1].y + 40 }];
-    if (type === 'perimeter') P = [...points, points[0]];
+    if (type === 'perimeter') {
+      P = [...points, points[0]];
+      // The closing point repeats the first: it takes its incoming handlebar.
+      const h0 = extra.handles?.[0];
+      if (extra.handles) extra = { ...extra, handles: [...extra.handles, h0 ? { in: h0.in, out: { x: 0, y: 0 } } : null] };
+    }
     if (type === 'typewriter') P = typewriterBox(points[0], '', style.fontSize);
     if (type === 'stamp' && points.length === 1) P = [{ x: points[0].x - 80, y: points[0].y - 25 }, { x: points[0].x + 80, y: points[0].y + 25 }];
     const editable = type === 'textbox' || type === 'callout' || type === 'typewriter' || type === 'cloudplus';
@@ -498,9 +508,13 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     // The cutout tool stays active for further cutouts until Esc (Revu).
     const m = doc.markups.find((x) => x.id === id);
     if (!m) return;
-    const r = applyCutout(m, { kind, points: pts });
+    // A curved outline is cut as its flattened polygon; it stays curved when only a hole is added.
+    const curved = hasCurves(m.handles);
+    const base = curved ? { ...m, points: flatPoints(m) } : m;
+    const r = applyCutout(base, { kind, points: pts });
     if ('error' in r) { s.setStatus(r.error); return; }
-    s.updateMarkups([id], () => r);
+    const same = r.points.length === base.points.length && r.points.every((q, k) => q.x === base.points[k].x && q.y === base.points[k].y);
+    s.updateMarkups([id], () => (curved && same ? { cutouts: r.cutouts } : { ...r, handles: curved ? undefined : m.handles }));
   };
 
   const finishPoly = () => {
@@ -512,7 +526,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     }
     const t = toolById(draft.tool);
     const min = t.closed ? 3 : 2;
-    if (draft.points.length >= min) finish(draft.tool as MarkupType, draft.points);
+    if (draft.points.length >= min) finish(draft.tool as MarkupType, draft.points, hasCurves(draft.handles) ? { handles: draft.handles } : {});
     else setDraft(null);
   };
 
@@ -584,11 +598,50 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       if (doc.selection.length === 1) {
         const m = markups.find((x) => x.id === doc.selection[0]);
         if (m && !m.locked) {
+          const curvable = CURVABLE.has(m.type);
+          // Curve handlebars (drag; Ctrl+drag moves one side only).
+          if (curvable && m.handles) {
+            for (let k = 0; k < m.points.length; k++) {
+              const h = m.handles[k];
+              if (!h) continue;
+              for (const side of ['in', 'out'] as const) {
+                const q = { x: m.points[k].x + h[side].x, y: m.points[k].y + h[side].y };
+                if ((h[side].x || h[side].y) && dist(q, raw) <= 6 / zoom) {
+                  setDrag({ kind: 'bezier', id: m.id, index: k, side, snapshot: doc.markups, independent: e.ctrlKey || e.metaKey });
+                  return;
+                }
+              }
+            }
+          }
           const hs = handlePoints(m);
           const i = hs.findIndex((h) => dist(h, raw) <= 6 / zoom);
+          if (i >= 0 && curvable && (e.ctrlKey || e.metaKey)) {
+            // Ctrl+click a control point: straight <-> curve (Revu).
+            s.updateMarkups([m.id], (x) => ({ handles: cleanHandles(toggleCurve(x.points, x.handles, i, closedType(x.type))) }));
+            return;
+          }
+          if (i >= 0 && curvable && e.shiftKey) {
+            // Shift+click a control point removes it.
+            if (m.points.length > (closedType(m.type) ? 3 : 2)) {
+              s.updateMarkups([m.id], (x) => ({ points: x.points.filter((_, k) => k !== i), handles: removeHandle(x.handles, i) }));
+            }
+            return;
+          }
           if (i >= 0) {
             setDrag({ kind: 'vertex', id: m.id, index: i, snapshot: doc.markups, moved: false });
             return;
+          }
+          if (curvable && e.shiftKey) {
+            // Shift+click on a line adds a control point there.
+            const k = segmentAt(m, raw, tol * 1.5);
+            if (k >= 0) {
+              s.updateMarkups([m.id], (x) => {
+                const pts = [...x.points];
+                pts.splice(k + 1, 0, raw);
+                return { points: pts, handles: insertHandle(x.handles, x.points.length, k + 1) };
+              });
+              return;
+            }
           }
         }
       }
@@ -660,7 +713,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
           if (c) finish('radius', [c.center, pts[0]]);
           else s.setStatus('3-Point Radius: the three points are in a line; pick a point off the line.');
         } else if (def.maxPoints && pts.length >= def.maxPoints) finish(s.tool as MarkupType, pts.slice(0, def.maxPoints));
-        else setDraft({ tool: s.tool, points: pts, cursor: p });
+        else if ((e.ctrlKey || e.metaKey) && CURVABLE.has(s.tool)) {
+          // Ctrl+drag: this point gets a curve handlebar, dragged out until release (Revu).
+          const handles: Handles = [...(draft?.handles ?? (draft?.points ?? []).map(() => null)), null];
+          setDraft({ tool: s.tool, points: pts, cursor: p, handles, curving: pts.length - 1 });
+          (e.target as Element).setPointerCapture?.(e.pointerId);
+        } else setDraft({ tool: s.tool, points: pts, cursor: p, handles: draft?.handles ? [...draft.handles, null] : undefined });
         break;
       }
       case 'cutout': case 'cutout-ellipse': {
@@ -790,6 +848,22 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
           return { points: pts };
         }, { history: false });
         if (!drag.moved) setDrag({ ...drag, moved: true });
+      } else if (drag.kind === 'bezier') {
+        const orig = drag.snapshot.find((x) => x.id === drag.id);
+        if (orig) {
+          const v = orig.points[drag.index];
+          const d = { x: raw.x - v.x, y: raw.y - v.y };
+          const other = drag.side === 'in' ? 'out' : 'in';
+          s.updateMarkups([drag.id], (m) => {
+            const H = [...(m.handles ?? [])];
+            const h = H[drag.index] ?? { in: { x: 0, y: 0 }, out: { x: 0, y: 0 } };
+            // Smooth points stay smooth: the other side turns with it, keeping its length.
+            const len = Math.hypot(h[other].x, h[other].y), dl = Math.hypot(d.x, d.y) || 1;
+            const o = drag.independent || !len ? h[other] : { x: (-d.x / dl) * len, y: (-d.y / dl) * len };
+            H[drag.index] = drag.side === 'in' ? { in: d, out: o } : { out: d, in: o };
+            return { handles: H };
+          }, { history: false });
+        }
       } else if (drag.kind === 'band') {
         setDrag({ ...drag, cur: raw });
       } else if (drag.kind === 'viewport') {
@@ -804,6 +878,15 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
           setDrag({ ...drag, rect: [{ x: Math.min(opp.x, p.x), y: Math.min(opp.y, p.y) }, { x: Math.max(opp.x, p.x), y: Math.max(opp.y, p.y) }] });
         }
       }
+      return;
+    }
+    if (draft?.curving !== undefined && draft.handles) {
+      // Ctrl+drag while drawing: pull out the handlebar of the point just placed (smooth).
+      const v = draft.points[draft.curving];
+      const out = { x: raw.x - v.x, y: raw.y - v.y };
+      const handles = [...draft.handles];
+      handles[draft.curving] = Math.hypot(out.x, out.y) * zoom < 3 ? null : { out, in: { x: -out.x, y: -out.y } };
+      setDraft({ ...draft, handles, cursor: raw });
       return;
     }
     if (draft) {
@@ -824,6 +907,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
 
   const onPointerUp = (e: React.PointerEvent) => {
     buttonDown.current = false;
+    if (draft?.curving !== undefined) { setDraft({ ...draft, curving: undefined }); return; }
     if (eraseSnapshot.current) {
       const before = eraseSnapshot.current;
       eraseSnapshot.current = null;
@@ -847,6 +931,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     if (s.tool === 'dynamic-fill') fillUp();
     if (drag) {
       if ((drag.kind === 'move' || drag.kind === 'vertex') && drag.moved) s.pushUndo(drag.snapshot);
+      if (drag.kind === 'bezier') s.pushUndo(drag.snapshot);
       if (drag.kind === 'band') selectInBand(drag);
       if (drag.kind === 'viewport' && drag.rect !== drag.orig) {
         const v = viewports.find((x) => x.id === drag.id);
@@ -942,6 +1027,24 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     } else if (hit) {
       if (!selected.has(hit.id)) s.select([hit.id]);
       const ids = selected.has(hit.id) ? doc.selection : [hit.id];
+      if (CURVABLE.has(hit.type) && !hit.locked) {
+        // Control point menu (Revu): curve a point, or turn a line into an arc.
+        const vi = hit.points.findIndex((q) => dist(q, raw) <= 6 / zoom);
+        const si = segmentAt(hit, raw, 6 / zoom);
+        if (vi >= 0) items.push({ label: hit.handles?.[vi] ? 'Convert Control Point to Straight' : 'Convert Control Point to Curve',
+          action: () => s.updateMarkups([hit.id], (x) => ({ handles: cleanHandles(toggleCurve(x.points, x.handles, vi, closedType(x.type))) })) });
+        else if (si >= 0) {
+          items.push({ label: 'Convert to Arc', action: () => s.updateMarkups([hit.id], (x) => ({ handles: arcSegment(x.points, x.handles, si, closedType(x.type)) })) });
+          items.push({ label: 'Add Control Point', action: () => s.updateMarkups([hit.id], (x) => {
+            const pts = [...x.points]; pts.splice(si + 1, 0, raw);
+            return { points: pts, handles: insertHandle(x.handles, x.points.length, si + 1) };
+          }) });
+        }
+        if (vi >= 0 && hit.points.length > (closedType(hit.type) ? 3 : 2)) {
+          items.push({ label: 'Subtract Control Point', action: () => s.updateMarkups([hit.id], (x) => ({ points: x.points.filter((_, k) => k !== vi), handles: removeHandle(x.handles, vi) })) });
+        }
+        items.push({ sep: true });
+      }
       items.push(
         { label: 'Properties', action: () => s.setPanels({ right: 'properties' }) },
         { label: 'Add to My Tools', action: () => s.addToToolChest(hit) },
@@ -988,7 +1091,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       subject: '', label: '', comment: '', author: '', created: '', modified: '', status: 'None',
     };
   } else if (draft && draft.cursor) {
-    const pts = def.interaction === 'freehand' ? draft.points : [...draft.points, draft.cursor];
+    const pts = def.interaction === 'freehand' || draft.curving !== undefined ? draft.points : [...draft.points, draft.cursor];
     const boxed = draft.tool.startsWith('form-') || draft.tool === 'lasso' || draft.tool === 'redact-text' || draft.tool === 'viewport' || draft.tool === 'snapshot' || draft.tool === 'link' || def.interaction === 'text';
     let type = (draft.tool === 'calibrate' ? 'length' : boxed ? 'rectangle' : draft.tool) as MarkupType;
     let P = pts;
@@ -1007,6 +1110,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
           : s.preset?.style ?? s.toolDefaults[type],
       subject: '', label: '', comment: '', author: '', created: '', modified: '', status: 'None',
       scale: scaleFor(draft.points[0]) ?? undefined, depth: s.preset?.depth ?? 1,
+      handles: draft.handles && CURVABLE.has(type) && P === pts ? [...draft.handles, null].slice(0, P.length) : undefined,
     };
   }
 
@@ -1086,6 +1190,15 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
                 <g key={`sel-${m.id}`} pointerEvents="none">
                   <rect x={b.minX - pad} y={b.minY - pad} width={b.w + pad * 2} height={b.h + pad * 2}
                     fill="none" stroke="#1a73e8" strokeWidth={1 / zoom} strokeDasharray={`${4 / zoom} ${3 / zoom}`} />
+                  {doc.selection.length === 1 && m.handles?.map((h, i) => h && (['in', 'out'] as const).filter((k) => h[k].x || h[k].y).map((k) => {
+                    const v = m.points[i], q = { x: v.x + h[k].x, y: v.y + h[k].y };
+                    return (
+                      <g key={`bz${i}${k}`} className="bezier-handle">
+                        <line x1={v.x} y1={v.y} x2={q.x} y2={q.y} stroke="#1a73e8" strokeWidth={1 / zoom} />
+                        <circle cx={q.x} cy={q.y} r={3.5 / zoom} fill="#1a73e8" stroke="#fff" strokeWidth={1 / zoom} />
+                      </g>
+                    );
+                  }))}
                   {doc.selection.length === 1 && handlePoints(m).map((h, i) => (
                     <rect key={i} x={h.x - 3.5 / zoom} y={h.y - 3.5 / zoom} width={7 / zoom} height={7 / zoom}
                       fill="#fff" stroke="#1a73e8" strokeWidth={1 / zoom} />
@@ -1195,6 +1308,24 @@ function PageTile({ doc, slot, zoom, rot, active, onActivate }: {
     </div>
   );
 }
+
+/** Index of the segment of a curvable markup passing within `tol` of `p`, or -1. */
+function segmentAt(m: Markup, p: Pt, tol: number): number {
+  const segs = segments(m.points, m.handles, closedType(m.type));
+  return segs.findIndex(([a, c1, c2, b]) => {
+    if (!c1 || !c2) return distToSegment(p, a, b) <= tol;
+    let prev = a;
+    for (let k = 1; k <= 24; k++) {
+      const q = bezierAt(a, c1, c2, b, k / 24);
+      if (distToSegment(p, prev, q) <= tol) return true;
+      prev = q;
+    }
+    return false;
+  });
+}
+
+/** No handles at all reads as "no curves". */
+const cleanHandles = (h: Handles): Handles | undefined => (hasCurves(h) ? h : undefined);
 
 /** Tools that draw a region: drag a rectangle, or click points and close the shape. */
 const isRegion = (t: ToolId) => t === 'cutout' || t === 'space';

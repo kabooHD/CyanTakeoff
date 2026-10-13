@@ -982,6 +982,52 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await kd.getByRole('button', { name: 'Close', exact: true }).click();
 }
 
+// Curved segments: Ctrl+drag while drawing, Ctrl+click a control point, Convert to Arc.
+{
+  await page.locator('.doc-tab', { hasText: 'Sample Floor Plan.pdf' }).click();
+  await page.keyboard.press('Control+4');
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(800);
+  const rows = async () => (await page.locator('.ml-table tbody tr').allInnerTexts());
+  const before = new Set(await rows());
+  const fresh = async () => (await rows()).filter((r) => !before.has(r)).join(' | ');
+  await page.keyboard.press('Control+Shift+F8'); // content snap off: exact corners
+  await page.keyboard.press('Control+Shift+F7'); // markup snap off
+  await page.keyboard.press('Shift+Alt+A');
+  const corners = [[30, 2], [40, 2], [40, 12], [30, 12]];
+  for (const [i, [x, y]] of corners.entries()) {
+    const p = await toScreen(x, y);
+    if (i === 1) {
+      // Ctrl+drag: the point gets a handlebar, bulging the sides next to it.
+      await page.keyboard.down('Control');
+      await page.mouse.move(p.x, p.y); await page.mouse.down();
+      await page.mouse.move(p.x + 25, p.y - 40, { steps: 5 }); await page.mouse.up();
+      await page.keyboard.up('Control');
+    } else await page.mouse.click(p.x, p.y);
+  }
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  const curved = await fresh();
+  const sf = (t) => Number(t.match(/([\d,.]+) sf/)?.[1].replace(/,/g, ''));
+  assert(sf(curved) > 100.5, `a Ctrl+dragged point curves the area (${sf(curved)} sf vs 100 sf straight)`);
+  await page.screenshot({ path: `${OUT}/17-curved.png` });
+  // Ctrl+click the control point: back to straight lines.
+  const v = await toScreen(40, 2);
+  await page.keyboard.down('Control'); await page.mouse.click(v.x, v.y); await page.keyboard.up('Control');
+  await page.waitForTimeout(300);
+  assert(sf(await fresh()) === 100, `Ctrl+click on the control point makes it straight again (${sf(await fresh())} sf)`);
+  // Right-click a side: Convert to Arc.
+  const mid = await toScreen(35, 12);
+  await page.mouse.click(mid.x, mid.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Convert to Arc' }).click();
+  await page.waitForTimeout(300);
+  assert(sf(await fresh()) !== 100, `Convert to Arc curves that side (${sf(await fresh())} sf)`);
+  await page.keyboard.press('Delete');
+  await page.keyboard.press('Control+Shift+F8');
+  await page.keyboard.press('Control+Shift+F7');
+}
+
 // View modes (Ctrl+4 to Ctrl+7) and Rotate View (Ctrl+Shift+Plus/Minus).
 {
   await page.locator('.doc-tab').first().click();

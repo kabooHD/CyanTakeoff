@@ -95,7 +95,9 @@ Signatures panel Alt+4), redaction (mark area/text; apply removes the
 content under the marks: src/pdf/redactContent.ts), OCR (tesseract.js,
 7 Latin-script languages, assets served from /ocr/, invisible text);
 length, polylength, area, perimeter, volume, count, angle, radius, diameter;
-cutouts (polygon/ellipse, Revu fuse/trim rules); Dynamic Fill;
+cutouts (polygon/ellipse, Revu fuse/trim rules); curved segments
+(src/model/curves.ts: Ctrl+drag, Ctrl/Shift+click, Convert to Arc; PDF 2.0
+/Path); Dynamic Fill;
 separate X/Y scales; 3-point radius; viewports (regions with their own scale, Revu
 `/VP` layout); Apply Scale to Pages dialog (preset/custom/
 calibrate, page range, precision, saved presets) and scale prompt; snap to
@@ -111,8 +113,8 @@ Next (from `docs/PLAN.md`):
 Known gaps: need Revu-made samples (none public; wanted list in
 tests/fixtures/revu/README.md): cutout storage (ours in CTData), custom
 column values (/BSIColumnData kept on edit but not read), .btx tool sets;
-curved segments
-on polygons/cutouts (Ctrl+drag) not supported; vector Compare ignores
+polygon cutouts
+cannot be curved (ellipse cutouts can); vector Compare ignores
 colour/lineweight-only changes; signatures are not checked against a
 trust list and have no timestamps; OCR languages limited to Latin scripts
 (the text layer is WinAnsi).

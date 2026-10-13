@@ -75,6 +75,13 @@ export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
       ...markup,
       points: pdfPoints.map(toPage),
       cutouts: markup.cutouts?.map((c) => ({ ...c, points: c.points.map(toPage) })),
+      // Handle offsets: convert the control points, then take them relative to the vertex again.
+      handles: markup.handles?.map((h, i) => {
+        if (!h) return null;
+        const v = pdfPoints[i], pv = toPage(v);
+        const rel = (d: Pt) => { const q = toPage({ x: v.x + d.x, y: v.y + d.y }); return { x: q.x - pv.x, y: q.y - pv.y }; };
+        return { in: rel(h.in), out: rel(h.out) };
+      }),
     };
   });
 

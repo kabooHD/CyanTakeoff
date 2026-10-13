@@ -76,6 +76,12 @@ export function flip(markups: Markup[], ids: string[], axis: 'horizontal' | 'ver
   const cx = all.minX + all.maxX, cy = all.minY + all.maxY;
   const f = (p: Pt) => (axis === 'horizontal' ? { x: cx - p.x, y: p.y } : { x: p.x, y: cy - p.y });
   return markups.map((m) => (sel.includes(m)
-    ? markDirty({ ...m, points: m.points.map(f), cutouts: m.cutouts?.map((c) => ({ ...c, points: c.points.map(f) })) })
+    ? markDirty({
+      ...m, points: m.points.map(f), cutouts: m.cutouts?.map((c) => ({ ...c, points: c.points.map(f) })),
+      // Handlebars are offsets: mirror their direction.
+      handles: m.handles?.map((h) => h && (axis === 'horizontal'
+        ? { in: { x: -h.in.x, y: h.in.y }, out: { x: -h.out.x, y: h.out.y } }
+        : { in: { x: h.in.x, y: -h.in.y }, out: { x: h.out.x, y: -h.out.y } })),
+    })
     : m));
 }

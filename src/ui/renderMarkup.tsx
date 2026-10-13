@@ -1,3 +1,4 @@
+import { hasCurves, svgPath } from '../model/curves';
 import { calloutAttach } from '../pdf/save';
 import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import type { Cutout, Markup, MarkupStyle, MarkupType, Pt } from '../model/types';
@@ -196,11 +197,13 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
         <polyline {...c} fill="none" points={arrowHead(P[0], P[1], Math.max(8, st.width * 5))} /></>;
       break;
     case 'polyline': case 'polylength': case 'perimeter': case 'pen':
-      shape = <polyline {...c} fill="none" points={pts(P)} />;
+      shape = hasCurves(m.handles) && m.type !== 'pen'
+        ? <path {...c} fill="none" d={svgPath(P, m.handles, false)} />
+        : <polyline {...c} fill="none" points={pts(P)} />;
       break;
     case 'polygon': case 'area': case 'volume':
-      shape = m.cutouts?.length
-        ? <path {...c} fillRule="evenodd" d={polyPath(P) + m.cutouts.map(cutoutPath).join('')} />
+      shape = m.cutouts?.length || hasCurves(m.handles)
+        ? <path {...c} fillRule="evenodd" d={(hasCurves(m.handles) ? svgPath(P, m.handles, true) : polyPath(P)) + (m.cutouts ?? []).map(cutoutPath).join('')} />
         : <polygon {...c} points={pts(P)} />;
       break;
     case 'cloud':

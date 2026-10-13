@@ -12,7 +12,8 @@
 // - /FillOpacity holds fill opacity; /Label holds the markup label.
 // - Page /VP: the page scale is a /Viewport covering the whole page with no
 //   /Name; viewports (regions with their own scale) carry a /Name and BBox.
-import { PDFArray, PDFDict, PDFRawStream, PDFRef, decodePDFRawStream, type PDFDocument } from 'pdf-lib';
+import { CURVABLE, closedType, fromPdfPath } from '../model/curves';
+import { PDFArray, PDFDict, PDFName, PDFNumber, PDFRawStream, PDFRef, decodePDFRawStream, type PDFDocument } from 'pdf-lib';
 import type { CustomColumn, Markup, MarkupStatus, MarkupStyle, MarkupType, Pt, Reply, Scale } from '../model/types';
 import { DEFAULT_STYLES, toolById } from '../tools/tools';
 import { MEASURE_TYPES } from '../model/measure';
@@ -40,6 +41,7 @@ export interface CTData {
   legend?: Markup['legend'];
   checked?: boolean;
   groupId?: string; // Revu-style markup group
+  handles?: (number[] | null)[]; // curved segments: PDF-space [inX, inY, outX, outY] offsets per vertex
 }
 
 export const CT_KEY = 'CTData';
@@ -347,9 +349,20 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
   if (ct?.points) pts = pairs(ct.points);
   if (type === 'cloudplus') text = getText(doc, dict, 'Contents') ?? ct?.text ?? '';
   if (!type || pts.length === 0) return null;
+  // Curved segments: ours from CTData, else a PDF 2.0 /Path from another app.
+  let handles: Markup['handles'] = ct?.handles?.map((h) => (h ? { in: { x: h[0], y: h[1] }, out: { x: h[2], y: h[3] } } : null));
+  const path = dict.lookup(PDFName.of('Path'));
+  if (CURVABLE.has(type) && path instanceof PDFArray) {
+    // /Vertices of a curved markup is a flattened copy: the vertices come from /Path.
+    const ops = path.asArray().map((a) => { const v = a instanceof PDFRef ? doc.context.lookup(a) : a; return v instanceof PDFArray ? v.asArray().map((n) => (n instanceof PDFNumber ? n.asNumber() : 0)) : []; });
+    const read = fromPdfPath(ops, (x, y) => ({ x, y }), closedType(type));
+    if (read.points.length >= 2 && (read.handles || handles)) { pts = read.points; handles ??= read.handles; }
+  }
+  if (handles && handles.length !== pts.length) handles = undefined;
   const markup = {
     ...baseMarkup(doc, dict, ref, page, type, ct), text, ...extra,
     cutouts: ct?.cutouts?.map((c) => ({ kind: c.kind, points: pairs(c.points) })),
+    handles,
   };
   if (type === 'volume' && markup.depth === undefined) markup.depth = 0;
   return { markup, pdfPoints: pts, displayed: getText(doc, dict, 'Contents') };

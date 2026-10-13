@@ -1,3 +1,4 @@
+import { flattenPath, hasCurves, pdfPath, segments } from '../model/curves';
 import { hasSignatures, incrementalUpdate, loadForUpdate } from './incremental';
 import {
   PDFArray, PDFDict, PDFDocument, PDFHexString, PDFRef, PDFString, StandardFonts,
@@ -127,6 +128,26 @@ function textInBox(o: Ops, font: PDFFont, text: string, size: number, a: Pt, c: 
     textAt(o, font, line, size, align === 'center' ? (u0 + u1 - w) / 2 : u0 + 3, v, rgb, fr);
     v -= size * 1.2;
   }
+}
+
+/** A path with curved segments (m, l, c; closed with h). */
+function curvedPath(o: Ops, P: Pt[], h: Markup['handles'], closed: boolean) {
+  if (!P.length) return;
+  o.moveTo(P[0]);
+  for (const [, c1, c2, b] of segments(P, h, closed)) { if (c1 && c2) o.curveTo(c1, c2, b); else o.lineTo(b); }
+  if (closed) o.add('h');
+}
+
+/** Handles (offsets) converted to PDF space along with their vertices. */
+function pdfHandles(m: Markup, page: PageInfo): Markup['handles'] {
+  if (!hasCurves(m.handles)) return undefined;
+  return m.points.map((p, i) => {
+    const h = m.handles?.[i];
+    if (!h) return null;
+    const v = toPdfPt(p, page);
+    const at = (d: Pt) => { const q = toPdfPt({ x: p.x + d.x, y: p.y + d.y }, page); return { x: q.x - v.x, y: q.y - v.y }; };
+    return { in: at(h.in), out: at(h.out) };
+  });
 }
 
 function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], rot = 0, rows: LegendRow[] = []) {
@@ -293,7 +314,8 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
       }
       break;
     case 'polyline': case 'polylength': case 'perimeter': case 'pen': case 'angle':
-      o.poly(P, false); o.add('S');
+      if (hasCurves(m.handles)) curvedPath(o, P, m.handles, false); else o.poly(P, false);
+      o.add('S');
       break;
     case 'radius':
       if (P.length > 2) {
@@ -309,7 +331,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
       break;
     }
     case 'polygon': case 'area': case 'volume':
-      o.poly(P, true);
+      if (hasCurves(m.handles)) curvedPath(o, P, m.handles, true); else o.poly(P, true);
       if (cutouts?.length) {
         // Holes: extra subpaths painted with the even-odd rule.
         for (const c of cutouts) {
@@ -431,6 +453,7 @@ function ctData(m: Markup, P: Pt[]): CTData {
     custom: m.custom && Object.keys(m.custom).length ? m.custom : undefined,
     legend: m.legend,
     checked: m.checked || undefined,
+    handles: hasCurves(m.handles) ? m.handles!.map((h) => (h ? [h.in.x, h.in.y, h.out.x, h.out.y] : null)) : undefined,
   };
 }
 
@@ -491,6 +514,8 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
   if (m.type === 'count') return buildCount(doc, m, page);
   const ctx = doc.context;
   const P = toPdf(m, page);
+  const handles = pdfHandles(m, page);
+  if (handles) m = { ...m, handles };
   const ct = ctData(m, P);
   const cutouts = m.cutouts?.map((c) => ({ ...c, points: c.points.map((q) => toPdfPt(q, page)) }));
   const { ops, bbox } = buildAppearance(m, P, font, cutouts, (page.viewport as { rotation?: number }).rotation ?? 0, rows);
@@ -537,11 +562,14 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
       break;
     case 'PolyLine':
       // An arc is written as its curve; the three picked points stay in CTData.
-      entries.Vertices = flat(m.type === 'arc' && P.length > 2 ? arcThrough(P[0], P[1], P[2]) : P);
+      entries.Vertices = flat(m.type === 'arc' && P.length > 2 ? arcThrough(P[0], P[1], P[2]) : flattenPath(P, m.handles, false, 16));
+      // Curves: PDF 2.0 /Path; /Vertices keeps a flattened copy for readers without it.
+      if (hasCurves(m.handles)) entries.Path = pdfPath(P, m.handles, false, (p) => [p.x, p.y]);
       break;
     case 'Polygon':
       // Revu writes a radius as [arc start, center, arc end]; a full circle ends at its start.
-      entries.Vertices = flat(m.type === 'radius' ? [P[1], P[0], P[2] ?? P[1]] : m.type === 'cloudplus' ? rectCorners(P[0], P[1]) : P);
+      entries.Vertices = flat(m.type === 'radius' ? [P[1], P[0], P[2] ?? P[1]] : m.type === 'cloudplus' ? rectCorners(P[0], P[1]) : flattenPath(P, m.handles, true, 16));
+      if (hasCurves(m.handles)) entries.Path = pdfPath(P, m.handles, true, (p) => [p.x, p.y]);
       if (m.type === 'cloud' || m.type === 'cloudplus') entries.BE = { S: 'C', I: 1 };
       break;
     case 'StrikeOut': case 'Underline': case 'Squiggly':
