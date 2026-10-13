@@ -542,6 +542,32 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert((await page.locator('.markup-layer g.legend').count()) === 1, 'Legend survives save and reload');
 }
 
+// Replies, Checkmark and the PDF summary report.
+{
+  const p = await toScreen(20, 38);
+  await page.mouse.click(p.x, p.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Reply' }).click();
+  await page.getByLabel('Reply').fill('Verified on site');
+  await page.getByLabel('Reply').press('Enter');
+  assert(await page.locator('.reply-row').filter({ hasText: 'Verified on site' }).count() === 1, 'reply shown under its markup');
+  await page.mouse.click(p.x, p.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Check', exact: true }).click();
+  await page.getByRole('button', { name: 'Summary ▾' }).click();
+  const [sp] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'PDF report' }).click()]);
+  await sp.saveAs(`${OUT}/summary.pdf`);
+  assert((await PDFDocument.load(readFileSync(`${OUT}/summary.pdf`))).getPageCount() >= 1, 'PDF summary report generated');
+  const [rd] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
+  await rd.saveAs(`${OUT}/saved-replies.pdf`);
+  await page.waitForTimeout(800);
+  assert(await page.locator('.reply-row').filter({ hasText: 'Verified on site' }).count() === 1, 'reply survives save and reload');
+  // Arrow keys step through the Markups List.
+  await page.locator('.ml-table tbody tr').first().locator('td').first().click();
+  const firstText = await page.locator('.ml-table tbody tr.selected').first().innerText();
+  await page.keyboard.press('ArrowDown');
+  const sels = await page.locator('.ml-table tbody tr.selected').allInnerTexts();
+  assert(sels.length >= 1 && sels[0] !== firstText, `Down arrow selects the next row (${sels.length})`);
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],

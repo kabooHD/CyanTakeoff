@@ -13,7 +13,7 @@
 // - Page /VP: the page scale is a /Viewport covering the whole page with no
 //   /Name; viewports (regions with their own scale) carry a /Name and BBox.
 import { PDFArray, PDFDict, PDFRawStream, PDFRef, decodePDFRawStream, type PDFDocument } from 'pdf-lib';
-import type { CustomColumn, Markup, MarkupStatus, MarkupStyle, MarkupType, Pt, Scale } from '../model/types';
+import type { CustomColumn, Markup, MarkupStatus, MarkupStyle, MarkupType, Pt, Reply, Scale } from '../model/types';
 import { DEFAULT_STYLES, toolById } from '../tools/tools';
 import { MEASURE_TYPES } from '../model/measure';
 import {
@@ -38,6 +38,7 @@ export interface CTData {
   rise?: number;
   custom?: Markup['custom'];
   legend?: Markup['legend'];
+  checked?: boolean;
   groupId?: string; // Revu-style markup group
 }
 
@@ -164,6 +165,7 @@ function baseMarkup(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number, 
     rise: ct?.rise,
     custom: ct?.custom,
     legend: ct?.legend,
+    checked: ct?.checked,
     locked: ((getNumber(doc, dict, 'F') ?? 0) & 128) !== 0 || undefined,
   } satisfies Omit<Markup, 'points'>;
 }
@@ -420,9 +422,17 @@ export function importAnnotations(doc: PDFDocument): ImportResult {
     const counts: { ref: PDFRef; dict: PDFDict }[] = [];
     const groupHeads = new Set<string>();
     const pageRaws: RawImport[] = [];
+    const replies: { parent: string; ref: PDFRef; reply: Reply }[] = [];
     for (const a of pageAnnots(doc, p)) {
       try {
         const ct = readCT(doc, a.dict);
+        // Replies: /Text annotations pointing at their markup with /IRT (reply type /R, the default).
+        const irt0 = a.dict.get(N('IRT'));
+        if (irt0 instanceof PDFRef && getName(doc, a.dict, 'Subtype') === 'Text' && (getName(doc, a.dict, 'RT') ?? 'R') === 'R') {
+          const date = parsePdfDate(getText(doc, a.dict, 'M')) ?? parsePdfDate(getText(doc, a.dict, 'CreationDate')) ?? new Date().toISOString();
+          replies.push({ parent: refKey(irt0), ref: a.ref, reply: { id: crypto.randomUUID(), author: getText(doc, a.dict, 'T') ?? '', date, text: getText(doc, a.dict, 'Contents') ?? '' } });
+          continue;
+        }
         if (getName(doc, a.dict, 'IT') === 'PolygonCount' || ct?.type === 'count') { counts.push(a); continue; }
         const r = readAnnot(doc, a.dict, a.ref, p);
         if (r) {
@@ -441,6 +451,14 @@ export function importAnnotations(doc: PDFDocument): ImportResult {
     for (const r of pageRaws) {
       const key = refKey(r.markup.source as Ref);
       if (groupHeads.has(key)) r.markup.groupId ??= `g${key}`;
+      // Attach replies; they are rewritten with their markup.
+      const mine = replies.filter((x) => x.parent === key);
+      if (mine.length) {
+        r.markup.replies = mine.map((x) => x.reply).sort((a, b) => a.date.localeCompare(b.date));
+        const src = r.markup.source as Ref & { extraRefs?: Ref[] };
+        src.extraRefs = [...(src.extraRefs ?? []), ...mine.map((x) => toRef(x.ref))];
+        for (const x of mine) taken.add(refKey(x.ref));
+      }
     }
     for (const r of readCounts(doc, counts, p)) {
       raws.push(r);

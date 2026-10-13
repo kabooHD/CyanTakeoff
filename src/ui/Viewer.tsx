@@ -26,6 +26,8 @@ export const viewerApi = {
   fitPage: () => {},
   fitWidth: () => {},
   zoomBy: (_f: number) => {},
+  /** Scroll so page point `p` is in the middle of the view. */
+  centerOn: (_p: Pt) => {},
 };
 
 type Draft = { tool: ToolId; points: Pt[]; cursor: Pt | null; dragFrom?: { x: number; y: number }; target?: string };
@@ -127,7 +129,13 @@ export function Viewer({ doc }: { doc: DocState }) {
     viewerApi.fitPage = fitPage;
     viewerApi.fitWidth = fitWidth;
     viewerApi.zoomBy = (f) => zoomAt(f);
-  }, [fitPage, fitWidth, zoomAt]);
+    viewerApi.centerOn = (p) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      el.scrollLeft = left + p.x * zoom - el.clientWidth / 2;
+      el.scrollTop = top + p.y * zoom - el.clientHeight / 2;
+    };
+  }, [fitPage, fitWidth, zoomAt, left, top, zoom]);
 
   useEffect(() => { if (!doc.zoom) fitPage(); }, [doc.zoom, fitPage]);
 
@@ -831,6 +839,9 @@ export function Viewer({ doc }: { doc: DocState }) {
         { sep: true },
         { label: 'Copy', shortcut: 'Ctrl+C', action: () => s.copy() },
         { label: 'Delete', shortcut: 'Del', action: () => s.deleteMarkups(ids), disabled: !!hit.locked },
+        { label: 'Reply', action: () => { s.setPanels({ markupsList: true }); useApp.setState({ replyTo: hit.id }); } },
+        { label: hit.checked ? 'Uncheck' : 'Check', action: () => s.updateMarkups(ids, () => ({ checked: !hit.checked || undefined })) },
+        { label: 'Clear All Checkmarks', action: () => s.updateMarkups(doc.markups.filter((x) => x.checked).map((x) => x.id), () => ({ checked: undefined })) },
         { label: 'Create Legend', action: () => {
           const sel = doc.markups.filter((m) => ids.includes(m.id) && m.type !== 'legend');
           useApp.setState({ legendKeys: [...new Set(sel.map(legendKey))] });

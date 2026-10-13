@@ -236,3 +236,22 @@ describe('Revu Spaces (/BSISpaces)', () => {
     expect(kids.size()).toBe(1); // one root: Level 1
   });
 });
+
+describe('replies', () => {
+  it('are saved as /Text annotations with /IRT and read back onto their markup', async () => {
+    const { savePdf } = await import('../src/pdf/save');
+    const bytes = readFileSync('tests/fixtures/revu/measure.pdf');
+    const first = importAnnotations(await PDFDocument.load(bytes, { updateMetadata: false }));
+    const identity = { convertToPdfPoint: (x: number, y: number) => [x, y] };
+    const pages = [{ index: 0, label: '', width: 0, height: 0, viewport: identity }] as never;
+    const markups = first.raws.map((r, i) => ({
+      ...r.markup, points: r.pdfPoints,
+      ...(i === 0 ? { replies: [{ id: 'r1', author: 'Sam', date: '2026-10-13T10:00:00.000Z', text: 'Checked on site' }], source: { ...r.markup.source!, dirty: true } } : {}),
+    }));
+    const out = await savePdf({ original: bytes, pages, markups, importedRefs: new Set(first.imported.flatMap((s) => [...s])), calibrations: first.pageScales, dirtyCalibrations: new Set() });
+    const again = importAnnotations(await PDFDocument.load(out));
+    const withReply = again.raws.find((r) => r.markup.replies?.length);
+    expect(withReply?.markup.replies?.[0]).toMatchObject({ author: 'Sam', text: 'Checked on site' });
+    expect(again.raws).toHaveLength(first.raws.length); // the reply is not a separate markup
+  });
+});

@@ -425,6 +425,7 @@ function ctData(m: Markup, P: Pt[]): CTData {
     rise: m.rise,
     custom: m.custom && Object.keys(m.custom).length ? m.custom : undefined,
     legend: m.legend,
+    checked: m.checked || undefined,
   };
 }
 
@@ -667,6 +668,17 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
     if (m.groupId) {
       if (!groupHead.has(m.groupId)) groupHead.set(m.groupId, built[0]);
       else pendingMembers.push({ ref: built[0], group: m.groupId });
+    }
+    // Replies: /Text annotations with /IRT to the markup, as other PDF apps write them.
+    const head = doc.context.lookup(built[0]) as PDFDict;
+    for (const r of m.replies ?? []) {
+      const rect = head.lookup(N('Rect'));
+      built.push(doc.context.register(doc.context.obj({
+        Type: 'Annot', Subtype: 'Text', IRT: built[0], RT: 'R', Rect: rect ?? [0, 0, 18, 18], F: 4 | 8 | 16, Name: 'Comment',
+        NM: PDFString.of(r.id), T: PDFHexString.fromText(r.author), Contents: PDFHexString.fromText(r.text),
+        M: PDFString.of(pdfDate(new Date(r.date))), CreationDate: PDFString.of(pdfDate(new Date(r.date))),
+        Subj: PDFHexString.fromText('Reply'),
+      })));
     }
     for (const ref of built) {
       (annots as PDFArray).push(ref);

@@ -114,6 +114,8 @@ export interface CustomColumn {
   includeInTotals?: boolean;
 }
 
+export interface Reply { id: string; author: string; date: string; text: string }
+
 export type MarkupStatus = 'None' | 'Accepted' | 'Rejected' | 'Cancelled' | 'Completed';
 
 export type LineStyle = 'solid' | 'dashed' | 'dotted';
@@ -165,6 +167,10 @@ export interface Markup {
   locked?: boolean;
   /** Legend settings (Legend markups). */
   legend?: import('./legend').LegendDef;
+  /** Replies to this markup (PDF: /Text annotations with /IRT to it). */
+  replies?: Reply[];
+  /** Markups List Checkmark column. */
+  checked?: boolean;
   /** Values of the document's custom columns, by column id. */
   custom?: Record<string, string | number | boolean>;
   /** Original PDF annotation reference when imported from the file. */

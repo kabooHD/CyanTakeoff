@@ -24,6 +24,12 @@ Clean-room notes from inspecting Revu-authored PDFs
   formats; `/D 100` means two decimals and `/FD true` drops trailing zeros.
 - Revu also adds `/TargetUnitConversion` and an annotation-level `/DepthUnit`.
 
+## Replies
+
+- Replies are standard `/Text` annotations with `/IRT` pointing at the
+  markup (reply type `/RT /R`, the default). CyanTakeoff shows them under
+  their markup and rewrites them with it.
+
 ## Groups
 
 - Markup groups use the same link as count groups: every member after the

@@ -302,3 +302,10 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
 .ml-columns-menu button:hover { background: var(--hover); }
 .ml-cell-input { width: 100%; min-width: 60px; border: 1px solid transparent; background: transparent; font: inherit; }
 .ml-cell-input:focus { border-color: var(--accent); background: #fff; }
+
+/* Markups List replies */
+.reply-row td { color: var(--muted); font-style: italic; background: var(--row-alt); }
+.reply-mark { padding-left: 14px; margin-right: 6px; }
+.reply-del { border: 0; background: none; cursor: pointer; color: var(--muted); padding: 0 4px; }
+.reply-input { width: calc(100% - 90px); font: inherit; font-style: normal; }
+.ml-table-wrap:focus { outline: none; }

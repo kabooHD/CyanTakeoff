@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
+import { viewerApi } from './Viewer';
+import { anchorOf } from '../model/spaces';
 import { useApp, useActiveDoc } from '../model/store';
 import type { CustomColumn, Markup, MarkupStatus } from '../model/types';
-import { allColumns, exportSummaryCsv, exportSummaryXlsx, type SummaryColumn } from './actions';
+import { allColumns, exportSummaryCsv, exportSummaryPdf, exportSummaryXlsx, type SummaryColumn } from './actions';
 import { ManageColumns } from './ManageColumns';
 import { Icon } from './icons';
 
@@ -9,7 +11,7 @@ const STATUSES: MarkupStatus[] = ['None', 'Accepted', 'Rejected', 'Cancelled', '
 const NO_TOTAL = new Set(['depth', 'angle', 'slope']);
 /** Columns that sort by creation date when values tie (Revu does this for Subject and page). */
 const TIE_BY_DATE = new Set(['subject', 'page']);
-const DEFAULT_HIDDEN = ['label', 'angle', 'depth', 'units', 'slope'];
+const DEFAULT_HIDDEN = ['label', 'angle', 'depth', 'units', 'slope', 'created', 'lock', 'pageIndex'];
 const LS = 'cyantakeoff:markups-list';
 
 interface Layout { order: string[]; hidden: string[] }
@@ -90,6 +92,22 @@ export function MarkupsList() {
     setLayout({ ...layout, order: next });
   };
 
+  /** Select a markup from the list and bring it into view (Revu). */
+  const goTo = (m: Markup, add = false) => {
+    if (doc && m.page !== doc.page) s.setPage(m.page);
+    s.select([m.id], add);
+    setTimeout(() => viewerApi.centerOn(anchorOf(m)), 60);
+  };
+  /** Up/Down arrows step through the list. */
+  const onListKey = (e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    if ((e.target as HTMLElement).closest('input, select, textarea')) return;
+    e.preventDefault(); e.stopPropagation();
+    const i = rows.findIndex((r) => sel.has(r.m.id));
+    const next = rows[Math.max(0, Math.min(rows.length - 1, i < 0 ? 0 : i + (e.key === 'ArrowDown' ? 1 : -1)))];
+    if (next) goTo(next.m);
+  };
+
   const distinct = (key: string) => [...new Set(all.map((r) => String(r.v[key])))].filter((x) => x !== '').sort();
 
   return (
@@ -129,13 +147,14 @@ export function MarkupsList() {
           {exportOpen && (
             <div className="ml-columns-menu right" onMouseLeave={() => setExportOpen(false)}>
               <button onClick={() => { setExportOpen(false); exportSummaryXlsx(rows.map((r) => r.m), columns); }}>Excel (.xlsx)</button>
+              <button onClick={() => { setExportOpen(false); exportSummaryPdf(rows.map((r) => r.m), columns); }}>PDF report</button>
               <button onClick={() => { setExportOpen(false); exportSummaryCsv(rows.map((r) => r.m), columns); }}>CSV</button>
             </div>
           )}
         </span>
         <button onClick={() => s.setPanels({ markupsList: false })} title="Close"><Icon name="close" size={12} /></button>
       </div>
-      <div className="ml-table-wrap">
+      <div className="ml-table-wrap" tabIndex={0} onKeyDown={onListKey}>
         <table className="ml-table">
           <thead>
             <tr>
@@ -167,14 +186,16 @@ export function MarkupsList() {
           </thead>
           <tbody>
             {rows.map(({ m, v }) => (
-              <tr key={m.id} className={sel.has(m.id) ? 'selected' : ''}
-                onClick={(e) => {
-                  if (doc && m.page !== doc.page) s.setPage(m.page);
-                  s.select([m.id], e.ctrlKey || e.metaKey);
-                }}>
+              <Fragment key={m.id}>
+              <tr className={sel.has(m.id) ? 'selected' : ''}
+                onClick={(e) => goTo(m, e.ctrlKey || e.metaKey)}>
                 {columns.map((c) => (
                   <td key={c.key} className={c.numeric ? 'num' : ''}>
                     {c.key === 'color' ? <span className="color-chip" style={{ background: m.style.color }} />
+                      : c.key === 'checkmark' ? <input type="checkbox" aria-label="Checkmark" checked={!!m.checked} onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => s.updateMarkups([m.id], () => ({ checked: e.target.checked || undefined }))} />
+                      : c.key === 'lock' ? <input type="checkbox" aria-label="Lock" checked={!!m.locked} onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => s.updateMarkups([m.id], () => ({ locked: e.target.checked || undefined }))} />
                       : c.key === 'status' ? (
                         <select value={m.status} onClick={(e) => e.stopPropagation()}
                           onChange={(e) => s.updateMarkups([m.id], () => ({ status: e.target.value as MarkupStatus }))}>
@@ -185,6 +206,34 @@ export function MarkupsList() {
                   </td>
                 ))}
               </tr>
+              {(m.replies ?? []).map((r) => (
+                <tr key={r.id} className="reply-row">
+                  {columns.map((c, i) => (
+                    <td key={c.key}>
+                      {i === 0 ? <><span className="reply-mark">↳ Reply</span>
+                        <button className="reply-del" title="Delete reply" onClick={() => s.updateMarkups([m.id], (x) => ({ replies: x.replies!.filter((y) => y.id !== r.id) }))}>×</button></>
+                        : c.key === 'author' ? r.author : c.key === 'date' || c.key === 'created' ? new Date(r.date).toLocaleString() : c.key === 'comment' ? r.text : ''}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {s.replyTo === m.id && (
+                <tr className="reply-row">
+                  <td colSpan={columns.length}>
+                    <span className="reply-mark">↳ Reply</span>
+                    <input autoFocus aria-label="Reply" className="reply-input" placeholder="Type a reply and press Enter"
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        const t = (e.target as HTMLInputElement).value.trim();
+                        if (e.key === 'Enter' && t) {
+                          s.updateMarkups([m.id], (x) => ({ replies: [...(x.replies ?? []), { id: crypto.randomUUID(), author: s.author, date: new Date().toISOString(), text: t }] }));
+                          useApp.setState({ replyTo: null });
+                        } else if (e.key === 'Escape') useApp.setState({ replyTo: null });
+                      }} onBlur={() => useApp.setState({ replyTo: null })} />
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             ))}
           </tbody>
           {rows.length > 0 && (

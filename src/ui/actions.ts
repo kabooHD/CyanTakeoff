@@ -4,6 +4,7 @@ import { areaLabel, measure, unitLabel, volumeLabel } from '../model/measure';
 import type { CustomColumn, Markup } from '../model/types';
 import { displayValue, isNumericColumn, numericValue } from '../model/columns';
 import { buildXlsx } from '../model/xlsx';
+import { buildSummaryPdf } from '../pdf/summary';
 
 type Picker = (o: unknown) => Promise<FileSystemFileHandle[]>;
 
@@ -70,9 +71,13 @@ export const SUMMARY_COLUMNS: SummaryColumn[] = [
   { key: 'page', label: 'Page Label', value: (m, d) => d.loaded.pages[m.page]?.label ?? m.page + 1 },
   { key: 'space', label: 'Space', value: (m, d) => spaceAt(d.spaces[m.page], anchorOf(m))?.title ?? '' },
   { key: 'label', label: 'Label', value: (m) => m.label },
-  { key: 'comment', label: 'Comments', value: (m) => m.comment || m.text || '' },
+  { key: 'comment', label: 'Comments', value: (m) => [m.comment || m.text || '', ...(m.replies ?? []).map((r) => `${r.author}: ${r.text}`)].filter(Boolean).join(' | ') },
   { key: 'author', label: 'Author', value: (m) => m.author },
   { key: 'date', label: 'Date', value: (m) => new Date(m.modified).toLocaleString() },
+  { key: 'created', label: 'Creation Date', value: (m) => new Date(m.created).toLocaleString() },
+  { key: 'checkmark', label: 'Checkmark', value: (m) => (m.checked ? '✓' : '') },
+  { key: 'lock', label: 'Lock', value: (m) => (m.locked ? 'Locked' : '') },
+  { key: 'pageIndex', label: 'Page Index', value: (m) => m.page + 1, numeric: true, noTotal: true },
   { key: 'status', label: 'Status', value: (m) => m.status },
   { key: 'color', label: 'Color', value: (m) => m.style.color },
   { key: 'measurement', label: 'Measurement', value: (m) => meas(m)?.text ?? '' },
@@ -137,6 +142,25 @@ export function exportSummaryXlsx(markups: Markup[], columns: SummaryColumn[]) {
   const bytes = buildXlsx('Markups', columns.map((c) => c.label), rows, totals);
   const url = URL.createObjectURL(new Blob([bytes as unknown as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
   const a = Object.assign(document.createElement('a'), { href: url, download: d.name.replace(/\.pdf$/i, '') + ' - Markups Summary.xlsx' });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/** Summary as a PDF report of the rows and columns shown. */
+export async function exportSummaryPdf(markups: Markup[], columns: SummaryColumn[]) {
+  const d = activeDoc();
+  if (!d) return;
+  const rows = markups.map((m) => columns.map((c) => c.value(m, d)));
+  const totals = columns.map((c, i) => (i === 0 ? 'Total'
+    : c.numeric && !c.noTotal && !['depth', 'angle', 'slope'].includes(c.key)
+      ? Math.round(rows.reduce((t, r) => t + (Number(String(r[i]).replace(/[^0-9.eE+-]/g, '')) || 0), 0) * 100) / 100 : ''));
+  const bytes = await buildSummaryPdf({
+    title: `Markups Summary: ${d.name}`,
+    subtitle: `${markups.length} markup${markups.length === 1 ? '' : 's'}, ${new Date().toLocaleString()}, CyanTakeoff`,
+    header: columns.map((c) => c.label), rows, totals, numeric: columns.map((c) => !!c.numeric),
+  });
+  const url = URL.createObjectURL(new Blob([bytes as unknown as BlobPart], { type: 'application/pdf' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: d.name.replace(/\.pdf$/i, '') + ' - Markups Summary.pdf' });
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
