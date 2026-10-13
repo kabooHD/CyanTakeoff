@@ -210,6 +210,8 @@ function Properties() {
       return <p className="muted pad">Select a markup to view and edit its properties, or choose a markup tool to set its defaults.</p>;
     }
     const type = s.tool as MarkupType;
+    // Tools that draw no markup of their own (form fields, viewports, lasso...) have no style defaults.
+    if (!s.toolDefaults[type]) return <p className="muted pad">{t.name}: no style properties. Select a markup to view and edit its properties.</p>;
     return (
       <div className="props">
         <div className="prop-title">{t.name} — tool defaults</div>

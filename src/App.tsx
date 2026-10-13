@@ -32,6 +32,7 @@ export function App() {
   const doc = useActiveDoc();
   const split = useApp((st) => st.split);
   const docs = useApp((st) => st.docs);
+  const busy = useApp((st) => st.busy);
   const [dialog, setDialog] = useState<'shortcuts' | 'about' | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
@@ -39,6 +40,8 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       if (isEditable(e.target)) return;
       const s = useApp.getState();
+      // Saving or a page operation is in progress: edits now would be lost when it finishes.
+      if (s.busy) { e.preventDefault(); return; }
       const d = activeDoc();
       const combo = resolveCombo(comboFromEvent(e), useApp.getState().customKeys);
       if (!combo) return;
@@ -177,6 +180,7 @@ export function App() {
         e.preventDefault(); setDragOver(false);
         for (const f of Array.from(e.dataTransfer.files)) if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') await openFileObject(f);
       }}>
+      {busy && <div className="busy-overlay" aria-busy="true" onPointerDownCapture={(e) => { e.preventDefault(); e.stopPropagation(); }} />}
       <MenuBar onShortcuts={() => setDialog('shortcuts')} onAbout={() => setDialog('about')} />
       <Toolbar />
       <div className="workspace">

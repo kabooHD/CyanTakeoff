@@ -810,27 +810,38 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForFunction(() => /\d+ results?/.test(document.querySelector('.search-panel')?.textContent ?? ''));
   const pagesWithHits = await page.locator('.search-hit .muted').allInnerTexts();
   assert(!pagesWithHits.includes('A-101'), `redacted text is gone from A-101 (hits on: ${pagesWithHits.join(', ') || 'none'})`);
+  // Only what was under the mark is gone: the rest of A-101 is still real, searchable text (no OCR needed).
+  await page.getByLabel('Search text').fill('FLOOR PLAN');
+  await page.getByLabel('Search text').press('Enter');
+  await page.waitForFunction(() => /\d+ results?/.test(document.querySelector('.search-panel')?.textContent ?? ''));
+  const keptHits = await page.locator('.search-hit .muted').allInnerTexts();
+  assert(keptHits.includes('A-101'), `text outside the redaction stays searchable on A-101 (hits on: ${keptHits.join(', ')})`);
+  assert(/\d+ character\(s\)/.test(await page.locator('.statusbar').innerText()) && !/replaced by an image/.test(await page.locator('.statusbar').innerText()), 'redaction removed the characters without rasterising the page');
   await page.locator('.ml-table-wrap').focus();
   await page.keyboard.press('Alt+1');
   await page.keyboard.press('Home');
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `${OUT}/16-redacted.png` });
 
-  // OCR the now image-only A-101: its text becomes searchable again.
+  // OCR an image-only PDF (the Overlay output): its text becomes searchable. English + French data both load.
+  await page.locator('.doc-tab', { hasText: 'Overlay' }).click();
+  await page.waitForTimeout(800);
   await page.keyboard.press('Control+Shift+O');
   const od = page.getByRole('dialog', { name: 'OCR' });
   await od.getByLabel('Page range').selectOption('current');
+  await od.getByLabel('French').check();
   await od.getByRole('button', { name: 'OK' }).click();
   await page.waitForFunction(() => /OCR: \d+ word/.test(document.querySelector('.statusbar')?.textContent ?? '') || /OCR failed/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 240000 });
   const ocrStatus = await page.locator('.statusbar').innerText();
   assert(/OCR: \d+ word/.test(ocrStatus), `OCR recognised text (${ocrStatus.match(/OCR[^\n]*/)?.[0]})`);
   await page.keyboard.press('Control+F');
-  await page.getByLabel('Search text').fill('FLOOR PLAN');
+  await page.getByLabel('Search text').fill('FLOOR');
   await page.getByLabel('Search text').press('Enter');
   await page.waitForFunction(() => /\d+ results?/.test(document.querySelector('.search-panel')?.textContent ?? ''));
+  await page.waitForTimeout(500);
   const ocrHits = await page.locator('.search-hit .muted').allInnerTexts();
 
-  assert(ocrHits.includes('A-101'), `OCR text is searchable on A-101 (hits on: ${ocrHits.join(', ')})`);
+  assert(ocrHits.includes('1') && !ocrHits.includes('A-101'), `OCR text is searchable in the scanned overlay (hits on: ${ocrHits.join(', ')})`);
   await page.locator('.ml-table-wrap').focus();
   await page.keyboard.press('Alt+1');
 
@@ -874,6 +885,9 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.waitForTimeout(400);
   };
   await tool('Text Field');
+  await page.keyboard.press('Alt+P'); // Properties panel with a form tool active (it has no style defaults)
+  assert((await page.locator('.side-right + *, .panel').allInnerTexts()).join(' ').includes('Text Field: no style properties'), 'Properties shows no style for a form field tool');
+  await page.keyboard.press('Alt+U');
   await drag(0.1, 0.8, 0.5, 0.84);
   let nf = page.getByRole('dialog', { name: 'New Text Field' });
   await nf.getByLabel('Field name').fill('Remarks');
@@ -934,6 +948,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const sv = sdoc.getForm().getField('Signature1').acroField.dict.lookup(PDFName.of('V'));
   const br = sv.lookup(PDFName.of('ByteRange')).asArray().map((x) => x.asNumber());
   assert(br[2] + br[3] === sb.length, 'the saved file is signed over its whole length');
+  await page.waitForFunction(() => /Saved form\.pdf/.test(document.querySelector('.statusbar')?.textContent ?? ''));
   // A markup added after signing is saved as a new revision: the signature stays valid.
   await page.keyboard.press('r');
   { const b = await svg.boundingBox(); await page.mouse.move(b.x + b.width * 0.6, b.y + b.height * 0.3); await page.mouse.down(); await page.mouse.move(b.x + b.width * 0.7, b.y + b.height * 0.35, { steps: 4 }); await page.mouse.up(); }

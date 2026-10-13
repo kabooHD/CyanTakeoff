@@ -91,8 +91,9 @@ field creation (Tools > field tools, X = signature field, Forms Editor
 Ctrl+Shift+F), image
 signatures (draw/type, reusable), digital signatures (src/pdf/sign.ts:
 .pfx/.p12, PKCS#7 detached, incremental updates in src/pdf/incremental.ts;
-Signatures panel Alt+4), redaction (mark area/text, apply =
-page rasterised), OCR (tesseract.js, assets served from /ocr/, invisible text);
+Signatures panel Alt+4), redaction (mark area/text; apply removes the
+content under the marks: src/pdf/redactContent.ts), OCR (tesseract.js,
+7 Latin-script languages, assets served from /ocr/, invisible text);
 length, polylength, area, perimeter, volume, count, angle, radius, diameter;
 cutouts (polygon/ellipse, Revu fuse/trim rules); Dynamic Fill;
 separate X/Y scales; 3-point radius; viewports (regions with their own scale, Revu
@@ -110,4 +111,5 @@ Next (from `docs/PLAN.md`):
 Known gaps: Revu cutout storage unknown (ours in CTData); curved segments
 on polygons/cutouts (Ctrl+drag) not supported; vector Compare ignores
 colour/lineweight-only changes; signatures are not checked against a
-trust list and have no timestamps; applying redactions rasterises the page; OCR is English only.
+trust list and have no timestamps; OCR languages limited to Latin scripts
+(the text layer is WinAnsi).

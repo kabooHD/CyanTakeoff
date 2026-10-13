@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import { readFileSync } from 'node:fs';
 
 /**
- * OCR assets (tesseract.js worker, LSTM cores, English data) are served from
+ * OCR assets (tesseract.js worker, LSTM cores, language data) are served from
  * the app itself under /ocr/ instead of a CDN, so self-hosted installs work
  * offline. They are only downloaded when someone runs OCR.
  */
@@ -12,7 +12,10 @@ const OCR_FILES: Record<string, string> = {
   'ocr/core/tesseract-core-lstm.wasm.js': 'node_modules/tesseract.js-core/tesseract-core-lstm.wasm.js',
   'ocr/core/tesseract-core-simd-lstm.wasm.js': 'node_modules/tesseract.js-core/tesseract-core-simd-lstm.wasm.js',
   'ocr/core/tesseract-core-relaxedsimd-lstm.wasm.js': 'node_modules/tesseract.js-core/tesseract-core-relaxedsimd-lstm.wasm.js',
-  'ocr/lang/eng.traineddata.gz': 'node_modules/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz',
+  // Latin-script languages (the invisible text layer is written in WinAnsi); keep in step with OCR_LANGUAGES in src/ui/ocr.ts.
+  ...Object.fromEntries(['eng', 'fra', 'deu', 'spa', 'ita', 'por', 'nld'].map((l) => [
+    `ocr/lang/${l}.traineddata.gz`, `node_modules/@tesseract.js-data/${l}/4.0.0_best_int/${l}.traineddata.gz`,
+  ])),
 };
 
 function ocrAssets(): Plugin {

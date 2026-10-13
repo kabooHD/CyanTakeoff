@@ -127,8 +127,17 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
   browser), and does not add timestamps (no TSA).
 - Redaction: Mark for Redaction (Shift+R, area), Mark Text for Redaction
   (Shift+K), Apply Redactions (Shift+A, after confirmation) removes the
-  content underneath for good.
+  content underneath for good and paints the areas black. Ours edits the
+  page content (src/pdf/redactContent.ts): glyphs touching a mark are
+  removed (the text around them keeps its place), lines are cut and fills
+  have the area subtracted, image pixels under a mark are blacked out (the
+  image is re-encoded), nested drawings are redacted too, inline images and
+  shadings under a mark are removed. The rest of the page stays vector and
+  searchable. A page whose content cannot be parsed falls back to an image.
 - OCR (Ctrl+Shift+O): makes scanned pages searchable (invisible text).
+  Languages: English, French, German, Spanish, Italian, Portuguese, Dutch
+  (several at once); their data is served by the app and only downloaded
+  when used.
 
 - Forms: field tools (Text Field, Check Box, Radio Button, Dropdown, List
   Box, Signature Field; Revu default shortcut X adds a signature field):

@@ -353,3 +353,5 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
 .sig-title { display: flex; gap: 6px; align-items: center; }
 .sig-valid .sig-badge { color: #2e7d32; }
 .sig-invalid .sig-badge { color: #c62828; }
+.ocr-langs { flex-wrap: wrap; } .ocr-langs label { margin-right: 8px; }
+.busy-overlay { position: fixed; inset: 0; z-index: 900; cursor: progress; background: transparent; }

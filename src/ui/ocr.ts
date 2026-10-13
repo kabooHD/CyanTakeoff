@@ -4,10 +4,16 @@
 import { StandardFonts, type PDFDocument } from 'pdf-lib';
 import type { DocState } from '../model/store';
 
+/** Languages whose data is served under /ocr/lang (see vite.config.ts). */
+export const OCR_LANGUAGES: { code: string; name: string }[] = [
+  { code: 'eng', name: 'English' }, { code: 'fra', name: 'French' }, { code: 'deu', name: 'German' }, { code: 'spa', name: 'Spanish' },
+  { code: 'ita', name: 'Italian' }, { code: 'por', name: 'Portuguese' }, { code: 'nld', name: 'Dutch' },
+];
+
 export interface OcrWord { text: string; x0: number; y0: number; x1: number; y1: number; confidence: number }
 
 /** Recognise one page; word boxes in PDF space. */
-async function recognisePage(d: DocState, pageIdx: number, onProgress: (p: number) => void): Promise<OcrWord[]> {
+async function recognisePage(d: DocState, pageIdx: number, langs: string[], onProgress: (p: number) => void): Promise<OcrWord[]> {
   const page = await d.loaded.pdf.getPage(pageIdx + 1);
   const base = page.getViewport({ scale: 1, rotation: 0 });
   // About 300 dpi, capped for large sheets.
@@ -19,7 +25,8 @@ async function recognisePage(d: DocState, pageIdx: number, onProgress: (p: numbe
   await page.render({ canvas, viewport: vp, annotationMode: 0 }).promise;
   const { createWorker } = await import('tesseract.js');
   const base_ = import.meta.env.BASE_URL;
-  const worker = await createWorker('eng', 1, {
+  // Several languages at once ('eng+fra'): each language's data downloads once, when first used.
+  const worker = await createWorker(langs.length ? langs.join('+') : 'eng', 1, {
     workerPath: `${base_}ocr/worker.min.js`, corePath: `${base_}ocr/core`, langPath: `${base_}ocr/lang`,
     logger: (m: { status: string; progress: number }) => { if (m.status === 'recognizing text') onProgress(m.progress); },
   });
@@ -62,11 +69,11 @@ export async function addTextLayer(lib: PDFDocument, pageIdx: number, words: Ocr
 }
 
 /** OCR the given pages; returns the words per page. */
-export async function ocrPages(d: DocState, pages: number[], onProgress: (msg: string) => void): Promise<Map<number, OcrWord[]>> {
+export async function ocrPages(d: DocState, pages: number[], onProgress: (msg: string) => void, langs: string[] = ['eng']): Promise<Map<number, OcrWord[]>> {
   const out = new Map<number, OcrWord[]>();
   for (const [i, p] of pages.entries()) {
     onProgress(`OCR: page ${i + 1} of ${pages.length}…`);
-    out.set(p, await recognisePage(d, p, (f) => onProgress(`OCR: page ${i + 1} of ${pages.length}, ${Math.round(f * 100)}%`)));
+    out.set(p, await recognisePage(d, p, langs, (f) => onProgress(`OCR: page ${i + 1} of ${pages.length}, ${Math.round(f * 100)}%`)));
   }
   return out;
 }

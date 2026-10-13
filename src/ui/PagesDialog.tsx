@@ -10,7 +10,7 @@ import {
 } from '../pdf/pages';
 import { pickFile } from './toolActions';
 import { openPdf } from '../pdf/document';
-import { addTextLayer, ocrPages } from './ocr';
+import { OCR_LANGUAGES, addTextLayer, ocrPages } from './ocr';
 import { detectSheetNumbers } from './Sheets';
 import type { DocState } from '../model/store';
 
@@ -50,6 +50,9 @@ function PagesForm({ op }: { op: PagesOp }) {
   const [delAfter, setDelAfter] = useState(false);
   const [keep, setKeep] = useState(true);
   const [every, setEvery] = useState('1');
+  const [langs, setLangs] = useState<string[]>(() => {
+    try { const l = JSON.parse(localStorage.getItem('cyantakeoff:ocr-langs') ?? '[]'); return Array.isArray(l) && l.length ? l : ['eng']; } catch { return ['eng']; }
+  });
   const [file, setFile] = useState<{ name: string; doc: PDFDocument; bytes: Uint8Array } | null>(null);
   const [appendNew, setAppendNew] = useState(true);
   if (!doc) return null;
@@ -99,7 +102,8 @@ function PagesForm({ op }: { op: PagesOp }) {
         break;
       case 'ocr': {
         try {
-          const words = await ocrPages(doc, pages, (msg) => s.setStatus(msg));
+          try { localStorage.setItem('cyantakeoff:ocr-langs', JSON.stringify(langs)); } catch { /* storage unavailable */ }
+          const words = await ocrPages(doc, pages, (msg) => s.setStatus(msg), langs);
           const total = [...words.values()].reduce((t, ls) => t + ls.reduce((n, l) => n + l.text.split(' ').length, 0), 0);
           await s.transformDoc(async (lib) => { for (const [p, w] of words) await addTextLayer(lib, p, w); }, `OCR: ${total} word(s) recognised on ${pages.length} page(s); the text is now searchable`);
         } catch (e) { s.setStatus(`OCR failed: ${(e as Error).message}`); }
@@ -163,7 +167,17 @@ function PagesForm({ op }: { op: PagesOp }) {
           {op === 'insert' && <>{fileRow}{position}</>}
           {op === 'insert-blank' && <>{position}<div className="form-row"><span>Count</span><input aria-label="Count" type="number" min={1} value={count} onChange={(e) => setCount(e.target.value)} style={{ width: 60 }} /></div></>}
           {(op === 'delete' || op === 'extract' || op === 'rotate' || op === 'flatten' || op === 'ocr') && range_}
-          {op === 'ocr' && <p className="muted small">Recognises text on scanned pages (English) and adds it as invisible text, so Search, text markups and copying work. Runs in your browser; large sheets take a while.</p>}
+          {op === 'ocr' && (
+            <>
+              <div className="form-row ocr-langs"><span>Languages</span>
+                {OCR_LANGUAGES.map((l) => (
+                  <label key={l.code}><input type="checkbox" checked={langs.includes(l.code)}
+                    onChange={(e) => setLangs(e.target.checked ? [...langs, l.code] : langs.filter((x) => x !== l.code))} /> {l.name}</label>
+                ))}
+              </div>
+              <p className="muted small">Recognises text on scanned pages and adds it as invisible text, so Search, text markups and copying work. Pick the languages on the drawings (fewer is faster). Runs in your browser; large sheets take a while.</p>
+            </>
+          )}
           {op === 'rotate' && (
             <div className="form-row"><span>Direction</span>
               <select aria-label="Direction" value={dir} onChange={(e) => setDir(e.target.value as '90')}>
@@ -180,7 +194,7 @@ function PagesForm({ op }: { op: PagesOp }) {
           {op === 'split' && <div className="form-row"><span>Every</span><input aria-label="Pages per file" type="number" min={1} value={every} onChange={(e) => setEvery(e.target.value)} style={{ width: 60 }} /> page(s) per file</div>}
           <div className="modal-actions">
             <span className="spacer" />
-            <button className="primary" disabled={!ready || (op !== 'insert' && op !== 'insert-blank' && op !== 'split' && op !== 'slip-sheet' && !pages.length)} onClick={ok}>OK</button>
+            <button className="primary" disabled={!ready || (op === 'ocr' && !langs.length) || (op !== 'insert' && op !== 'insert-blank' && op !== 'split' && op !== 'slip-sheet' && !pages.length)} onClick={ok}>OK</button>
             <button onClick={close}>Cancel</button>
           </div>
         </div>

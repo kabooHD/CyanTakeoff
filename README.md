@@ -30,8 +30,9 @@ shortcuts, and markups saved as standard PDF annotations.
   rotate, reorder), combine, split, flatten, Compare and Overlay, page
   labels from sheet numbers, Batch Link, Slip Sheet, form filling and
   field creation, image signatures, digital signatures with your own
-  certificate (.pfx/.p12, checked in the Signatures panel), redaction and
-  OCR.
+  certificate (.pfx/.p12, checked in the Signatures panel), true
+  redaction (removes the text, linework and image pixels under the marks)
+  and OCR in seven languages.
 - **Files:** everything is saved as standard PDF annotations the way Revu
   writes them; files are opened and saved in the browser, nothing uploaded.
 
