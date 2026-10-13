@@ -152,7 +152,7 @@ filling, image signatures, redaction and OCR.
 ### Now: closing the remaining gaps (before the public test)
 - [x] View modes: Single Page, Continuous, Side by Side, Continuous Side by
   Side (Ctrl+4 to Ctrl+7), Rotate View (Ctrl+Shift+Plus/Minus)
-- [ ] Undo across page operations
+- [x] Undo across page operations (the last 10 per document)
 - [ ] Compare: alignment points and vector comparison
 - [ ] Forms editor: create, rename and delete fields
 - [ ] Certificate digital signatures (sign with a .pfx/.p12, verify)

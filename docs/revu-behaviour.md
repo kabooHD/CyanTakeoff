@@ -81,6 +81,8 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
   thumbnails); with the pointer outside the view, the page in the middle.
 
 ## Page operations (Document menu)
+- Page operations can be undone and redone (Ctrl+Z / Ctrl+Y) like markup
+  edits. Ours keeps the last 10 per document (each holds a copy of the file).
 - Insert Pages (Ctrl+Shift+I), Insert Blank Page (Ctrl+Shift+N), Delete
   (Ctrl+Shift+D), Extract (Ctrl+Shift+X, optionally deleting), Replace
   (Ctrl+Shift+Y), Rotate Pages (Ctrl+Shift+R; current page Shift+Alt+Plus/

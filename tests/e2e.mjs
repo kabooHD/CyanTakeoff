@@ -632,6 +632,18 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.getByRole('dialog', { name: 'Delete Pages' }).getByRole('button', { name: 'OK' }).click();
   await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n})`), n0);
   assert(await pagesOf() === n0, 'Delete Pages removes it again');
+  const waitPages = (n) => page.waitForFunction((k) => document.querySelector('.statusbar')?.textContent?.includes(`of ${k})`), n);
+  await page.keyboard.press('Control+z');
+  await waitPages(n0 + 1);
+  assert(await pagesOf() === n0 + 1, 'Undo brings the deleted page back');
+  await page.keyboard.press('Control+z');
+  await waitPages(n0);
+  assert(await page.locator('.ml-table tbody tr:not(.reply-row)').count() === markupsBefore, 'undoing the insert keeps the markups');
+  await page.keyboard.press('Control+y');
+  await waitPages(n0 + 1);
+  await page.keyboard.press('Control+y');
+  await waitPages(n0);
+  assert(await pagesOf() === n0, 'Redo repeats the page operations');
   await page.keyboard.press('Home');
   await page.waitForTimeout(500);
   const legendBox = async () => page.locator('.markup-layer g.legend > rect').first().evaluate((r) => { const b = r.getBBox(); return [b.x, b.y, b.width, b.height].map(Math.round).join(','); });

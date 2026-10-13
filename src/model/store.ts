@@ -18,8 +18,20 @@ export type RightPanel = 'properties' | 'toolchest' | 'measurements' | null;
 
 /** Page scales and viewports, for undoing scale changes. */
 export interface ScaleSnapshot { markups: Markup[]; calibrations: (Scale | null)[]; viewports: Viewport[][]; spaces?: Space[][] }
-/** An undo step: markups only, or markups with page scales and viewports. */
-export type UndoEntry = Markup[] | ScaleSnapshot;
+/** The whole document before a page operation (insert, delete, rotate...), for undoing it. */
+export interface DocSnapshot { doc: Pick<DocState, typeof DOC_KEYS[number]> }
+const DOC_KEYS = ['bytes', 'loaded', 'markups', 'importedRefs', 'calibrations', 'viewports', 'dirtyCalibrations',
+  'spaces', 'dirtySpaces', 'columns', 'dirtyColumns', 'formValues', 'page'] as const;
+/** Page operations kept in the undo history per document (each holds a copy of the file). */
+const MAX_DOC_UNDO = 10;
+/** An undo step: markups only, markups with page scales and viewports, or the whole document. */
+export type UndoEntry = Markup[] | ScaleSnapshot | DocSnapshot;
+const docSnapshot = (d: DocState): DocSnapshot => ({ doc: Object.fromEntries(DOC_KEYS.map((k) => [k, d[k]])) as DocSnapshot['doc'] });
+const isDocSnap = (e: UndoEntry): e is DocSnapshot => !Array.isArray(e) && 'doc' in e;
+/** Free the pdf.js documents held by undo entries that are being dropped. */
+function dropEntries(entries: UndoEntry[], keep: DocState) {
+  for (const e of entries) if (isDocSnap(e) && e.doc.loaded !== keep.loaded) e.doc.loaded.pdf.loadingTask.destroy();
+}
 
 export interface DocState {
   id: string;
@@ -246,6 +258,7 @@ export function serialize(d: DocState): Promise<Uint8Array> {
 /** State after applying an undo entry, plus the entry that reverses it. */
 function restore(d: DocState, e: UndoEntry): [Partial<DocState>, UndoEntry] {
   if (Array.isArray(e)) return [{ markups: e }, d.markups];
+  if (isDocSnap(e)) return [{ ...e.doc, page: Math.min(d.page, e.doc.loaded.pages.length - 1) }, docSnapshot(d)];
   const dirtyCalibrations = new Set(d.dirtyCalibrations);
   const dirtySpaces = new Set(d.dirtySpaces);
   const spaces = e.spaces ?? d.spaces;
@@ -357,6 +370,7 @@ export const useApp = create<AppState>((set, get) => {
       const sp = get().split;
       if (sp && (sp.docId === id || sp.mainDocId === id)) set({ split: null, activePane: 0 });
       d?.loaded.pdf.loadingTask.destroy();
+      if (d) dropEntries([...d.undo, ...d.redo], d);
       set((s) => {
         const docs = s.docs.filter((x) => x.id !== id);
         return { docs, activeId: s.activeId === id ? docs[docs.length - 1]?.id ?? null : s.activeId };
@@ -574,14 +588,22 @@ export const useApp = create<AppState>((set, get) => {
         await fn(lib);
         const bytes = await lib.save({ useObjectStreams: false });
         const loaded = await openPdf(bytes);
+        // The old document goes on the undo stack (Revu undoes page operations too).
         const old = get().docs.find((x) => x.id === d.id)!;
-        old.loaded.pdf.loadingTask.destroy();
+        let undo = [...old.undo, docSnapshot(old)];
+        const snaps = undo.filter(isDocSnap);
+        if (snaps.length > MAX_DOC_UNDO) {
+          const drop = snaps[0];
+          undo = undo.slice(undo.indexOf(drop) + 1);
+          dropEntries([drop], old);
+        }
+        dropEntries(old.redo, old);
         set((st) => ({
           docs: st.docs.map((x) => x.id === d.id ? {
             ...x, bytes, loaded, markups: loaded.markups, importedRefs: loaded.importedRefs,
             calibrations: loaded.calibrations, viewports: loaded.viewports, dirtyCalibrations: new Set(),
             spaces: loaded.spaces, dirtySpaces: new Set(), columns: loaded.columns, dirtyColumns: false, formValues: {},
-            page: Math.max(0, Math.min(loaded.pages.length - 1, page ?? x.page)), selection: [], undo: [], redo: [], dirty: true,
+            page: Math.max(0, Math.min(loaded.pages.length - 1, page ?? x.page)), selection: [], undo, redo: [], dirty: true,
           } : x),
           status: done,
         }));
