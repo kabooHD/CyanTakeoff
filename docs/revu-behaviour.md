@@ -70,6 +70,12 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - CyanTakeoff: holes larger than ~0.5% of the room (columns, shafts) become
   cutouts on Area/Volume; small pockets (room labels) are ignored.
 
+## Measurement properties: slope, rise/drop, depth
+- Slope (Pitch x/12, Degree or Grade %) adjusts lengths and areas for a
+  sloped plane: sloped = plan × sqrt(1 + slope²).
+- Rise/Drop (length, polylength) is added to the length; Depth on lengths
+  gives wall area (length × depth). Depth and Rise/Drop are exclusive.
+
 ## Spaces (Alt+S)
 - Spaces panel: Add Space (drag a rectangle or click corners, close on the
   first point or Enter, then name it), Highlight toggle, Edit; per page

@@ -65,7 +65,8 @@ export const SUMMARY_COLUMNS: SummaryColumn[] = [
   { key: 'volume', label: 'Volume', value: (m) => round(meas(m)?.volume), numeric: true },
   { key: 'angle', label: 'Angle', value: (m) => round(meas(m)?.angle), numeric: true },
   { key: 'count', label: 'Count', value: (m) => meas(m)?.count ?? '', numeric: true },
-  { key: 'depth', label: 'Depth', value: (m) => (m.type === 'volume' ? m.depth ?? '' : ''), numeric: true },
+  { key: 'depth', label: 'Depth', value: (m) => m.depth ?? '', numeric: true },
+  { key: 'slope', label: 'Slope', value: (m) => (m.slope ? `${m.slope.value}${m.slope.unit === 'pitch' ? '/12' : m.slope.unit === 'degree' ? '°' : '%'}` : '') },
   { key: 'units', label: 'Units', value: (m) => unitsOf(m) },
 ];
 

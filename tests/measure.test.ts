@@ -180,3 +180,25 @@ describe('cutout rules (Revu)', async () => {
     expect('cutouts' in ok && ok.cutouts.length).toBe(2);
   });
 });
+
+describe('slope, rise/drop and wall area (Revu measurement properties)', async () => {
+  const { slopeFactor } = await import('../src/model/measure');
+  const scale = { factor: 1 / 72, unit: 'ft' as const, label: '1" = 1\'' };
+  const sq = [{ x: 0, y: 0 }, { x: 720, y: 0 }, { x: 720, y: 720 }, { x: 0, y: 720 }]; // 10 x 10 ft
+  it('slope factors for pitch, degree and grade', () => {
+    expect(slopeFactor({ unit: 'pitch', value: 12 })).toBeCloseTo(Math.SQRT2, 9);
+    expect(slopeFactor({ unit: 'degree', value: 45 })).toBeCloseTo(Math.SQRT2, 9);
+    expect(slopeFactor({ unit: 'grade', value: 100 })).toBeCloseTo(Math.SQRT2, 9);
+    expect(slopeFactor(undefined)).toBe(1);
+  });
+  it('a 6/12 roof increases area by sqrt(1 + 0.25)', () => {
+    expect(measure({ type: 'area', points: sq, scale, slope: { unit: 'pitch', value: 6 } })!.area).toBeCloseTo(100 * Math.sqrt(1.25), 6);
+  });
+  it('rise/drop adds to length; depth gives wall area', () => {
+    const line = [{ x: 0, y: 0 }, { x: 720, y: 0 }];
+    expect(measure({ type: 'polylength', points: line, scale, rise: 2.5 })!.length).toBeCloseTo(12.5, 9);
+    const wall = measure({ type: 'length', points: line, scale, depth: 9 })!;
+    expect(wall.length).toBeCloseTo(10, 9);
+    expect(wall.area).toBeCloseTo(90, 9);
+  });
+});

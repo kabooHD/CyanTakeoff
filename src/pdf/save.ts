@@ -378,6 +378,8 @@ function ctData(m: Markup, P: Pt[]): CTData {
     comment: measure(m) || m.type === 'cloudplus' || m.type === 'stamp' ? m.comment || undefined : undefined,
     text: m.type === 'stamp' || m.type === 'cloudplus' ? m.text : undefined,
     groupId: m.groupId,
+    slope: m.slope,
+    rise: m.rise,
   };
 }
 

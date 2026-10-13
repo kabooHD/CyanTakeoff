@@ -389,7 +389,14 @@ export function netArea(m: Pick<Markup, 'points' | 'cutouts'>): number {
   return Math.max(0, polygonArea(m.points) - (m.cutouts ?? []).reduce((t, c) => t + cutoutArea(c), 0));
 }
 
-export function measure(m: Pick<Markup, 'type' | 'points' | 'scale' | 'depth' | 'cutouts'>): Measurement | null {
+/** Ratio of sloped to plan length for a slope (1 when flat). */
+export function slopeFactor(slope: Markup['slope']): number {
+  if (!slope || !slope.value) return 1;
+  const t = slope.unit === 'pitch' ? slope.value / 12 : slope.unit === 'grade' ? slope.value / 100 : Math.tan((slope.value * Math.PI) / 180);
+  return Math.sqrt(1 + t * t);
+}
+
+export function measure(m: Pick<Markup, 'type' | 'points' | 'scale' | 'depth' | 'cutouts' | 'slope' | 'rise'>): Measurement | null {
   if (!MEASURE_TYPES.has(m.type)) return null;
   const s = m.scale ?? DEFAULT_SCALE;
   if (s.yFactor) {
@@ -406,16 +413,18 @@ export function measure(m: Pick<Markup, 'type' | 'points' | 'scale' | 'depth' | 
     case 'perimeter': {
       // Like Revu, a perimeter is the length of its segments as drawn; the
       // perimeter tool closes the shape by repeating the first point.
-      const length = pathLength(m.points) * f;
-      return { length, text: len(length) };
+      // Slope applies to the plan length; Rise/Drop is added (Revu). Depth gives wall area.
+      const length = pathLength(m.points) * f * slopeFactor(m.slope) + (m.type === 'dimension' ? 0 : m.rise ?? 0);
+      const area = m.depth && m.type !== 'dimension' ? length * m.depth : undefined;
+      return { length, area, text: len(length) };
     }
     case 'area': {
-      const area = netArea(m) * f * f;
+      const area = netArea(m) * f * f * slopeFactor(m.slope);
       const length = pathLength(m.points, true) * f;
       return { area, length, text: `${formatNumber(area, fmt.decimals, fmt.trim)} ${fmt.areaLabel}` };
     }
     case 'volume': {
-      const area = netArea(m) * f * f;
+      const area = netArea(m) * f * f * slopeFactor(m.slope);
       const volume = area * (m.depth ?? 0);
       return { area, volume, text: `${formatNumber(volume, fmt.decimals, fmt.trim)} ${fmt.volumeLabel}` };
     }

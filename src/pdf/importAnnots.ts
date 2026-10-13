@@ -34,6 +34,8 @@ export interface CTData {
   comment?: string; // measurement comments (/Contents holds the value, as in Revu)
   cutouts?: { kind: 'polygon' | 'ellipse'; points: number[] }[]; // PDF-space holes in an area/volume
   text?: string; // stamp label, Cloud+ text
+  slope?: Markup['slope'];
+  rise?: number;
   groupId?: string; // Revu-style markup group
 }
 
@@ -156,6 +158,8 @@ function baseMarkup(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number, 
     depth: ct?.depth ?? getNumber(doc, dict, 'Depth'),
     source: { ...toRef(ref), dirty: false },
     groupId: ct?.groupId,
+    slope: ct?.slope,
+    rise: ct?.rise,
     locked: ((getNumber(doc, dict, 'F') ?? 0) & 128) !== 0 || undefined,
   } satisfies Omit<Markup, 'points'>;
 }

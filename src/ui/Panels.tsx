@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp, useActiveDoc, type DocState } from '../model/store';
-import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, measure, precisionOf, unitLabel, withPrecision } from '../model/measure';
+import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, formatNumber, measure, precisionOf, unitLabel, withPrecision } from '../model/measure';
 import type { LineStyle, Markup, MarkupStyle, MarkupType, Scale, ToolPreset } from '../model/types';
 import { toolById } from '../tools/tools';
 import { Icon } from './icons';
@@ -197,11 +197,28 @@ function Properties() {
         <>
           <div className="prop-section">Measurement</div>
           <Row label="Scale"><input readOnly value={m.scale?.label ?? 'Not calibrated'} /></Row>
-          {m.type === 'volume' && (
+          {['volume', 'length', 'polylength', 'perimeter'].includes(m.type) && (
             <Row label={`Depth (${unitLabel(m.scale?.unit ?? 'ft')})`}>
-              <input type="number" step={0.01} value={m.depth ?? 0} onChange={(e) => upd(() => ({ depth: +e.target.value }))} />
+              <input type="number" step={0.01} aria-label="Depth" value={m.depth ?? 0}
+                onChange={(e) => upd(() => ({ depth: +e.target.value || (m.type === 'volume' ? 0 : undefined), ...(+e.target.value ? { rise: undefined } : {}) }))} />
             </Row>
           )}
+          {['length', 'polylength'].includes(m.type) && (
+            <Row label={`Rise/Drop (${unitLabel(m.scale?.unit ?? 'ft')})`}>
+              <input type="number" step={0.01} aria-label="Rise/Drop" value={m.rise ?? 0}
+                onChange={(e) => upd(() => ({ rise: +e.target.value || undefined, ...(+e.target.value ? { depth: undefined } : {}) }))} />
+            </Row>
+          )}
+          {['area', 'volume', 'length', 'polylength', 'perimeter'].includes(m.type) && (
+            <Row label="Slope">
+              <select aria-label="Slope unit" value={m.slope?.unit ?? 'pitch'} onChange={(e) => upd((x) => ({ slope: { unit: e.target.value as 'pitch', value: x.slope?.value ?? 0 } }))}>
+                <option value="pitch">Pitch (x/12)</option><option value="degree">Degree</option><option value="grade">Grade (%)</option>
+              </select>
+              <input type="number" step={0.5} aria-label="Slope" value={m.slope?.value ?? 0} style={{ width: 60 }}
+                onChange={(e) => upd((x) => ({ slope: +e.target.value ? { unit: x.slope?.unit ?? 'pitch', value: +e.target.value } : undefined }))} />
+            </Row>
+          )}
+          {meas.area !== undefined && m.type !== 'area' && m.type !== 'volume' && <Row label="Wall Area"><input readOnly value={formatNumber(meas.area, 2, true)} /></Row>}
           <Row label="Value"><input readOnly value={meas.text} /></Row>
         </>
       )}

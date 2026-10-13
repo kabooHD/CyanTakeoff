@@ -5,10 +5,10 @@ import { SUMMARY_COLUMNS, exportSummaryCsv, type SummaryColumn } from './actions
 import { Icon } from './icons';
 
 const STATUSES: MarkupStatus[] = ['None', 'Accepted', 'Rejected', 'Cancelled', 'Completed'];
-const NO_TOTAL = new Set(['depth', 'angle']);
+const NO_TOTAL = new Set(['depth', 'angle', 'slope']);
 /** Columns that sort by creation date when values tie (Revu does this for Subject and page). */
 const TIE_BY_DATE = new Set(['subject', 'page']);
-const DEFAULT_HIDDEN = ['label', 'angle', 'depth', 'units'];
+const DEFAULT_HIDDEN = ['label', 'angle', 'depth', 'units', 'slope'];
 const LS = 'cyantakeoff:markups-list';
 
 interface Layout { order: string[]; hidden: string[] }

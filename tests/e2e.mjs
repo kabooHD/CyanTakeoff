@@ -391,6 +391,15 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Shift+F'); await click(57, 34);
   await page.keyboard.press('k'); await drag([44, 26], [50, 21]); await click(52, 27); await page.keyboard.type('Check this'); await page.keyboard.press('Escape');
   await page.keyboard.press('Shift+C'); await click(44, 4); await click(54, 4); await click(49, 8);
+  // Rise/Drop on a length (Properties): 10 ft + 2 ft rise reads 12'-0"; then undone.
+  await page.keyboard.press('Shift+Alt+L'); await click(44, 33); await click(54, 33);
+  await page.locator('.side-right button[title="Properties"]').click();
+  await page.getByLabel('Rise/Drop').fill('2');
+  assert((await page.locator('.ml-table tbody').innerText()).includes(`12'-0"`), 'Rise/Drop adds to the length (12\'-0")');
+  await page.evaluate(() => (document.activeElement)?.blur?.());
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+Z'); await page.keyboard.press('Control+Z');
+  await page.locator('.side-right button[title="Measurements"]').click();
   await page.keyboard.press('Control+Shift+F8');
   await page.screenshot({ path: `${OUT}/09-markup-tools.png` });
   const list = await page.locator('.ml-table tbody').innerText();

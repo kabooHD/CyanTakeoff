@@ -128,8 +128,12 @@ export interface Markup {
   text?: string;
   /** Scale captured from the page when the measurement was made. */
   scale?: Scale;
-  /** Depth for volume, in scale units (ft or m). */
+  /** Depth in scale units (ft or m): volume, or wall area for lengths. */
   depth?: number;
+  /** Slope of the measured plane (Revu: Pitch x/12, Degree or Grade %). */
+  slope?: { unit: 'pitch' | 'degree' | 'grade'; value: number };
+  /** Rise/Drop added to a length, in scale units (piping, conduit). */
+  rise?: number;
   /** Holes cut out of an Area or Volume measurement. */
   cutouts?: Cutout[];
   /** Image markups (image, snapshot): a data: URL. */
