@@ -445,3 +445,12 @@ button.active { background: #d6e4fa; }
 .ql-filter { display: flex; gap: 2px; align-items: center; margin-bottom: 2px; }
 .ql-value { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .am-preview { margin: 0; padding-left: 20px; max-height: 160px; overflow: auto; font-size: 12px; }
+
+/* Header & Footer, Bates, Watermark */
+.stamp-dialog { width: min(820px, calc(100vw - 32px)); }
+.stamp-body { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+.stamp-body .scale-dialog { flex: 1; min-width: 320px; }
+.hf-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.hf-grid label { display: flex; flex-direction: column; gap: 2px; }
+.hf-grid textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 12px; }
+.stamp-preview { background: #f4f4f4; margin: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }

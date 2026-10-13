@@ -258,6 +258,16 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - With the Area or Volume tool, clicking a cutout converts it into its own
   measurement (Shift: all cutouts of that markup); the cutout stays.
 
+## Header & Footer, Bates, Watermark
+Header & Footer (Document menu, Batch for many files): left/centre/right
+text in the header and footer, with fields such as page number, page label,
+date, time, file name and Bates number; font, size, colour, margins, page
+range (e.g. skip the cover), preview. Bates numbering adds prefix, suffix,
+start number and digit padding (six or more digits is common). Watermarks
+add large faded text across pages. Ours writes all three as real page text
+tagged as pagination artifacts (so they print everywhere) and can remove
+what it added; Batch across many files: not yet.
+
 ## Quantity Link (Excel)
 Revu's Quantity Link is an Excel add-in: right-click a cell > Quantity Link
 > Create, choose the PDF, a total (length, area, volume, count…) and

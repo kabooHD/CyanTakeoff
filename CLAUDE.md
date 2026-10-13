@@ -94,7 +94,8 @@ styles and hatch patterns (src/model/lineStyles.ts, src/ui/LineStyles.tsx);
 spell check (F7, src/ui/Spell.tsx, nspell + dictionary-en served from /dict/);
 VisualSearch (src/model/visualSearch.ts matcher, src/ui/VisualSearch.tsx);
 Sequences (src/model/sequence.ts, src/ui/SequenceDialog.tsx); Quantity Link
-(src/ui/QuantityLink.tsx, cell writes in src/model/xlsxEdit.ts); CyanTakeoff (=Revu)
+(src/ui/QuantityLink.tsx, cell writes in src/model/xlsxEdit.ts); Header &
+Footer, Bates, Watermark (src/pdf/stamps.ts, src/ui/HeaderFooter.tsx); CyanTakeoff (=Revu)
 and Batch menus; form filling (AcroForm inputs saved into the form) and
 field creation (Tools > field tools, X = signature field, Forms Editor
 Ctrl+Shift+F), image

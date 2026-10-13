@@ -1560,6 +1560,42 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.screenshot({ path: `${OUT}/automark.png` });
 }
 
+// Watermark, Bates Numbering, Header & Footer: real page text, found by Search, removable.
+{
+  const menu = async (m, item) => {
+    await page.locator('.menubar-item > button', { hasText: new RegExp(`^${m}$`) }).click();
+    await page.getByRole('menuitem', { name: item, exact: true }).click();
+  };
+  const find = async (q) => {
+    await page.keyboard.press('Control+f');
+    const box = page.locator('[aria-label="Search text"]');
+    await box.fill(q);
+    await box.press('Enter');
+    await page.waitForTimeout(800);
+    const t = await page.locator('.search-panel .muted.small').first().innerText();
+    return Number(t.match(/(\d+) result/)?.[1] ?? 0);
+  };
+  await menu('Document', 'Watermark…');
+  await page.locator('[role=dialog][aria-label="Watermark"]').getByRole('button', { name: 'OK' }).click();
+  await page.getByText('Watermark added').waitFor({ timeout: 20000 });
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${OUT}/watermark.png` });
+  assert(await find('DRAFT') === 2, 'the watermark is on both pages');
+  await menu('Batch', 'Bates Numbering…');
+  const bd = page.locator('[role=dialog][aria-label="Bates Numbering"]');
+  await bd.locator('[aria-label="Bates prefix"]').fill('CT');
+  await bd.locator('[aria-label="Bates digits"]').fill('4');
+  await bd.getByRole('button', { name: 'OK' }).click();
+  await page.getByText('Bates numbers added').waitFor({ timeout: 20000 });
+  await page.waitForTimeout(800);
+  assert(await find('CT0002') === 1, 'Bates numbers run across the pages (CT0001, CT0002)');
+  await menu('Document', 'Remove Watermark');
+  await page.getByText('Watermark removed').waitFor({ timeout: 20000 });
+  await page.waitForTimeout(800);
+  assert(await find('DRAFT') === 0 && await find('CT0001') === 1, 'Remove Watermark removes only the watermark');
+  await page.evaluate(() => document.activeElement?.blur());
+}
+
 // Print (Ctrl+P): sheets are prepared in the page, then the browser's print dialog opens.
 {
   await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });

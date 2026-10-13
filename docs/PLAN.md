@@ -195,7 +195,10 @@ filling, image signatures, redaction and OCR.
 - [x] AutoMark: Create Bookmarks from page labels or from text in page
   regions (sheet number, sheet title...), page range, preview, replace or
   append
-- [ ] Header/Footer, Watermark, Bates numbering
+- [x] Header & Footer (6 positions, fields: page, pages, page label, date,
+  time, file name, Bates), Bates Numbering (prefix/start/digits/suffix),
+  Watermark (text, font, colour, opacity, rotation, behind/in front); page
+  ranges, preview; written as pagination artifacts and removable
 - [ ] Password protection, Reduce file size, XFDF import/export
 - [ ] Edit Text / Edit Content
 - [ ] Touch and pen support

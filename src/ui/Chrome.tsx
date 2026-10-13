@@ -13,6 +13,7 @@ import { openPrint } from './Print';
 import { addBookmark } from './BookmarksPanel';
 import { checkSpelling, useSpellContent } from './Spell';
 import { useQuantityLink } from './QuantityLink';
+import { removeStamps, useStampDialog } from './HeaderFooter';
 import { stepView, viewHistory } from './Rulers';
 import { openSignDialog } from './DigitalSignature';
 import { useFormsDialog } from './FormsEditor';
@@ -118,6 +119,12 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Replace Pages…', shortcut: 'Ctrl+Shift+Y', disabled: noDoc, action: () => openPagesDialog('replace') },
       { label: 'Rotate Pages…', shortcut: 'Ctrl+Shift+R', disabled: noDoc, action: () => openPagesDialog('rotate') },
       { label: 'Split Document…', disabled: noDoc, action: () => openPagesDialog('split') },
+      { sep: true },
+      { label: 'Header & Footer…', disabled: noDoc, action: () => useStampDialog.setState({ open: 'header' }) },
+      { label: 'Remove Header & Footer', disabled: noDoc, action: () => removeStamps('Header') },
+      { label: 'Watermark…', disabled: noDoc, action: () => useStampDialog.setState({ open: 'watermark' }) },
+      { label: 'Remove Watermark', disabled: noDoc, action: () => removeStamps('Watermark') },
+      { sep: true },
       { label: 'Slip Sheet…', disabled: noDoc, action: () => openPagesDialog('slip-sheet') },
       { label: 'Page Labels…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'labels' }) },
       { label: 'Batch Link…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'batch-link' }) },
@@ -152,6 +159,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Batch Link…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'batch-link' }) },
       { label: 'Slip Sheet…', disabled: noDoc, action: () => openPagesDialog('slip-sheet') },
       { label: 'Flatten…', disabled: noDoc, action: () => openPagesDialog('flatten') },
+      { label: 'Bates Numbering…', disabled: noDoc, action: () => useStampDialog.setState({ open: 'bates' }) },
       { label: 'Quantity Link (Excel)…', disabled: noDoc, action: () => useQuantityLink.setState({ open: true }) },
       { label: 'Summary (Excel)', disabled: noDoc, action: () => { const d = activeDoc(); if (d) exportSummaryXlsx(d.markups, allColumns(d)); } },
       { label: 'Summary (PDF)', disabled: noDoc, action: () => { const d = activeDoc(); if (d) exportSummaryPdf(d.markups, allColumns(d)); } },
