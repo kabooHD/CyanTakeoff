@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import type { PDFPageProxy, RenderTask } from 'pdfjs-dist';
 import { useApp, type DocState } from '../model/store';
 import { MEASURE_TYPES, bounds, dist, distToSegment, pointInPolygon, formatLength, formatNumber, measure, ortho, rectCorners, resolveFormat, scaleAt, stretchY, circleFrom3 } from '../model/measure';
@@ -18,9 +19,12 @@ import { cutoutAt, hitTest, markupBounds, outline } from './hit';
 import { setCursor } from './cursor';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { snapGeometry, snapToContent, type SnapGeometry } from '../pdf/geometry';
+import { layoutPages, rotateCss, rotateIn, rotateOut, rotatedSize, slotAt, type Slot, type ViewRotation } from '../model/layout';
 
 const PAD = 40;
 const BASE_MAX_PIXELS = 6e6;
+/** Pages other than the active one, in continuous / side-by-side views. */
+const TILE_MAX_PIXELS = 3e6;
 
 /** Imperative hooks for menus/toolbar (fit page etc.). */
 export const viewerApi = {
@@ -58,6 +62,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [pdfPage, setPdfPage] = useState<PDFPageProxy | null>(null);
   const renderedPage = useRef<PDFPageProxy | null>(null);
+  const [renderedIdx, setRenderedIdx] = useState(-1);
   const [baseScale, setBaseScale] = useState(0);
   const [detail, setDetail] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -77,8 +82,15 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const [hover, setHover] = useState<string | null>(null);
 
   const pw = page.width * zoom, ph = page.height * zoom;
-  const innerW = Math.max(size.w, pw + PAD * 2), innerH = Math.max(size.h, ph + PAD * 2);
-  const left = (innerW - pw) / 2, top = (innerH - ph) / 2;
+  // View mode and Rotate View: where each shown page sits in the scroll area.
+  const mode = s.viewMode, rot = s.viewRotation;
+  const multi = mode !== 'single';
+  const lay = layoutPages(doc.loaded.pages.map((p) => rotatedSize(p.width * zoom, p.height * zoom, rot)), mode, pageIdx, PAD, size);
+  const { innerW, innerH } = lay;
+  const slot = lay.slots.find((x) => x.index === page.index)!;
+  const left = slot.x, top = slot.y;
+  /** Page pixels (unrotated, relative to the page) to scroll-area pixels, and back. */
+  const outPt = (u: number, v: number) => { const q = rotateOut(u, v, pw, ph, rot); return { x: left + q.x, y: top + q.y }; };
   const markups = doc.markups.filter((m) => m.page === pageIdx);
   const viewports = doc.viewports[pageIdx] ?? [];
   /** Scale a measurement starting at `p` would use (viewport, else page). */
@@ -97,6 +109,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   useEffect(() => {
     let alive = true;
     doc.loaded.pdf.getPage(pageIdx + 1).then((p) => alive && setPdfPage(p));
+    setDetail(null);
     countId.current = null;
     setDraft(null);
     return () => { alive = false; };
@@ -115,11 +128,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   // ----- fit / zoom helpers -----
   const fitPage = useCallback(() => {
     const el = scrollRef.current!;
-    s.setViewZoom(pane, Math.min((el.clientWidth - PAD * 2) / page.width, (el.clientHeight - PAD * 2) / page.height));
+    const r = rotatedSize(page.width, page.height, s.viewRotation);
+    s.setViewZoom(pane, Math.min((el.clientWidth - PAD * 2) / r.w, (el.clientHeight - PAD * 2) / r.h));
   }, [page, s]);
   const fitWidth = useCallback(() => {
     const el = scrollRef.current!;
-    s.setViewZoom(pane, (el.clientWidth - PAD * 2) / page.width);
+    s.setViewZoom(pane, (el.clientWidth - PAD * 2) / rotatedSize(page.width, page.height, s.viewRotation).w);
   }, [page, s]);
   const zoomAt = useCallback((factor: number, cx?: number, cy?: number) => {
     const el = scrollRef.current!;
@@ -140,10 +154,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     viewerApi.centerOn = (p) => {
       const el = scrollRef.current;
       if (!el) return;
-      el.scrollLeft = left + p.x * zoom - el.clientWidth / 2;
-      el.scrollTop = top + p.y * zoom - el.clientHeight / 2;
+      const q = outPt(p.x * zoom, p.y * zoom);
+      el.scrollLeft = q.x - el.clientWidth / 2;
+      el.scrollTop = q.y - el.clientHeight / 2;
     };
-  }, [fitPage, fitWidth, zoomAt, left, top, zoom, isActivePane]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitPage, fitWidth, zoomAt, left, top, zoom, isActivePane, rot]);
 
   useEffect(() => { if (!zoomRaw) fitPage(); }, [zoomRaw, fitPage]);
 
@@ -155,6 +171,49 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     el.scrollLeft = left + a.px * zoom - a.cx;
     el.scrollTop = top + a.py * zoom - a.cy;
   }, [zoom, left, top]);
+
+  // ----- continuous / side-by-side views -----
+  // The page under the pointer becomes the active (editable) page; with the
+  // pointer outside the view, the page in the middle of the view does.
+  const ownPage = useRef(pageIdx);
+  const lastLayout = useRef('');
+  const pointerIn = useRef(false);
+  const activate = (index: number) => {
+    if (index === pageIdx || draft || drag || buttonDown.current || editing) return;
+    ownPage.current = index;
+    flushSync(() => s.setViewPage(pane, index, true));
+  };
+  const layoutPoint = (clientX: number, clientY: number) => {
+    const el = scrollRef.current!, r = el.getBoundingClientRect();
+    return { x: clientX - r.left + el.scrollLeft, y: clientY - r.top + el.scrollTop };
+  };
+  const onLayoutMove = (e: React.PointerEvent) => {
+    pointerIn.current = true;
+    if (!multi || e.buttons) return;
+    const q = layoutPoint(e.clientX, e.clientY);
+    const hit = lay.slots.find((x) => q.x >= x.x && q.x <= x.x + x.w && q.y >= x.y && q.y <= x.y + x.h);
+    if (hit) activate(hit.index);
+  };
+  const onScroll = () => {
+    setScrollTick((n) => n + 1);
+    if (!multi || pointerIn.current) return;
+    const el = scrollRef.current!;
+    const mid = slotAt(lay.slots, el.scrollLeft + el.clientWidth / 2, el.scrollTop + el.clientHeight / 2);
+    if (mid) activate(mid.index);
+  };
+  // Going to a page (thumbnails, Ctrl+Right, a new view mode...) scrolls it into view.
+  useLayoutEffect(() => {
+    const key = `${mode}:${rot}`;
+    const changed = lastLayout.current !== key;
+    lastLayout.current = key;
+    if (!multi || (!changed && ownPage.current === pageIdx)) return;
+    ownPage.current = pageIdx;
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = top - PAD / 2;
+    el.scrollLeft = left + slot.w / 2 - el.clientWidth / 2;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageIdx, mode, rot, multi]);
 
   // Wheel zooms around the cursor (Revu default). Shift/Ctrl+wheel scrolls.
   useEffect(() => {
@@ -187,6 +246,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         canvas.getContext('2d')!.drawImage(off, 0, 0);
         renderedPage.current = pdfPage;
         setBaseScale(wantBase);
+        setRenderedIdx(pdfPage.pageNumber - 1);
       }).catch(() => {});
       // Debounce re-renders while zooming; a different page renders at once.
     }, baseScale && renderedPage.current === pdfPage ? 200 : 0);
@@ -200,10 +260,13 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     let task: RenderTask | null = null;
     const t = setTimeout(() => {
       const el = scrollRef.current!;
-      const x = Math.max(0, (el.scrollLeft - left) / zoom);
-      const y = Math.max(0, (el.scrollTop - top) / zoom);
-      const w = Math.min(page.width - x, el.clientWidth / zoom);
-      const h = Math.min(page.height - y, el.clientHeight / zoom);
+      // The visible part of the page, in page units (the view may be rotated).
+      const c = [[el.scrollLeft, el.scrollTop], [el.scrollLeft + el.clientWidth, el.scrollTop + el.clientHeight]]
+        .map(([sx, sy]) => rotateIn(sx - left, sy - top, pw, ph, rot));
+      const x = Math.max(0, Math.min(c[0].x, c[1].x) / zoom);
+      const y = Math.max(0, Math.min(c[0].y, c[1].y) / zoom);
+      const w = Math.min(page.width, Math.max(c[0].x, c[1].x) / zoom) - x;
+      const h = Math.min(page.height, Math.max(c[0].y, c[1].y) / zoom) - y;
       if (w <= 0 || h <= 0) return;
       const sc = zoom * dpr;
       const off = document.createElement('canvas');
@@ -224,7 +287,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     }, 150);
     return () => { clearTimeout(t); task?.cancel(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfPage, zoom, scrollTick, size.w, size.h]);
+  }, [pdfPage, zoom, scrollTick, size.w, size.h, rot, left, top]);
 
   // ----- Dynamic Fill: read the page's content layer while the tool is active -----
   const fillKey = useFill((f) => f.key);
@@ -274,7 +337,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const toPage = (e: { clientX: number; clientY: number }): Pt => {
     const r = svgRef.current!.getBoundingClientRect();
-    return { x: (e.clientX - r.left) / zoom, y: (e.clientY - r.top) / zoom };
+    const q = rotateIn(e.clientX - r.left, e.clientY - r.top, pw, ph, rot);
+    return { x: q.x / zoom, y: q.y / zoom };
   };
   const GRID = 12;
   // Like Revu's status bar: Markup = snap to markups, Content = snap to the
@@ -940,10 +1004,21 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   return (
     <div className={`viewer-wrap ${split ? (isActivePane ? 'pane-active' : 'pane-inactive') : ''}`}
       onPointerDownCapture={() => { if (split && !isActivePane) s.focusPane(pane); }}>
-    <div className="viewer" ref={scrollRef} onScroll={() => setScrollTick((n) => n + 1)}>
-      <div style={{ width: innerW, height: innerH, position: 'relative' }}>
-        <div className="page" style={{ left, top, width: pw, height: ph }}>
-          <canvas ref={baseRef} style={{ width: pw, height: ph }} />
+    <div className="viewer" ref={scrollRef} onScroll={onScroll} onPointerLeave={() => { pointerIn.current = false; }}>
+      <div style={{ width: innerW, height: innerH, position: 'relative' }} onPointerMove={onLayoutMove}>
+        {multi && (() => {
+          const el = scrollRef.current;
+          const vy = el?.scrollTop ?? 0, vh = el?.clientHeight ?? size.h;
+          return lay.slots.filter((x) => x.y < vy + vh * 2 && x.y + x.h > vy - vh).map((x) => (
+            <PageTile key={x.index} doc={doc} slot={x} zoom={zoom} rot={rot} active={x.index === page.index}
+              onActivate={() => activate(x.index)} />
+          ));
+        })()}
+        <div className="page" style={{
+          left, top, width: pw, height: ph, transform: rotateCss(pw, ph, rot), transformOrigin: '0 0',
+          ...(multi ? { background: 'transparent', boxShadow: 'none' } : {}),
+        }}>
+          <canvas ref={baseRef} style={{ width: pw, height: ph, visibility: multi && renderedIdx !== page.index ? 'hidden' : undefined }} />
           <canvas ref={detailRef} style={detail ? {
             left: detail.x * zoom, top: detail.y * zoom, width: detail.w * zoom, height: detail.h * zoom,
           } : { display: 'none' }} />
@@ -1043,6 +1118,54 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         </div>
       )}
       <MeasurePreview markup={preview && MEASURE_TYPES.has(preview.type) && preview.scale ? preview : null} />
+    </div>
+  );
+}
+
+/**
+ * A page other than the active one in a continuous or side-by-side view:
+ * its drawing and markups, display only. The active page is drawn on top of
+ * its tile by the Viewer, so the tile shows while that page re-renders.
+ */
+function PageTile({ doc, slot, zoom, rot, active, onActivate }: {
+  doc: DocState; slot: Slot; zoom: number; rot: ViewRotation; active: boolean; onActivate: () => void;
+}) {
+  const pg = doc.loaded.pages[slot.index];
+  const ref = useRef<HTMLCanvasElement>(null);
+  const done = useRef(false);
+  const pw = pg.width * zoom, ph = pg.height * zoom;
+  const sc = Math.min(zoom * (window.devicePixelRatio || 1), Math.sqrt(TILE_MAX_PIXELS / (pg.width * pg.height)));
+  const forms = doc.loaded.fields.length > 0;
+  useEffect(() => {
+    let task: RenderTask | null = null, alive = true;
+    const t = setTimeout(async () => {
+      const p = await doc.loaded.pdf.getPage(slot.index + 1);
+      if (!alive) return;
+      const vp = p.getViewport({ scale: sc });
+      const off = document.createElement('canvas');
+      off.width = Math.ceil(vp.width); off.height = Math.ceil(vp.height);
+      task = p.render({ canvas: off, viewport: vp, annotationMode: forms ? 2 : 1 });
+      task.promise.then(() => {
+        const c = ref.current;
+        if (!c || !alive) return;
+        c.width = off.width; c.height = off.height;
+        c.getContext('2d')!.drawImage(off, 0, 0);
+        done.current = true;
+      }).catch(() => {});
+    }, done.current ? 200 : 0);
+    return () => { alive = false; clearTimeout(t); task?.cancel(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc.loaded.pdf, slot.index, Math.round(sc * 20)]);
+  const markups = active ? [] : doc.markups.filter((m) => m.page === slot.index);
+  return (
+    <div className="page-tile" data-page={slot.index + 1} onPointerDown={onActivate}
+      style={{ left: slot.x, top: slot.y, width: pw, height: ph, transform: rotateCss(pw, ph, rot), transformOrigin: '0 0' }}>
+      <canvas ref={ref} style={{ width: pw, height: ph }} />
+      {markups.length > 0 && (
+        <svg width={pw} height={ph} viewBox={`0 0 ${pg.width} ${pg.height}`} pointerEvents="none">
+          {markups.map((m) => <MarkupShape key={m.id} m={m} />)}
+        </svg>
+      )}
     </div>
   );
 }

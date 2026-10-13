@@ -8,6 +8,7 @@ import { MEASURE_TYPES, scaleAt } from './measure';
 import { translated } from './markup';
 import { expandGroups } from './arrange';
 import { columnDefaults } from './columns';
+import type { ViewMode, ViewRotation } from './layout';
 import type {
   CustomColumn, Markup, MarkupStyle, MarkupType, Pt, Scale, Space, ToolId, ToolPreset, ToolSet, Toggles, Viewport,
 } from './types';
@@ -118,11 +119,18 @@ interface AppState {
   setPage(page: number): void;
   setZoom(zoom: number): void;
   /** Page / zoom of a given view pane. */
-  setViewPage(pane: 0 | 1, page: number): void;
+  /** `keep` leaves the selection alone (pointer moving onto another page in continuous view). */
+  setViewPage(pane: 0 | 1, page: number, keep?: boolean): void;
   setViewZoom(pane: 0 | 1, zoom: number): void;
   /** Split view (Revu: Split Horizontal Ctrl+H, Split Vertical Ctrl+2, Unsplit, Switch Ctrl+1). */
   split: { dir: 'h' | 'v'; mainDocId: string; docId: string; page: number; zoom: number } | null;
   activePane: 0 | 1;
+  /** Revu View > Mode (Single Page Ctrl+4, Continuous Ctrl+5, Side by Side Ctrl+6, Continuous Side by Side Ctrl+7). */
+  viewMode: ViewMode;
+  /** Revu Rotate View (Ctrl+Shift+Plus/Minus): turns the display only, never the file. */
+  viewRotation: ViewRotation;
+  setViewMode(mode: ViewMode): void;
+  rotateView(delta: 90 | -90): void;
   splitView(dir: 'h' | 'v'): void;
   unsplit(): void;
   focusPane(pane: 0 | 1): void;
@@ -361,16 +369,16 @@ export const useApp = create<AppState>((set, get) => {
     },
     setPage: (page) => get().setViewPage(get().split ? get().activePane : 0, page),
     setZoom: (zoom) => get().setViewZoom(get().split ? get().activePane : 0, zoom),
-    setViewPage(pane, page) {
+    setViewPage(pane, page, keep) {
       const { split, docs } = get();
       if (pane === 1 && split) {
         const d = docs.find((x) => x.id === split.docId);
         if (d) set({ split: { ...split, page: Math.max(0, Math.min(d.loaded.pages.length - 1, page)) } });
-        withDoc(() => ({ selection: [] }));
+        if (!keep) withDoc(() => ({ selection: [] }));
         return;
       }
       const id = split ? split.mainDocId : get().activeId;
-      set({ docs: docs.map((d) => (d.id === id ? { ...d, page: Math.max(0, Math.min(d.loaded.pages.length - 1, page)), selection: [] } : d)) });
+      set({ docs: docs.map((d) => (d.id === id ? { ...d, page: Math.max(0, Math.min(d.loaded.pages.length - 1, page)), selection: keep ? d.selection : [] } : d)) });
     },
     setViewZoom(pane, zoom) {
       const z = Math.max(0.02, Math.min(64, zoom));
@@ -381,6 +389,10 @@ export const useApp = create<AppState>((set, get) => {
     },
     split: null,
     activePane: 0,
+    viewMode: 'single',
+    viewRotation: 0,
+    setViewMode: (viewMode) => set({ viewMode }),
+    rotateView: (delta) => set({ viewRotation: ((((get().viewRotation + delta) % 360) + 360) % 360) as ViewRotation }),
     splitView(dir) {
       const { activeId, split, docs } = get();
       if (!activeId) return;

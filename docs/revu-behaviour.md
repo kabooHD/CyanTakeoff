@@ -70,6 +70,16 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - CyanTakeoff: holes larger than ~0.5% of the room (columns, shafts) become
   cutouts on Area/Volume; small pockets (room labels) are ignored.
 
+## View modes and Rotate View
+- View > Mode: Single Page (Ctrl+4), Continuous (Ctrl+5, pages one under
+  another), Side by Side (Ctrl+6, pages 1-2, 3-4... as pairs), Continuous
+  Side by Side (Ctrl+7). Markups can be drawn on any page shown.
+- Rotate View clockwise / counterclockwise (Ctrl+Shift+Plus / Minus) turns
+  the display of all pages in 90 degree steps. It does not change the file
+  (unlike Rotate Pages, which sets the page /Rotate).
+- Ours: the page under the pointer is the current page (status bar,
+  thumbnails); with the pointer outside the view, the page in the middle.
+
 ## Page operations (Document menu)
 - Insert Pages (Ctrl+Shift+I), Insert Blank Page (Ctrl+Shift+N), Delete
   (Ctrl+Shift+D), Extract (Ctrl+Shift+X, optionally deleting), Replace

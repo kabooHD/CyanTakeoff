@@ -806,6 +806,75 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await kd.getByRole('button', { name: 'Close', exact: true }).click();
 }
 
+// View modes (Ctrl+4 to Ctrl+7) and Rotate View (Ctrl+Shift+Plus/Minus).
+{
+  await page.locator('.doc-tab').first().click();
+  await page.mouse.click(5, 500);
+  const nav = page.locator('.sb-nav > span').first();
+  const layer = page.locator('.page .markup-layer');
+  await page.keyboard.press('Control+4');
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Control+ArrowRight');
+  await page.waitForTimeout(500);
+  assert((await nav.innerText()).startsWith('(2 of'), 'on page 2');
+  const total = async () => Number((await page.getByText(/ of \d+ markups/).innerText()).match(/of (\d+)/)[1]);
+  const labels = async () => (await page.locator('.ml-table tbody').innerText()).split('C-101').length;
+  const before = await total(), beforeC = await labels();
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Control+5');
+  await page.waitForTimeout(1000);
+  assert(await page.locator('.page-tile').count() >= 2, 'Continuous (Ctrl+5) shows the pages one under another');
+  await page.screenshot({ path: `${OUT}/view-continuous.png` });
+  const tile2 = page.locator('.page-tile[data-page="2"]');
+  await tile2.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  const b = await tile2.boundingBox();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  await page.waitForTimeout(300);
+  assert((await nav.innerText()).startsWith('(2 of'), 'the page under the pointer becomes the current page');
+  await page.keyboard.press('r');
+  await page.mouse.move(b.x + b.width * 0.4, b.y + b.height * 0.4);
+  await page.mouse.down();
+  await page.mouse.move(b.x + b.width * 0.5, b.y + b.height * 0.5, { steps: 4 });
+  await page.mouse.up();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+4');
+  await page.waitForTimeout(500);
+  assert((await nav.innerText()).startsWith('(2 of') && await page.locator('.page-tile').count() === 0, 'Single Page (Ctrl+4) stays on that page');
+  assert(await total() === before + 1 && await labels() === beforeC + 1, 'a markup drawn in continuous view lands on the page under the pointer');
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+6');
+  await page.waitForTimeout(800);
+  assert(await page.locator('.page-tile').count() === 2, 'Side by Side (Ctrl+6) shows a pair of pages');
+  const tiles = await page.locator('.page-tile').evaluateAll((els) => els.map((e) => e.getBoundingClientRect()));
+  assert(Math.abs(tiles[0].top - tiles[1].top) < 2 && tiles[1].left > tiles[0].right, 'the pair sits next to each other');
+  await page.keyboard.press('Control+4');
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(300);
+  const flat = await layer.boundingBox();
+  await page.keyboard.press('Control+Shift+Equal');
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(600);
+  const turned = await layer.boundingBox();
+  assert(flat.width > flat.height && turned.height > turned.width, 'Rotate View turns the sheet on screen');
+  await page.screenshot({ path: `${OUT}/view-rotated.png` });
+  // A point picked in the rotated view maps back to the right place on the page.
+  await page.keyboard.press('r');
+  await page.mouse.move(turned.x + turned.width * 0.8, turned.y + turned.height * 0.2);
+  await page.mouse.down();
+  await page.mouse.move(turned.x + turned.width * 0.9, turned.y + turned.height * 0.3, { steps: 4 });
+  await page.mouse.up();
+  await page.keyboard.press('v');
+  await page.keyboard.press('Control+Shift+Minus');
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(600);
+  const r = await layer.locator('rect[stroke-dasharray]').first().boundingBox(); // the new markup is selected
+  const unturned = await layer.boundingBox();
+  // Top-right of the rotated view is the top-left of the page.
+  assert(r.x - unturned.x < unturned.width * 0.35 && r.y - unturned.y < unturned.height * 0.25, 'drawing in a rotated view lands where the pointer was');
+  await page.keyboard.press('Control+z');
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],

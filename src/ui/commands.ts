@@ -19,6 +19,8 @@ export const APP_COMMANDS: Command[] = [
   c('Markup', 'Flip Horizontal', 'Ctrl+Alt+H'), c('Markup', 'Flip Vertical', 'Ctrl+Alt+V'),
   c('View', 'Fit Page', 'Ctrl+9'), c('View', 'Fit Width', 'Ctrl+0'), c('View', 'Actual Size', 'Ctrl+8'), c('View', 'Zoom In', '+'), c('View', 'Zoom Out', '-'),
   c('View', 'Show Grid', 'Shift+F9'), c('View', 'Snap to Grid', 'Ctrl+Shift+F9'), c('View', 'Snap to Content', 'Ctrl+Shift+F8'), c('View', 'Snap to Markup', 'Ctrl+Shift+F7'),
+  c('View', 'Single Page', 'Ctrl+4'), c('View', 'Continuous', 'Ctrl+5'), c('View', 'Side by Side', 'Ctrl+6'), c('View', 'Continuous Side by Side', 'Ctrl+7'),
+  c('View', 'Rotate View Clockwise', 'Ctrl+Shift++'), c('View', 'Rotate View Counterclockwise', 'Ctrl+Shift+-'),
   c('View', 'Split Horizontal', 'Ctrl+H'), c('View', 'Split Vertical', 'Ctrl+2'), c('View', 'Unsplit', 'Ctrl+Shift+2'), c('View', 'Switch', 'Ctrl+1'), c('View', 'Toggle Split', 'Ctrl+I'),
   c('Navigation', 'Next Page', 'Ctrl+ArrowRight'), c('Navigation', 'Previous Page', 'Ctrl+ArrowLeft'), c('Navigation', 'First Page', 'Home'), c('Navigation', 'Last Page', 'End'),
   c('Search', 'Search', 'Ctrl+F'), c('Search', 'Next Result', 'F3'), c('Search', 'Previous Result', 'Shift+F3'),

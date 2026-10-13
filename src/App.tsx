@@ -92,8 +92,14 @@ export function App() {
         case 'Ctrl+9': return run(viewerApi.fitPage);
         case 'Ctrl+0': return run(viewerApi.fitWidth);
         case 'Ctrl+8': return run(() => s.setZoom(1));
-        case '+': case '=': case 'Shift++': case 'Shift+=': case 'Ctrl+=': case 'Ctrl++': case 'Ctrl+Shift+=':
+        case '+': case '=': case 'Shift++': case 'Shift+=': case 'Ctrl+=': case 'Ctrl++':
           return run(() => viewerApi.zoomBy(1.25));
+        case 'Ctrl+4': return run(() => s.setViewMode('single'));
+        case 'Ctrl+5': return run(() => s.setViewMode('continuous'));
+        case 'Ctrl+6': return run(() => s.setViewMode('side'));
+        case 'Ctrl+7': return run(() => s.setViewMode('continuous-side'));
+        case 'Ctrl+Shift++': case 'Ctrl+Shift+=': return run(() => s.rotateView(90));
+        case 'Ctrl+Shift+-': case 'Ctrl+Shift+_': return run(() => s.rotateView(-90));
         case '-': case 'Ctrl+-': return run(() => viewerApi.zoomBy(0.8));
         case 'Shift+F9': return run(() => s.toggle('grid'));
         case 'Ctrl+Shift+F9': return run(() => s.toggle('snap'));

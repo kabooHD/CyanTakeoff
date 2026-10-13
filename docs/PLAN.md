@@ -147,9 +147,19 @@ slope / rise-drop / wall area, custom columns with formulas, Excel and PDF
 summaries, replies and checkmarks, Search, split view, page operations,
 Flatten, Compare and Overlay, page labels, Batch Link, Sets, Slip Sheet,
 tool sets with Drawing mode, keyboard shortcut editor, Profiles, form
-filling, image signatures, redaction and OCR. Remaining gaps are listed in
-CLAUDE.md (e.g. continuous view, alignment points for Compare, certificate
-signatures, form creation, Revu .btx import).
+filling, image signatures, redaction and OCR.
+
+### Now: closing the remaining gaps (before the public test)
+- [x] View modes: Single Page, Continuous, Side by Side, Continuous Side by
+  Side (Ctrl+4 to Ctrl+7), Rotate View (Ctrl+Shift+Plus/Minus)
+- [ ] Undo across page operations
+- [ ] Compare: alignment points and vector comparison
+- [ ] Forms editor: create, rename and delete fields
+- [ ] Certificate digital signatures (sign with a .pfx/.p12, verify)
+- [ ] OCR in more languages; redaction that removes content without
+  rasterising the page
+- [ ] Revu tool sets (.btx), custom-column and cutout storage: only if
+  public Revu-made samples exist, else from testers' files
 
 ### Next 2: public test build in local mode (days)
 - Host on a VPS (static site + HTTPS), with a feedback link
@@ -166,9 +176,7 @@ signatures, form creation, Revu .btx import).
   "anyone can join with a link, on any device"
 
 ### Next 4: after the public test
-Compare against earlier versions of a cloud document, continuous and side
-by side view modes, Rotate View, Compare alignment points and vector
-comparison, touch support.
+Compare against earlier versions of a cloud document, touch support.
 
 ### Later
 Certificate digital signatures, form field creation, Revu tool set (.btx)
