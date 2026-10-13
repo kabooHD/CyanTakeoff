@@ -346,6 +346,7 @@ function Measurements() {
       )}
       <div className="prop-actions">
         <button onClick={() => s.setTool('calibrate')}>Calibrate</button>
+        <button onClick={() => s.setTool('dynamic-fill')}>Dynamic Fill</button>
         <button onClick={() => s.openScaleDialog({ page: doc.page })}>Set Scale…</button>
         {scale && <button onClick={() => s.openScaleDialog({ page: doc.page, reuse: true })}>Add Scale to More Pages</button>}
         {scale && <button onClick={() => s.setScale([doc.page], null)}>Clear</button>}

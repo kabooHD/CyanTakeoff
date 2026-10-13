@@ -5,6 +5,7 @@ import { MEASURE_TYPES, dist, distToSegment, pointInPolygon, formatLength, forma
 import { Icon } from './icons';
 import { translated } from '../model/markup';
 import { applyCutout, ellipsePolygon } from '../model/cutouts';
+import { DynamicFillBar, FillOverlay, buildMask, fillDown, fillMove, fillUp, finishBoundary, resetFill, useFill } from './DynamicFill';
 import type { Markup, MarkupType, Pt, ToolId, Viewport } from '../model/types';
 import { toolById } from '../tools/tools';
 import { MarkupShape, handlePoints } from './renderMarkup';
@@ -200,11 +201,23 @@ export function Viewer({ doc }: { doc: DocState }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfPage, zoom, scrollTick, size.w, size.h]);
 
+  // ----- Dynamic Fill: read the page's content layer while the tool is active -----
+  const fillKey = useFill((f) => f.key);
+  const [fillCursor, setFillCursor] = useState<Pt | null>(null);
+  useEffect(() => {
+    if (s.tool === 'dynamic-fill' && pdfPage) buildMask(pdfPage, `${doc.id}:${doc.page}`);
+    if (s.tool !== 'dynamic-fill') resetFill();
+  }, [s.tool, pdfPage, doc.id, doc.page, fillKey]);
+
   // ----- keyboard: space-pan and draft keys -----
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (isEditable(e.target)) return;
       if (e.code === 'Space') { spaceDown.current = true; force((n) => n + 1); e.preventDefault(); }
+      if (s.tool === 'dynamic-fill' && useFill.getState().draftBoundary.length) {
+        if (e.key === 'Enter') { finishBoundary(); e.stopImmediatePropagation(); }
+        else if (e.key === 'Escape') { useFill.setState({ draftBoundary: [] }); e.stopImmediatePropagation(); }
+      }
       if (draft) {
         if (e.key === 'Escape') { setDraft(null); e.stopImmediatePropagation(); }
         else if (e.key === 'Enter') { finishPoly(); e.stopImmediatePropagation(); }
@@ -365,6 +378,12 @@ export function Viewer({ doc }: { doc: DocState }) {
     if (e.button !== 0) return;
     const raw = toPage(e);
 
+    if (tool === 'dynamic-fill') {
+      fillDown(raw);
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+      return;
+    }
+
     if (tool === 'zoom') { zoomAt(e.altKey ? 0.5 : 2, e.clientX - el.getBoundingClientRect().left, e.clientY - el.getBoundingClientRect().top); return; }
 
     if (tool === 'select') {
@@ -509,6 +528,7 @@ export function Viewer({ doc }: { doc: DocState }) {
   const onPointerMove = (e: React.PointerEvent) => {
     const raw = toPage(e);
     setCursor(raw, scaleFor(raw));
+    if (s.tool === 'dynamic-fill') { fillMove(raw); setFillCursor(raw); }
     if (drag) {
       if (drag.kind === 'pan') {
         const el = scrollRef.current!;
@@ -574,6 +594,7 @@ export function Viewer({ doc }: { doc: DocState }) {
       rightClick(e);
       return;
     }
+    if (s.tool === 'dynamic-fill') fillUp();
     if (drag) {
       if ((drag.kind === 'move' || drag.kind === 'vertex') && drag.moved) s.pushUndo(drag.snapshot);
       if (drag.kind === 'band') selectInBand(drag);
@@ -609,6 +630,7 @@ export function Viewer({ doc }: { doc: DocState }) {
   };
 
   const onDoubleClick = (e: React.MouseEvent) => {
+    if (s.tool === 'dynamic-fill') { finishBoundary(); return; }
     if (draft && draft.tool === 'cutout') {
       const pts = draft.points.slice(0, -1); // the double-click's second click added a point
       if (pts.length >= 3) finishCutout(pts, 'polygon');
@@ -717,6 +739,7 @@ export function Viewer({ doc }: { doc: DocState }) {
           <canvas ref={detailRef} style={detail ? {
             left: detail.x * zoom, top: detail.y * zoom, width: detail.w * zoom, height: detail.h * zoom,
           } : { display: 'none' }} />
+          {s.tool === 'dynamic-fill' && <FillOverlay width={pw} height={ph} pageW={page.width} pageH={page.height} cursor={fillCursor} />}
           <svg ref={svgRef} className="markup-layer" width={pw} height={ph}
             viewBox={`0 0 ${page.width} ${page.height}`} style={{ cursor }}
             onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
@@ -780,6 +803,7 @@ export function Viewer({ doc }: { doc: DocState }) {
       </div>
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
     </div>
+      {s.tool === 'dynamic-fill' && <DynamicFillBar />}
       <MeasurePreview markup={preview && MEASURE_TYPES.has(preview.type) && preview.scale ? preview : null} />
     </div>
   );

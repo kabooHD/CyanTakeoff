@@ -242,6 +242,34 @@ await page.waitForTimeout(1200);
 await page.screenshot({ path: `${OUT}/05-zoomed.png` });
 assert(parseInt(await page.locator('.statusbar').innerText().then((t) => t.match(/(\d+)%/)[1])) > 100, 'wheel zoom');
 
+// Dynamic Fill (J): press and hold inside Office 101, then Apply an Area.
+{
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(500);
+  await page.keyboard.press('j');
+  await page.getByRole('toolbar', { name: 'Dynamic Fill' }).waitFor();
+  await page.waitForFunction(() => !document.querySelector('.fill-bar')?.textContent?.includes('Reading drawing'));
+  // Temporary boundaries along the walls with door openings.
+  await page.getByRole('button', { name: 'Add Boundary' }).click();
+  for (const [x, y] of [[0, 22], [24, 22]]) { const q = await toScreen(x, y); await page.mouse.click(q.x, q.y); }
+  { const q = await toScreen(24, 40); await page.mouse.dblclick(q.x, q.y); }
+  await page.getByRole('button', { name: 'Fill', exact: true }).click();
+  const p = await toScreen(12, 31);
+  await page.mouse.move(p.x, p.y); await page.mouse.down();
+  await page.waitForTimeout(2500);
+  await page.mouse.up();
+  await page.screenshot({ path: `${OUT}/08-dynamic-fill.png` });
+  const before = await page.locator('.ml-table tbody tr').count();
+  await page.getByRole('toolbar', { name: 'Dynamic Fill' }).getByRole('button', { name: 'Apply' }).click();
+  assert(await page.locator('.ml-table tbody tr').count() === before + 1, 'Dynamic Fill Apply creates an Area');
+  const rows = await page.locator('.ml-table tbody').innerText();
+  const sf = [...rows.matchAll(/(\d+(?:\.\d+)?) sf/g)].map((m) => Number(m[1])).filter((v) => v !== 419.43);
+  // Interior between wall faces: 23.5 x 17.17 ft = 403.4 sf, less the 3 ft door swing (7.1 sf) = 396.3 sf.
+  assert(sf.length === 1 && Math.abs(sf[0] - 396.3) < 2, `filled office interior is 396.3 sf within 2 sf (${sf.join(', ')})`);
+  await page.keyboard.press('Control+Z');
+  await page.keyboard.press('Escape');
+}
+
 // Apply Scale to Pages: prompt on an unscaled page, then calibrate (site plan, sheet 2).
 await page.keyboard.press('Control+9');
 await page.keyboard.press('End');

@@ -69,7 +69,8 @@ preview server can die between turns: restart it if e2e cannot connect.
 ## Status (2026-10-13)
 Done: Revu-style workspace and official default shortcuts; markup tools;
 length, polylength, area, perimeter, volume, count, angle, radius, diameter;
-cutouts (polygon/ellipse); viewports (regions with their own scale, Revu
+cutouts (polygon/ellipse, Revu fuse/trim rules); Dynamic Fill;
+separate X/Y scales; 3-point radius; viewports (regions with their own scale, Revu
 `/VP` layout); Apply Scale to Pages dialog (preset/custom/
 calibrate, page range, precision, saved presets) and scale prompt; snap to
 content/markup/grid; live measurement preview; Markups List (columns,

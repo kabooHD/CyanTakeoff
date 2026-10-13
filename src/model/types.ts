@@ -27,7 +27,7 @@ export type MarkupType =
   | 'radius'
   | 'diameter';
 
-export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cutout' | 'ellipse-cutout' | 'viewport' | 'radius-3pt';
+export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cutout' | 'ellipse-cutout' | 'viewport' | 'radius-3pt' | 'dynamic-fill';
 
 /** A hole subtracted from an Area or Volume measurement. Ellipse: two opposite corners. */
 export interface Cutout { kind: 'polygon' | 'ellipse'; points: Pt[] }

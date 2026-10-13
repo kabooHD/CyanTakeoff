@@ -58,6 +58,18 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - Separate Y Scale (Apply Scale dialogs): X and Y scales set independently
   by any method; precision follows the X scale.
 
+## Dynamic Fill (J)
+- Works on the drawing's content layer only. Toolbar: Add Boundary
+  (click points, double-click/Enter to finish) and Fill (press and hold:
+  the highlight spreads until it meets lines or the button is released;
+  dragging spreads it faster; encircling fills everything inside the loop).
+- Create: Space, Polygon, Area, Polylength, Perimeter, Volume (default
+  properties or the Tool Chest tool), then Apply.
+- Clear menu: Clear All / Clear Fill / Clear Boundaries. Settings: boundary
+  and fill size/colour, fill speed, edge sensitivity.
+- CyanTakeoff: holes larger than ~0.5% of the room (columns, shafts) become
+  cutouts on Area/Volume; small pockets (room labels) are ignored.
+
 ## Cutouts
 - Polygon Cutout and Ellipse Cutout subtract from an existing Area or
   Volume; hovering the target measurement highlights it.

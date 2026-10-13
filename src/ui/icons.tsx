@@ -34,6 +34,7 @@ const P: Record<string, ReactNode> = {
   diameter: <><circle cx="10" cy="10" r="7" /><path d="M5 15L15 5" /></>,
   cutout: <><path d="M2.5 3.5h15v13h-15z" /><path d="M7 7h6v6H7z" strokeDasharray="2 1.5" /></>,
   'ellipse-cutout': <><path d="M2.5 3.5h15v13h-15z" /><ellipse cx="10" cy="10" rx="3.5" ry="3" strokeDasharray="2 1.5" /></>,
+  'dynamic-fill': <><path d="M4 9l6-6 6 6-6 6z" /><path d="M4 9h12" /><path d="M17 12c0 0 1.5 2 1.5 3a1.5 1.5 0 01-3 0c0-1 1.5-3 1.5-3z" /></>,
   count: <><circle cx="5" cy="6" r="2" /><circle cx="14" cy="5" r="2" /><circle cx="8" cy="14" r="2" /><path d="M15 12v5M12.5 14.5h5" /></>,
   fitpage: <><rect x="4" y="2.5" width="12" height="15" /><path d="M2 7V2h5M18 13v5h-5" /></>,
   fitwidth: <><rect x="4" y="4.5" width="12" height="11" /><path d="M1 10h5M19 10h-5M3 8l-2 2 2 2M17 8l2 2-2 2" /></>,

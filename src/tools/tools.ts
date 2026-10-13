@@ -11,6 +11,7 @@ export type Interaction =
   | 'callout' // click tip, then click box position
   | 'cutout' // polygon cutout inside an Area/Volume: drag = rectangle, or click points
   | 'cutout-ellipse' // ellipse cutout: drag
+  | 'fill' // Dynamic Fill: press and hold to flood a shape
   | 'none';
 
 export interface ToolDef {
@@ -61,6 +62,7 @@ export const TOOLS: ToolDef[] = [
   { id: 'angle', name: 'Angle', group: 'measure', shortcut: 'Shift+Alt+G', interaction: 'poly', subject: 'Angle Measurement', maxPoints: 3 },
   { id: 'cutout', name: 'Polygon Cutout', group: 'measure', interaction: 'cutout', subject: '' },
   { id: 'ellipse-cutout', name: 'Ellipse Cutout', group: 'measure', interaction: 'cutout-ellipse', subject: '' },
+  { id: 'dynamic-fill', name: 'Dynamic Fill', group: 'measure', shortcut: 'J', interaction: 'fill', subject: '' },
   { id: 'count', name: 'Count', group: 'measure', shortcut: 'Shift+Alt+C', interaction: 'count', subject: 'Count Measurement' },
 ];
 

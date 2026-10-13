@@ -9,7 +9,7 @@ const REVU: Record<string, string> = {
   polyline: 'Shift+N', rectangle: 'R', ellipse: 'E', polygon: 'Shift+P', cloud: 'C',
   length: 'Shift+Alt+L', polylength: 'Shift+Alt+Q', area: 'Shift+Alt+A', perimeter: 'Shift+Alt+P',
   volume: 'Shift+Alt+V', diameter: 'Shift+Alt+D', radius: 'Shift+Alt+U', angle: 'Shift+Alt+G',
-  count: 'Shift+Alt+C',
+  count: 'Shift+Alt+C', 'dynamic-fill': 'J',
 };
 
 describe('default shortcuts', () => {
