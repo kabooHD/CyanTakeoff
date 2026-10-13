@@ -28,8 +28,10 @@ shortcuts, and markups saved as standard PDF annotations.
   with formulas), replies, checkmarks, totals; Summary to Excel, PDF or CSV.
 - **Documents:** search, page operations (insert, delete, extract, replace,
   rotate, reorder), combine, split, flatten, Compare and Overlay, page
-  labels from sheet numbers, Batch Link, Slip Sheet, form filling,
-  signatures, redaction and OCR.
+  labels from sheet numbers, Batch Link, Slip Sheet, form filling and
+  field creation, image signatures, digital signatures with your own
+  certificate (.pfx/.p12, checked in the Signatures panel), redaction and
+  OCR.
 - **Files:** everything is saved as standard PDF annotations the way Revu
   writes them; files are opened and saved in the browser, nothing uploaded.
 

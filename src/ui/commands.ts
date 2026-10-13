@@ -28,7 +28,7 @@ export const APP_COMMANDS: Command[] = [
   c('Document', 'Extract Pages', 'Ctrl+Shift+X'), c('Document', 'Replace Pages', 'Ctrl+Shift+Y'), c('Document', 'Rotate Pages', 'Ctrl+Shift+R'),
   c('Document', 'Apply Redactions', 'Shift+A'), c('Document', 'OCR', 'Ctrl+Shift+O'), c('Document', 'Rotate Clockwise', 'Shift+Alt++'), c('Document', 'Rotate Counterclockwise', 'Shift+Alt+-'), c('Document', 'Flatten', 'Ctrl+Shift+M'),
   c('Window', 'Markups', 'Alt+L'), c('Window', 'Thumbnails', 'Alt+T'), c('Window', 'Bookmarks', 'Alt+B'), c('Window', 'Spaces', 'Alt+S'),
-  c('Window', 'Search', 'Alt+1'), c('Window', 'Sets', 'Alt+2'), c('Window', 'Properties', 'Alt+P'), c('Window', 'Tool Chest', 'Alt+X'),
+  c('Window', 'Search', 'Alt+1'), c('Window', 'Sets', 'Alt+2'), c('Window', 'Signatures', 'Alt+4'), c('Window', 'Properties', 'Alt+P'), c('Window', 'Tool Chest', 'Alt+X'),
   c('Window', 'Measurements', 'Alt+U'), c('Window', 'Hide Panel', 'Shift+F4'), c('Forms', 'Forms Editor', 'Ctrl+Shift+F'), c('Help', 'Help', 'F1'),
 ];
 

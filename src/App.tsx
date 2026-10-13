@@ -1,3 +1,4 @@
+import { DigitalSignDialog, useDigitalSign } from './ui/DigitalSignature';
 import { FormsDialogs, useFormsDialog } from './ui/FormsEditor';
 import { useEffect, useState } from 'react';
 import { activeDoc, useApp, useActiveDoc } from './model/store';
@@ -50,7 +51,7 @@ export function App() {
       // Revu 20/21 default shortcuts (support.bluebeam.com, "Keyboard shortcuts
       // and mouse navigation"). Browser-reserved keys (Ctrl+F4, Ctrl+Tab, Ctrl+N,
       // Ctrl+T) cannot be intercepted on the web; Ctrl+W/PgUp/PgDn are kept as extras.
-      const left = (p: 'thumbnails' | 'bookmarks' | 'spaces' | 'search' | 'sets') => run(() => s.setPanels({ left: s.left === p ? null : p }));
+      const left = (p: 'thumbnails' | 'bookmarks' | 'spaces' | 'search' | 'sets' | 'signatures') => run(() => s.setPanels({ left: s.left === p ? null : p }));
       const right = (p: 'properties' | 'toolchest' | 'measurements') => run(() => s.setPanels({ right: s.right === p ? null : p }));
       switch (combo) {
         // File
@@ -68,7 +69,7 @@ export function App() {
         case 'Ctrl+Shift+V': return run(() => s.paste(true));
         case 'Ctrl+A': return run(() => d && s.select(d.markups.filter((m) => m.page === d.page).map((m) => m.id)));
         case 'Delete': case 'Backspace': return run(() => d && s.deleteMarkups(d.selection));
-        case 'Escape': return run(() => { s.setTool('select'); s.select([]); useApp.setState({ painter: null }); });
+        case 'Escape': return run(() => { useDigitalSign.setState({ pending: null }); s.setTool('select'); s.select([]); useApp.setState({ painter: null }); });
         // Markup arrangement (Revu defaults)
         case 'Ctrl+G': return run(() => s.arrange(group));
         case 'Ctrl+Shift+G': return run(() => s.arrange(ungroup));
@@ -118,6 +119,7 @@ export function App() {
         case 'Alt+S': return left('spaces');
         case 'Alt+1': return left('search');
         case 'Alt+2': return left('sets');
+        case 'Alt+4': return left('signatures');
         case 'Ctrl+F': return run(() => { s.setPanels({ left: 'search' }); useSearch.setState((x) => ({ focusTick: x.focusTick + 1 })); });
         case 'F3': return run(() => nextHit(1));
         case 'Shift+A': return run(runApplyRedactions);
@@ -205,6 +207,7 @@ export function App() {
       <PrefsDialogs />
       <SignatureDialog />
       <FormsDialogs />
+      <DigitalSignDialog />
       {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
       {dialog === 'about' && <AboutDialog onClose={() => setDialog(null)} />}
     </div>

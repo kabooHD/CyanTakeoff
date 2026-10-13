@@ -9,6 +9,7 @@ import { allColumns, exportSummaryCsv, exportSummaryPdf, exportSummaryXlsx, open
 import { viewerApi } from './Viewer';
 import { combineFiles, openPagesDialog } from './PagesDialog';
 import { openCompare } from './Compare';
+import { openSignDialog } from './DigitalSignature';
 import { useFormsDialog } from './FormsEditor';
 import { useSheetsDialog } from './Sheets';
 import { usePrefsDialog } from './Prefs';
@@ -105,6 +106,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Flatten Markups…', shortcut: 'Ctrl+Shift+M', disabled: noDoc, action: () => openPagesDialog('flatten') },
       { sep: true },
       { label: 'Signature…', disabled: noDoc, action: () => useSignature.setState({ open: true }) },
+      { label: 'Sign Document (Digital ID)…', disabled: noDoc, action: () => openSignDialog() },
       { label: 'Mark for Redaction', shortcut: 'Shift+R', disabled: noDoc, action: () => s.setTool('redaction') },
       { label: 'Mark Text for Redaction', shortcut: 'Shift+K', disabled: noDoc, action: () => s.setTool('redact-text') },
       { label: 'Apply Redactions…', shortcut: 'Shift+A', disabled: noDoc, action: runApplyRedactions },

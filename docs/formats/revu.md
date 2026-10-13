@@ -74,5 +74,17 @@ Each counted item is its own annotation. The first item carries
 - Text style: `/DS` CSS-like string, `/RC` XHTML with
   `xfa:APIVersion="BluebeamPDFRevu:2018"`.
 
+Digital signatures (ISO 32000 12.8): a `/FT /Sig` field whose `/V` is a
+`/Type /Sig` dict with `/Filter /Adobe.PPKLite`, `/SubFilter
+/adbe.pkcs7.detached`, `/ByteRange` and a hex `/Contents` holding the
+DER CMS SignedData (signed attributes: content type, message digest,
+signing time). Each signature is added as an incremental update; files that
+contain signatures are always saved incrementally (only changed, reachable
+objects appended, with a classic xref table or an xref stream matching the
+previous section), so earlier revisions stay byte-for-byte intact.
+Verified with pyHanko: intact, valid, modification level "form filling"
+for a later signature (markups added after signing show as "other" there:
+pyHanko has no rule for annotation changes yet; the signature stays valid).
+
 CyanTakeoff reads all of the above that it supports, preserves the rest
 byte-for-byte, and writes its own measurements with the same structure.

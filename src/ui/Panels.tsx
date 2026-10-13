@@ -1,3 +1,4 @@
+import { SignaturesPanel } from './DigitalSignature';
 import { useEffect, useRef, useState } from 'react';
 import { useApp, useActiveDoc, type DocState } from '../model/store';
 import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, formatNumber, measure, precisionOf, unitLabel, withPrecision } from '../model/measure';
@@ -18,7 +19,7 @@ import { legendKey } from '../model/legend';
 export function SideTabs({ side }: { side: 'left' | 'right' }) {
   const s = useApp();
   const tabs = side === 'left'
-    ? [{ id: 'thumbnails', label: 'Thumbnails' }, { id: 'bookmarks', label: 'Bookmarks' }, { id: 'spaces', label: 'Spaces' }, { id: 'search', label: 'Search' }, { id: 'sets', label: 'Sets' }] as const
+    ? [{ id: 'thumbnails', label: 'Thumbnails' }, { id: 'bookmarks', label: 'Bookmarks' }, { id: 'spaces', label: 'Spaces' }, { id: 'search', label: 'Search' }, { id: 'sets', label: 'Sets' }, { id: 'signatures', label: 'Signatures' }] as const
     : [{ id: 'properties', label: 'Properties' }, { id: 'toolchest', label: 'Tool Chest' }, { id: 'measurements', label: 'Measurements' }] as const;
   const cur = side === 'left' ? s.left : s.right;
   return (
@@ -49,6 +50,7 @@ export function LeftPanel() {
   const doc = useActiveDoc();
   if (!s.left) return null;
   const close = () => s.setPanels({ left: null });
+  if (s.left === 'signatures') return <PanelFrame title="Signatures" onClose={close}>{doc ? <SignaturesPanel doc={doc} /> : null}</PanelFrame>;
   if (s.left === 'sets') return <PanelFrame title="Sets" onClose={close}><SetsPanel /></PanelFrame>;
   if (s.left === 'search') return <PanelFrame title="Search" onClose={close}>{doc ? <SearchPanel doc={doc} /> : null}</PanelFrame>;
   if (s.left === 'spaces') return <PanelFrame title="Spaces" onClose={close}>{doc ? <SpacesPanel doc={doc} /> : null}</PanelFrame>;

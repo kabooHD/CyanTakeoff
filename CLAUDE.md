@@ -18,7 +18,9 @@ TypeScript, React, zustand, pdf.js (legacy build), pdf-lib, Vite, vitest,
 playwright-core.
 - `src/model/`: types, measurement math (`measure.ts`), app store (`store.ts`)
 - `src/pdf/`: `importAnnots.ts` (read annotations incl. Revu), `save.ts`
-  (write Revu-structured annotations), `geometry.ts` (snap to content)
+  (write Revu-structured annotations), `geometry.ts` (snap to content),
+  `incremental.ts` (incremental updates: signed files are always saved this
+  way), `sign.ts` (digital signatures)
 - `src/tools/tools.ts`: tool list and Revu default shortcuts (pinned by
   `tests/shortcuts.test.ts`)
 - `src/ui/`: Viewer (drawing interactions), Chrome (menus, toolbar, status
@@ -87,7 +89,9 @@ Keyboard Shortcuts editor (src/ui/commands.ts), Profiles; CyanTakeoff (=Revu)
 and Batch menus; form filling (AcroForm inputs saved into the form) and
 field creation (Tools > field tools, X = signature field, Forms Editor
 Ctrl+Shift+F), image
-signatures (draw/type, reusable), redaction (mark area/text, apply =
+signatures (draw/type, reusable), digital signatures (src/pdf/sign.ts:
+.pfx/.p12, PKCS#7 detached, incremental updates in src/pdf/incremental.ts;
+Signatures panel Alt+4), redaction (mark area/text, apply =
 page rasterised), OCR (tesseract.js, assets served from /ocr/, invisible text);
 length, polylength, area, perimeter, volume, count, angle, radius, diameter;
 cutouts (polygon/ellipse, Revu fuse/trim rules); Dynamic Fill;
@@ -105,5 +109,5 @@ Next (from `docs/PLAN.md`):
 
 Known gaps: Revu cutout storage unknown (ours in CTData); curved segments
 on polygons/cutouts (Ctrl+drag) not supported; vector Compare ignores
-colour/lineweight-only changes; no certificate-based digital signatures;
-applying redactions rasterises the page; OCR is English only.
+colour/lineweight-only changes; signatures are not checked against a
+trust list and have no timestamps; applying redactions rasterises the page; OCR is English only.

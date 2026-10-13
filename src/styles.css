@@ -346,3 +346,10 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
 .page-tile { position: absolute; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.45); }
 .page-tile canvas, .page-tile svg { position: absolute; left: 0; top: 0; }
 .error { color: #c62828; }
+.signatures-panel { padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.sig-item { border: 1px solid var(--border, #ccc); border-left: 4px solid #999; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; }
+.sig-item.sig-valid { border-left-color: #2e7d32; }
+.sig-item.sig-invalid { border-left-color: #c62828; }
+.sig-title { display: flex; gap: 6px; align-items: center; }
+.sig-valid .sig-badge { color: #2e7d32; }
+.sig-invalid .sig-badge { color: #c62828; }

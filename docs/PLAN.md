@@ -155,7 +155,7 @@ filling, image signatures, redaction and OCR.
 - [x] Undo across page operations (the last 10 per document)
 - [x] Compare: alignment points and vector comparison
 - [x] Forms editor: create, rename and delete fields
-- [ ] Certificate digital signatures (sign with a .pfx/.p12, verify)
+- [x] Certificate digital signatures (sign with a .pfx/.p12, verify)
 - [ ] OCR in more languages; redaction that removes content without
   rasterising the page
 - [ ] Revu tool sets (.btx), custom-column and cutout storage: only if

@@ -115,8 +115,16 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 
 ## Document tools
 - Forms: fields are filled in place; values are saved into the PDF form.
-- Signature: Revu signs with certificates; CyanTakeoff places an image
-  signature (drawn or typed, kept for reuse).
+- Signature (image): a drawn or typed signature, kept for reuse, placed as
+  an image markup.
+- Digital signatures: sign with a digital ID (.pfx/.p12 + password) into an
+  empty signature field, a box drawn on the page, or invisibly; Reason and
+  Location are optional. The Signatures panel (Alt+4) lists each signature
+  with its status (valid / invalid / not checkable) and whether the file
+  changed after signing. Signing and later saves of a signed file are
+  incremental updates, so earlier signatures stay valid. Ours does not check
+  the signer against a trusted certificate list (no trust store in the
+  browser), and does not add timestamps (no TSA).
 - Redaction: Mark for Redaction (Shift+R, area), Mark Text for Redaction
   (Shift+K), Apply Redactions (Shift+A, after confirmation) removes the
   content underneath for good.

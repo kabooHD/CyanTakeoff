@@ -7,6 +7,7 @@ import { Icon } from './icons';
 import { eraseStroke, translated, typewriterBox } from '../model/markup';
 import { useSearch } from './Search';
 import { newFormField } from './FormsEditor';
+import { openSignDialog } from './DigitalSignature';
 import { cancelPicking, pickAlignPoint, pickingPrompt, useCompareDialog } from './Compare';
 import { STAMPS, downloadBase64, loadImage, pageText, pickFile, readAsDataUrl, snapshot, textRectsIn } from './toolActions';
 import { applyCutout, ellipsePolygon } from '../model/cutouts';
@@ -1302,7 +1303,11 @@ function FormLayer({ doc, pageIdx, zoom, interactive }: { doc: DocState; pageIdx
               </select>
             );
           case 'signature':
-            return <div key={key} className="form-field signature-field" style={style} title="Signature field: use the Signature tool to sign">Sign here</div>;
+            // Signed: the signature's own appearance shows on the page.
+            return value ? null : (
+              <div key={key} className="form-field signature-field" style={style} role="button" title="Signature field: click to sign with your digital ID"
+                onClick={() => openSignDialog(f.name)} {...stop}>Sign here</div>
+            );
           default:
             return <div key={key} className="form-field button-field" style={style} />;
         }

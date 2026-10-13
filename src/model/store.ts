@@ -8,12 +8,13 @@ import { MEASURE_TYPES, scaleAt } from './measure';
 import { translated } from './markup';
 import { expandGroups } from './arrange';
 import { columnDefaults } from './columns';
+import { hasSignatures, incrementalUpdate, loadForUpdate } from '../pdf/incremental';
 import type { ViewMode, ViewRotation } from './layout';
 import type {
   CustomColumn, Markup, MarkupStyle, MarkupType, Pt, Scale, Space, ToolId, ToolPreset, ToolSet, Toggles, Viewport,
 } from './types';
 
-export type LeftPanel = 'thumbnails' | 'bookmarks' | 'spaces' | 'search' | 'sets' | null;
+export type LeftPanel = 'thumbnails' | 'bookmarks' | 'spaces' | 'search' | 'sets' | 'signatures' | null;
 export type RightPanel = 'properties' | 'toolchest' | 'measurements' | null;
 
 /** Page scales and viewports, for undoing scale changes. */
@@ -190,7 +191,7 @@ interface AppState {
    * written in, `fn` edits the pdf-lib document, and the result is reloaded.
    * Returns false if it failed (the status bar says why).
    */
-  transformDoc(fn: (lib: PDFDocument) => Promise<void> | void, done: string, page?: number): Promise<boolean>;
+  transformDoc(fn: (lib: PDFDocument, bytes: Uint8Array) => Promise<void | Uint8Array> | void | Uint8Array, done: string, page?: number): Promise<boolean>;
   /** Replace the document's custom columns. */
   setColumns(cols: CustomColumn[]): void;
   setFieldValue(name: string, value: string | boolean): void;
@@ -584,9 +585,12 @@ export const useApp = create<AppState>((set, get) => {
       if (d.loaded.readOnly) { set({ status: 'This file could not be parsed for editing.' }); return false; }
       set({ busy: true, status: 'Updating pages…' });
       try {
-        const lib = await PDFDocument.load(await serialize(d), { updateMetadata: false });
-        await fn(lib);
-        const bytes = await lib.save({ useObjectStreams: false });
+        const src = await serialize(d);
+        const lib = await loadForUpdate(src);
+        const result = await fn(lib, src);
+        // `fn` may produce the new file itself (signing); signed files are updated incrementally.
+        const bytes = result instanceof Uint8Array ? result
+          : hasSignatures(lib) ? await incrementalUpdate(src, lib) : await lib.save({ useObjectStreams: false });
         const loaded = await openPdf(bytes);
         // The old document goes on the undo stack (Revu undoes page operations too).
         const old = get().docs.find((x) => x.id === d.id)!;

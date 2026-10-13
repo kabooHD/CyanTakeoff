@@ -1,3 +1,4 @@
+import { hasSignatures, incrementalUpdate, loadForUpdate } from './incremental';
 import {
   PDFArray, PDFDict, PDFDocument, PDFHexString, PDFRef, PDFString, StandardFonts,
   type PDFFont, type PDFObject,
@@ -638,7 +639,7 @@ export interface SaveInput {
 const randomNM = () => Array.from({ length: 16 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
 
 export async function savePdf(input: SaveInput): Promise<Uint8Array> {
-  const doc = await PDFDocument.load(input.original, { updateMetadata: false });
+  const doc = await loadForUpdate(input.original);
   // Legends summarise other markups, so they are always rewritten with current totals.
   const unchanged = (m: Markup): m is Markup & { source: NonNullable<Markup['source']> } => !!m.source && !m.source.dirty && m.type !== 'legend';
   const keep = new Set(
@@ -646,6 +647,12 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
       .flatMap((m) => [m.source!, ...(m.source!.extraRefs ?? [])].map(refKey)),
   );
   const remove = new Set([...input.importedRefs].filter((r) => !keep.has(r)));
+  const toWrite = input.markups.filter((m) => !unchanged(m));
+  // Nothing edited: hand back the file exactly as it was.
+  if (!remove.size && !toWrite.length && !(input.formValues && Object.keys(input.formValues).length) && !input.columns
+    && !input.dirtySpaces?.size && !input.dirtyCalibrations.size) return input.original;
+  // Signed files are saved as an incremental update so the signatures stay valid.
+  const signed = hasSignatures(doc);
   for (let p = 0; p < doc.getPageCount(); p++) removeAnnots(doc, p, remove);
 
   const font = await doc.embedFont(StandardFonts.Helvetica);
@@ -659,8 +666,7 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
       groupHead.set(m.groupId, PDFRef.of(m.source.objectNumber, m.source.generation));
     }
   }
-  for (const m of input.markups) {
-    if (unchanged(m)) continue;
+  for (const m of toWrite) {
     let image: PDFRef | undefined;
     if (m.type === 'image' && m.image) {
       const [, mime, b64] = /^data:([^;]+);base64,(.*)$/.exec(m.image) ?? [];
@@ -766,5 +772,5 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
     if (entries.length) page.node.set(N('VP'), ctx.obj(entries));
     else page.node.delete(N('VP'));
   }
-  return doc.save({ useObjectStreams: false });
+  return signed ? incrementalUpdate(input.original, doc) : doc.save({ useObjectStreams: false });
 }

@@ -906,6 +906,44 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const f2 = (await PDFDocument.load(readFileSync(`${OUT}/saved-form-fields.pdf`))).getForm();
   assert(f2.getTextField('Notes').getText() === 'Checked twice' && !f2.getFieldMaybe('Grade') && f2.getFieldMaybe('Signature1')
     && f2.getTextField('inspector').getText() === 'Sam Rivera', 'created fields saved into the PDF form, old values kept');
+
+  // Digital signature with a certificate (.p12): sign the empty signature field, check it, then edit and save again.
+  await page.getByRole('button', { name: 'Sign here' }).first().click();
+  const sg = page.getByRole('dialog', { name: 'Sign Document' });
+  const [cfc] = await Promise.all([page.waitForEvent('filechooser'), sg.getByRole('button', { name: 'Choose .pfx / .p12…' }).click()]);
+  await cfc.setFiles('tests/fixtures/test-cert.p12');
+  await sg.getByLabel('Certificate password').fill('wrong');
+  await sg.getByRole('button', { name: 'Open' }).click();
+  await sg.getByText('Wrong password').waitFor();
+  await sg.getByLabel('Certificate password').fill('test');
+  await sg.getByRole('button', { name: 'Open' }).click();
+  await sg.getByText('Signing as').waitFor();
+  assert(await sg.getByLabel('Signature placement').inputValue() === 'field:Signature1', 'Sign here opens Sign Document for that field');
+  await sg.getByLabel('Reason').fill('Approved');
+  await sg.getByRole('button', { name: 'Sign', exact: true }).click();
+  await page.waitForFunction(() => /Signed by Test Signer/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 30000 });
+  await page.keyboard.press('Alt+4');
+  const sp = page.locator('.signatures-panel');
+  await sp.getByText('Signature is valid').waitFor({ timeout: 15000 });
+  assert((await sp.innerText()).includes('Test Signer') && (await sp.innerText()).includes('Approved'), 'Signatures panel (Alt+4) shows the valid signature');
+  await page.screenshot({ path: `${OUT}/16-signed.png` });
+  const [sd2] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
+  await sd2.saveAs(`${OUT}/signed-form.pdf`);
+  const sb = readFileSync(`${OUT}/signed-form.pdf`);
+  const sdoc = await PDFDocument.load(sb);
+  const sv = sdoc.getForm().getField('Signature1').acroField.dict.lookup(PDFName.of('V'));
+  const br = sv.lookup(PDFName.of('ByteRange')).asArray().map((x) => x.asNumber());
+  assert(br[2] + br[3] === sb.length, 'the saved file is signed over its whole length');
+  // A markup added after signing is saved as a new revision: the signature stays valid.
+  await page.keyboard.press('r');
+  { const b = await svg.boundingBox(); await page.mouse.move(b.x + b.width * 0.6, b.y + b.height * 0.3); await page.mouse.down(); await page.mouse.move(b.x + b.width * 0.7, b.y + b.height * 0.35, { steps: 4 }); await page.mouse.up(); }
+  await page.keyboard.press('Escape');
+  const [sd3] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
+  await sd3.saveAs(`${OUT}/signed-form-2.pdf`);
+  const sb2 = readFileSync(`${OUT}/signed-form-2.pdf`);
+  assert(sb2.length > sb.length && Buffer.compare(sb2.subarray(0, sb.length), sb) === 0, 'saving a signed file appends a revision, leaving the signed bytes untouched');
+  await sp.getByText('changed after this signature').waitFor({ timeout: 15000 });
+  assert((await sp.innerText()).includes('Signature is valid'), 'the signature still checks out after the later edit');
 }
 
 // Keyboard Shortcuts editor: reassign Length to Ctrl+Shift+K; Tool Chest Drawing mode.

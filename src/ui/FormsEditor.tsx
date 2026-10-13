@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { create } from 'zustand';
 import { useApp, type DocState } from '../model/store';
 import type { Pt, ToolId } from '../model/types';
+import { awaitingSignatureBox, placeSignatureBox } from './DigitalSignature';
 import { createField, deleteField, renameField, setFieldOptions, uniqueFieldName, type FieldSpec, type NewFieldType } from '../pdf/forms';
 
 const KIND: Partial<Record<ToolId, NewFieldType>> = {
@@ -20,6 +21,7 @@ export const useFormsDialog = create<{ draft: Omit<FieldSpec, 'name'> | null; ed
 export function newFormField(tool: ToolId, doc: DocState, page: number, a: Pt, b: Pt) {
   const type = KIND[tool];
   if (!type) return;
+  if (type === 'signature' && awaitingSignatureBox()) { placeSignatureBox(doc, page, a, b); return; }
   const vp = doc.loaded.pages[page].viewport;
   const [x0, y0] = vp.convertToPdfPoint(a.x, a.y), [x1, y1] = vp.convertToPdfPoint(b.x, b.y);
   if (Math.abs(x1 - x0) < 4 || Math.abs(y1 - y0) < 4) return;

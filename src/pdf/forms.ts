@@ -2,6 +2,7 @@
 import {
   PDFCheckBox, PDFDropdown, PDFHexString, PDFName, PDFOptionList, PDFRadioGroup, PDFSignature, PDFTextField, type PDFDocument, type PDFFont,
 } from 'pdf-lib';
+import { keepPageContents } from './incremental';
 
 export type FieldValue = string | boolean;
 
@@ -46,7 +47,7 @@ export function readFields(doc: PDFDocument): FormField[] {
     }
     else if (f instanceof PDFDropdown) out.push({ ...base, type: 'dropdown', value: f.getSelected()[0] ?? '', options: f.getOptions() });
     else if (f instanceof PDFOptionList) out.push({ ...base, type: 'list', value: f.getSelected()[0] ?? '', options: f.getOptions() });
-    else if (f instanceof PDFSignature) out.push({ ...base, type: 'signature', value: '' });
+    else if (f instanceof PDFSignature) out.push({ ...base, type: 'signature', value: f.acroField.dict.get(PDFName.of('V')) ? 'signed' : '' });
     else out.push({ ...base, type: 'button', value: '' });
   }
   return out;
@@ -96,6 +97,7 @@ export function uniqueFieldName(existing: string[], base: string): string {
 export function createField(doc: PDFDocument, spec: FieldSpec) {
   const form = doc.getForm();
   const page = doc.getPage(spec.page);
+  keepPageContents(page);
   const at = box(spec.rect);
   const existing = form.getFieldMaybe(spec.name);
   if (existing && !(spec.type === 'radio' && existing instanceof PDFRadioGroup)) throw new Error(`A field named "${spec.name}" already exists.`);
