@@ -407,3 +407,18 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
 .bm-rename { flex: 1; font: inherit; }
 .bm-here { color: var(--accent); font-size: 10px; }
 .bm-broken { color: #c60; }
+
+/* Line styles and hatch patterns */
+.style-manager { width: min(640px, calc(100vw - 32px)); }
+.style-list { max-height: 320px; overflow: auto; border: 1px solid var(--border); margin: 8px 12px; }
+.style-item { display: flex; align-items: center; justify-content: space-between; padding: 2px 8px; cursor: default; }
+.style-item.selected, .hatch-item.selected { background: #d6e4fa; }
+.style-preview { background: #fff; flex: none; }
+.hatch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; max-height: 340px; overflow: auto; margin: 8px 12px; }
+.hatch-item { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; border-radius: 4px; text-align: center; }
+.hatch-editor { display: flex; gap: 12px; flex-wrap: wrap; }
+.hatch-tile { background: #fff; border: 1px solid var(--border); touch-action: none; cursor: crosshair; }
+.components { display: flex; flex-direction: column; gap: 4px; }
+.component { display: flex; gap: 4px; align-items: center; }
+.component input { width: 64px; }
+button.active { background: #d6e4fa; }

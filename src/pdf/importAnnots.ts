@@ -32,6 +32,9 @@ export interface CTData {
   depth?: number;
   fillOpacity?: number;
   lineStyle?: MarkupStyle['lineStyle'];
+  lineDef?: MarkupStyle['lineDef']; // copy of a custom line style
+  hatch?: MarkupStyle['hatch'];
+  hatchScale?: number;
   points?: number[]; // PDF-space points for types whose geometry is not standard (count)
   comment?: string; // measurement comments (/Contents holds the value, as in Revu)
   cutouts?: { kind: 'polygon' | 'ellipse'; points: number[] }[]; // PDF-space holes in an area/volume
@@ -137,6 +140,8 @@ function readStyle(doc: PDFDocument, dict: PDFDict, type: MarkupType, ct?: CTDat
     fillOpacity: ct?.fillOpacity ?? getNumber(doc, dict, 'FillOpacity') ?? ca ?? defaults.fillOpacity,
     width,
     lineStyle: ct?.lineStyle ?? (dashed ? 'dashed' : 'solid'),
+    ...(ct?.lineDef ? { lineDef: ct.lineDef } : {}),
+    ...(ct?.hatch ? { hatch: ct.hatch, hatchScale: ct.hatchScale } : {}),
     fontSize,
   };
 }

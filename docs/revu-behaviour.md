@@ -258,6 +258,19 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - With the Area or Volume tool, clicking a cutout converts it into its own
   measurement (Shift: all cutouts of that markup); the cutout stays.
 
+## Line styles and hatch patterns
+A line style is one or more lines, each offset from the middle (-10..10),
+made of components: dash and space (adjustable width), dot, and text. "Scale
+with line thickness" makes them grow with the line width. Styles live in
+sets (the Standard set is read only); sets are imported/exported (Revu
+.blx; ours JSON, since .blx is undocumented). Changing a style does not
+change markups already drawn. Hatch patterns fill closed markups and area/
+volume measurements; the editor draws lines and small/large dots on a grid
+tile; sets import/export (Revu also imports AutoCAD .pat: not yet).
+Ours: the markup keeps a copy of a custom style so the file is
+self-contained; hatches are drawn in the fill colour and saved as PDF
+tiling patterns so any viewer shows them.
+
 ## Bookmarks (Alt+B)
 Add Bookmark goes to the current view of the active page and is named after
 the page label, ready to type over; it goes below the selected bookmark

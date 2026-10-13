@@ -1,11 +1,12 @@
 import { BookmarksPanel } from './BookmarksPanel';
+import { HatchSelect, LineStyleSelect } from './LineStyles';
 import { LayersPanel } from './LayersPanel';
 import { layerIds } from '../pdf/layers';
 import { SignaturesPanel } from './DigitalSignature';
 import { useEffect, useRef, useState } from 'react';
 import { useApp, useActiveDoc, type DocState } from '../model/store';
 import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, formatNumber, measure, precisionOf, unitLabel, withPrecision } from '../model/measure';
-import type { LineStyle, Markup, MarkupStyle, MarkupType, Scale, ToolPreset, ToolSet } from '../model/types';
+import type { Markup, MarkupStyle, MarkupType, Scale, ToolPreset, ToolSet } from '../model/types';
 import { toolById } from '../tools/tools';
 import { Icon } from './icons';
 import { SpacesPanel } from './SpacesPanel';
@@ -167,11 +168,8 @@ function StyleEditor({ style, type, onChange }: { style: MarkupStyle; type: Mark
       <Row label="Opacity"><span className="inline"><input type="range" min={0} max={100} value={Math.round(style.opacity * 100)} onChange={(e) => onChange({ opacity: +e.target.value / 100 })} />{Math.round(style.opacity * 100)}</span></Row>
       {style.fill && <Row label="Fill Opacity"><span className="inline"><input type="range" min={0} max={100} value={Math.round(style.fillOpacity * 100)} onChange={(e) => onChange({ fillOpacity: +e.target.value / 100 })} />{Math.round(style.fillOpacity * 100)}</span></Row>}
       <Row label="Line Width"><input type="number" min={0} max={50} step={0.25} value={style.width} onChange={(e) => onChange({ width: Math.max(0, +e.target.value) })} /></Row>
-      <Row label="Line Style">
-        <select value={style.lineStyle} onChange={(e) => onChange({ lineStyle: e.target.value as LineStyle })}>
-          <option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option>
-        </select>
-      </Row>
+      <Row label="Line Style"><LineStyleSelect style={style} onChange={onChange} /></Row>
+      <HatchSelect style={style} type={type} onChange={onChange} />
       {(textual || ['length', 'polylength', 'area', 'perimeter', 'volume', 'angle', 'radius', 'diameter'].includes(type)) && (
         <Row label="Font Size"><input type="number" min={4} max={144} value={style.fontSize} onChange={(e) => onChange({ fontSize: Math.max(4, +e.target.value) })} /></Row>
       )}

@@ -1338,6 +1338,58 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert(dest.get(0).toString() === out.getPage(0).ref.toString() && dest.get(1).toString() === '/XYZ', 'bookmark goes to the view on page 1');
 }
 
+// Line styles and hatch patterns (Properties > Line Style / Hatch, Manage…).
+{
+  const layer = page.locator('.page .markup-layer');
+  const lb = await layer.boundingBox();
+  await page.keyboard.press('r');
+  await page.mouse.move(lb.x + lb.width * 0.06, lb.y + lb.height * 0.3);
+  await page.mouse.down();
+  await page.mouse.move(lb.x + lb.width * 0.13, lb.y + lb.height * 0.45, { steps: 4 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  if (!(await page.locator('select[aria-label="Hatch"]').count())) await page.keyboard.press('Alt+P');
+  await page.locator('select[aria-label="Hatch"]').selectOption('ansi31', { timeout: 5000 });
+  await page.waitForTimeout(200);
+  assert(await layer.locator('pattern line').count() >= 1, 'the rectangle is hatched (Diagonal ANSI31)');
+  await page.keyboard.press('l');
+  await page.mouse.move(lb.x + lb.width * 0.05, lb.y + lb.height * 0.6);
+  await page.mouse.down();
+  await page.mouse.move(lb.x + lb.width * 0.45, lb.y + lb.height * 0.6, { steps: 6 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  await page.locator('select[aria-label="Line Style"]').selectOption('gas');
+  await page.waitForTimeout(200);
+  const gs = await layer.locator('text').evaluateAll((els) => els.filter((e) => e.textContent === 'G').length);
+  assert(gs >= 3, `the Gas Line style repeats "G" along the line (${gs})`);
+  // A custom style made in the Line Style Editor.
+  await page.locator('select[aria-label="Line Style"]').selectOption('__manage__');
+  const mgr = page.locator('[role=dialog][aria-label="Manage Line Styles"]');
+  await mgr.waitFor();
+  await mgr.getByRole('button', { name: 'Add…' }).click();
+  const ed = page.locator('[role=dialog][aria-label="Line Style Editor"]');
+  await ed.locator('[aria-label="Line style name"]').fill('Fiber');
+  await ed.getByRole('button', { name: '+ Text' }).click();
+  await ed.locator('[aria-label="Text 3"]').fill('FO');
+  await ed.getByRole('button', { name: 'OK' }).click();
+  await mgr.getByRole('button', { name: 'Close' }).click();
+  const opt = await page.locator('select[aria-label="Line Style"] option', { hasText: 'Fiber' }).getAttribute('value');
+  await page.locator('select[aria-label="Line Style"]').selectOption(opt);
+  await page.waitForTimeout(200);
+  assert(await layer.locator('text').evaluateAll((els) => els.filter((e) => e.textContent === 'FO').length) >= 3, 'a custom line style with text applies to the line');
+  await page.screenshot({ path: `${OUT}/line-styles.png` });
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
+  const file = `${OUT}/line-styles.pdf`;
+  await dl.saveAs(file);
+  await page.waitForTimeout(800);
+  const out = await PDFDocument.load(readFileSync(file));
+  const { inflateSync } = await import('node:zlib');
+  const aps = out.getPage(1).node.lookup(PDFName.of('Annots'), PDFArray).asArray().map((r) => out.context.lookup(r, PDFDict))
+    .map((a) => { const st = a.lookup(PDFName.of('AP'), PDFDict).lookup(PDFName.of('N')); const raw = st.getContents(); try { return inflateSync(raw).toString('latin1'); } catch { return Buffer.from(raw).toString('latin1'); } });
+  assert(aps.some((t) => t.includes('/Pattern cs /HP0 scn')), 'saved: the hatch is a tiling pattern in the appearance');
+  assert(aps.some((t) => (t.match(/ Tj ET/g) ?? []).length >= 3 && t.includes(' Tm ')), 'saved: the line style text is in the appearance');
+}
+
 // Print (Ctrl+P): sheets are prepared in the page, then the browser's print dialog opens.
 {
   await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });

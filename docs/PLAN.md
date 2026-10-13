@@ -174,7 +174,10 @@ filling, image signatures, redaction and OCR.
   after/child, rename, delete, drag to reorder or nest (Ctrl+drag copies),
   Set to Current View, Properties, from page labels, Audit, Export CSV;
   saved to /Outlines keeping untouched items and actions
-- [ ] Line styles and hatch patterns
+- [x] Line styles (15 standard incl. center/hidden/phantom/double and
+  utility lines with text; Line Style Editor: lines, offsets, dash/space/
+  dot/text) and hatch patterns (10 standard; Hatch Pattern Editor; saved as
+  PDF tiling patterns); custom sets import/export as JSON
 - [ ] Spell check in text markups and comments
 - [ ] Visual Search
 - [ ] Sequences (auto-numbered markups)

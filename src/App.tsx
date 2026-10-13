@@ -24,6 +24,7 @@ import { CompareDialog } from './ui/Compare';
 import { PrintDialog, openPrint } from './ui/Print';
 import { stepView } from './ui/Rulers';
 import { addBookmark } from './ui/BookmarksPanel';
+import { StyleManagerDialog } from './ui/LineStyles';
 import { SheetsDialog } from './ui/Sheets';
 import { PrefsDialogs } from './ui/Prefs';
 import { SignatureDialog } from './ui/Signature';
@@ -219,6 +220,7 @@ export function App() {
       <PagesDialog />
       <CompareDialog />
       <PrintDialog />
+      <StyleManagerDialog />
       <SheetsDialog />
       <PrefsDialogs />
       <SignatureDialog />

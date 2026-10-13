@@ -1,4 +1,5 @@
 import { hasCurves, svgPath } from '../model/curves';
+import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTile, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type LineStyleDef } from '../model/lineStyles';
 import { calloutAttach } from '../pdf/save';
 import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import type { Cutout, Markup, MarkupStyle, MarkupType, Pt } from '../model/types';
@@ -22,7 +23,7 @@ function arrowHead(from: Pt, to: Pt, size: number) {
   return `${a.x},${a.y} ${to.x},${to.y} ${b.x},${b.y}`;
 }
 
-const polyPath = (P: Pt[]) => P.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join('') + 'Z';
+const polyPath = (P: Pt[], closed = true) => P.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join('') + (closed ? 'Z' : '');
 
 /** SVG subpath for a cutout (polygon or ellipse). */
 export function cutoutPath(c: Cutout): string {
@@ -66,18 +67,25 @@ export const STAMP_COLORS: Record<string, string> = {
 export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
   const st = m.style;
   const P = m.points;
+  // Line style: simple ones are a dash pattern; others (parallel lines, text) are drawn along the outline.
+  const def = lineStyleOf(st);
+  const styled = !isSimpleStyle(def) && st.width > 0 ? strokeOutline(m) : null;
+  const dash = lineDash(def, st.width);
+  const hatchArea = st.hatch && HATCH_TYPES.has(m.type) ? fillOutline(m) : null;
   const common = {
     stroke: st.width > 0 ? st.color : 'none',
     strokeWidth: st.width,
     strokeOpacity: st.opacity,
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
-    strokeDasharray: st.lineStyle === 'dashed' ? `${st.width * 4} ${st.width * 3}` : st.lineStyle === 'dotted' ? `${st.width} ${st.width * 2}` : undefined,
-    fill: st.fill ?? 'none',
+    strokeDasharray: dash?.join(' '),
+    fill: hatchArea ? 'none' : st.fill ?? 'none',
     fillOpacity: st.fillOpacity,
     opacity: ghost ? 0.7 : 1,
   };
   const c = common;
+  /** Props for the element that carries a styled outline (drawn separately when styled). */
+  const cm = styled ? { ...c, stroke: 'none' } : c;
   const meas = measure(m);
   let label: { at: Pt; text: string } | null = null;
   if (meas && m.type !== 'count' && P.length > 1) {
@@ -102,7 +110,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     }
     case 'arc':
       if (P.length < 2) break;
-      shape = <polyline {...c} fill="none" points={pts(P.length > 2 ? arcThrough(P[0], P[1], P[2]) : P)} />;
+      shape = <polyline {...cm} fill="none" points={pts(P.length > 2 ? arcThrough(P[0], P[1], P[2]) : P)} />;
       break;
     case 'typewriter': {
       const b = bounds(P.length > 1 ? [P[0], P[1]] : [P[0], { x: P[0].x + 120, y: P[0].y + 20 }]);
@@ -184,7 +192,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
       break;
     case 'line': case 'length':
       if (P.length < 2) break;
-      shape = <line {...c} x1={P[0].x} y1={P[0].y} x2={P[1].x} y2={P[1].y} />;
+      shape = <line {...cm} x1={P[0].x} y1={P[0].y} x2={P[1].x} y2={P[1].y} />;
       if (m.type === 'length') {
         const ang = Math.atan2(P[1].y - P[0].y, P[1].x - P[0].x) + Math.PI / 2;
         const t = (p: Pt) => <line key={`${p.x},${p.y}`} {...c} x1={p.x + Math.cos(ang) * 5} y1={p.y + Math.sin(ang) * 5} x2={p.x - Math.cos(ang) * 5} y2={p.y - Math.sin(ang) * 5} />;
@@ -193,18 +201,18 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
       break;
     case 'arrow':
       if (P.length < 2) break;
-      shape = <><line {...c} x1={P[0].x} y1={P[0].y} x2={P[1].x} y2={P[1].y} />
+      shape = <><line {...cm} x1={P[0].x} y1={P[0].y} x2={P[1].x} y2={P[1].y} />
         <polyline {...c} fill="none" points={arrowHead(P[0], P[1], Math.max(8, st.width * 5))} /></>;
       break;
     case 'polyline': case 'polylength': case 'perimeter': case 'pen':
       shape = hasCurves(m.handles) && m.type !== 'pen'
-        ? <path {...c} fill="none" d={svgPath(P, m.handles, false)} />
-        : <polyline {...c} fill="none" points={pts(P)} />;
+        ? <path {...cm} fill="none" d={svgPath(P, m.handles, false)} />
+        : <polyline {...cm} fill="none" points={pts(P)} />;
       break;
     case 'polygon': case 'area': case 'volume':
       shape = m.cutouts?.length || hasCurves(m.handles)
-        ? <path {...c} fillRule="evenodd" d={(hasCurves(m.handles) ? svgPath(P, m.handles, true) : polyPath(P)) + (m.cutouts ?? []).map(cutoutPath).join('')} />
-        : <polygon {...c} points={pts(P)} />;
+        ? <path {...cm} fillRule="evenodd" d={(hasCurves(m.handles) ? svgPath(P, m.handles, true) : polyPath(P)) + (m.cutouts ?? []).map(cutoutPath).join('')} />
+        : <polygon {...cm} points={pts(P)} />;
       break;
     case 'cloud':
       shape = <path {...c} d={cloudPath(P, st.width)} />;
@@ -216,15 +224,15 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
         break;
       }
       const b = bounds(P);
-      shape = <rect {...c} x={b.minX} y={b.minY} width={b.w} height={b.h}
+      shape = <rect {...cm} x={b.minX} y={b.minY} width={b.w} height={b.h}
         style={m.type === 'highlight' ? { mixBlendMode: 'multiply' } : undefined}
-        stroke={m.type === 'highlight' ? 'none' : c.stroke} />;
+        stroke={m.type === 'highlight' ? 'none' : cm.stroke} />;
       break;
     }
     case 'ellipse': {
       if (P.length < 2) break;
       const b = bounds(P);
-      shape = <ellipse {...c} cx={b.minX + b.w / 2} cy={b.minY + b.h / 2} rx={b.w / 2} ry={b.h / 2} />;
+      shape = <ellipse {...cm} cx={b.minX + b.w / 2} cy={b.minY + b.h / 2} rx={b.w / 2} ry={b.h / 2} />;
       break;
     }
     case 'radius': case 'diameter': {
@@ -274,13 +282,45 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
       break;
     }
   }
+  const hatchId = `hatch-${m.id}`;
+  const tile = st.hatch ? hatchTile(st.hatch, st.hatchScale) : 0;
+  const hatchColor = st.fill ?? st.color;
   return (
     <g data-id={m.id}>
+      {hatchArea && st.hatch && (
+        <>
+          <defs>
+            <pattern id={hatchId} patternUnits="userSpaceOnUse" width={tile} height={tile}>
+              {st.hatch.lines.map(([x1, y1, x2, y2], i) => <line key={i} x1={x1 * tile} y1={y1 * tile} x2={x2 * tile} y2={y2 * tile} stroke={hatchColor} strokeWidth={hatchLineWidth(tile)} strokeLinecap="square" />)}
+              {st.hatch.dots.map(([x, y, r], i) => <circle key={`d${i}`} cx={x * tile} cy={y * tile} r={Math.max(0.3, r * tile)} fill={hatchColor} />)}
+            </pattern>
+          </defs>
+          <path d={polyPath(hatchArea) + (m.cutouts ?? []).map(cutoutPath).join('')} fill={`url(#${hatchId})`} fillOpacity={st.fillOpacity} fillRule="evenodd" stroke="none" opacity={ghost ? 0.7 : 1} />
+        </>
+      )}
       {shape}
+      {styled && <StyledOutline outline={styled} def={def} st={st} ghost={ghost} />}
       {label && (
         <text x={label.at.x} y={label.at.y} fontSize={m.style.fontSize} fill={st.color}
           textAnchor="middle" dominantBaseline="middle" className="measure-label">{label.text}</text>
       )}
+    </g>
+  );
+}
+
+/** A line in a style with parallel lines or text along it. */
+function StyledOutline({ outline, def, st, ghost }: { outline: { pts: Pt[]; closed: boolean }; def: LineStyleDef; st: MarkupStyle; ghost?: boolean }) {
+  const { lines, texts } = styledStroke(outline.pts, outline.closed, def, st.width);
+  return (
+    <g opacity={ghost ? 0.7 : 1} pointerEvents="none">
+      {lines.map((l, i) => (
+        <path key={i} d={polyPath(l.pts, l.closed)} fill="none" stroke={st.color} strokeWidth={st.width} strokeOpacity={st.opacity}
+          strokeLinecap="round" strokeLinejoin="round" strokeDasharray={l.dash?.join(' ')} />
+      ))}
+      {texts.map((t, i) => (
+        <text key={`t${i}`} x={t.at.x} y={t.at.y} fontSize={t.size} fill={st.color} fillOpacity={st.opacity} textAnchor="middle" dominantBaseline="central"
+          fontFamily="Helvetica, Arial, sans-serif" transform={`rotate(${t.angle} ${t.at.x} ${t.at.y})`}>{t.text}</text>
+      ))}
     </g>
   );
 }

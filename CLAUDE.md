@@ -88,7 +88,8 @@ Tool Chest tool sets (new/rename/export/import, Properties vs Drawing mode),
 Keyboard Shortcuts editor (src/ui/commands.ts), Profiles; Print (Ctrl+P,
 src/ui/Print.tsx, layout math in src/model/print.ts); Rulers, crosshair,
 Dimmer, Previous/Next View (src/ui/Rulers.tsx, src/model/rulers.ts);
-Bookmarks editing (src/ui/BookmarksPanel.tsx, src/pdf/bookmarks.ts); CyanTakeoff (=Revu)
+Bookmarks editing (src/ui/BookmarksPanel.tsx, src/pdf/bookmarks.ts); line
+styles and hatch patterns (src/model/lineStyles.ts, src/ui/LineStyles.tsx); CyanTakeoff (=Revu)
 and Batch menus; form filling (AcroForm inputs saved into the form) and
 field creation (Tools > field tools, X = signature field, Forms Editor
 Ctrl+Shift+F), image

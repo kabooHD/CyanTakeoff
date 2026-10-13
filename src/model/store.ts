@@ -9,6 +9,7 @@ import { translated } from './markup';
 import { expandGroups } from './arrange';
 import { columnDefaults } from './columns';
 import type { RulerUnit } from './rulers';
+import type { HatchDef, LineStyleDef } from './lineStyles';
 import type { LayerSet } from '../pdf/layers';
 import type { Bookmark } from '../pdf/bookmarks';
 import { hasSignatures, incrementalUpdate, loadForUpdate } from '../pdf/incremental';
@@ -192,7 +193,10 @@ interface AppState {
   dimLevel: number;
   /** Units of the rulers (right-click a ruler). */
   rulerUnit: RulerUnit;
-  setView(p: Partial<Pick<AppState, 'dimLevel' | 'rulerUnit'>>): void;
+  /** Line styles and hatch patterns the user made (Manage Line Styles / Hatch Patterns). */
+  customLineStyles: LineStyleDef[];
+  customHatches: HatchDef[];
+  setView(p: Partial<Pick<AppState, 'dimLevel' | 'rulerUnit' | 'customLineStyles' | 'customHatches'>>): void;
   setPanels(p: Partial<Pick<AppState, 'left' | 'right' | 'markupsList'>>): void;
   setAuthor(a: string): void;
   /** Add a markup as a tool (to the first set, or `setId`). */
@@ -246,6 +250,7 @@ function savePrefs(s: AppState) {
       toolDefaults: s.toolDefaults, toggles: s.toggles, author: s.author,
       toolSets: s.toolSets, customKeys: s.customKeys, recentTools: s.recentTools, savedScales: s.savedScales,
       left: s.left, right: s.right, markupsList: s.markupsList, dimLevel: s.dimLevel, rulerUnit: s.rulerUnit,
+      customLineStyles: s.customLineStyles, customHatches: s.customHatches,
     }));
   } catch { /* storage unavailable */ }
 }
@@ -357,6 +362,8 @@ export const useApp = create<AppState>((set, get) => {
     toggles: { snap: false, grid: false, content: true, markup: true, reuse: false, sync: false, rulers: false, dimmer: false, crosshair: false, ...(prefs.toggles ?? {}) },
     dimLevel: prefs.dimLevel ?? 50,
     rulerUnit: prefs.rulerUnit ?? 'in',
+    customLineStyles: prefs.customLineStyles ?? [],
+    customHatches: prefs.customHatches ?? [],
     setView(p) { set(p); savePrefs(get()); },
     left: prefs.left === undefined ? 'thumbnails' : prefs.left,
     right: prefs.right === undefined ? 'properties' : prefs.right,

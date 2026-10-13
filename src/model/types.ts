@@ -1,6 +1,7 @@
 // Core data model. All geometry is stored in "page space": the pdf.js
 // viewport at scale 1 for the page (PDF points, y pointing down, page
 // rotation applied). Conversion to PDF user space happens only on save.
+import type { HatchDef, LineStyleDef } from './lineStyles';
 
 export type Pt = { x: number; y: number };
 
@@ -120,7 +121,8 @@ export interface Reply { id: string; author: string; date: string; text: string 
 
 export type MarkupStatus = 'None' | 'Accepted' | 'Rejected' | 'Cancelled' | 'Completed';
 
-export type LineStyle = 'solid' | 'dashed' | 'dotted';
+/** Line style id: a standard one ('solid', 'dashed', 'center'...) or a custom one (see lineStyles.ts). */
+export type LineStyle = string;
 
 export interface MarkupStyle {
   color: string; // stroke / text colour, #rrggbb
@@ -129,6 +131,11 @@ export interface MarkupStyle {
   fillOpacity: number; // 0..1
   width: number; // line width, points
   lineStyle: LineStyle;
+  /** Copy of a custom line style's definition (standard styles are looked up by id). */
+  lineDef?: LineStyleDef;
+  /** Hatch pattern filling a closed markup (drawn in the fill colour), and its scale. */
+  hatch?: HatchDef;
+  hatchScale?: number;
   fontSize: number; // points
 }
 
