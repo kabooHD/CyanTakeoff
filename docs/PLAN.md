@@ -84,183 +84,93 @@ Bluebeam users should be able to switch without retraining:
   all slab area on A-201" or "compare rev 3 to rev 4". We measure time per
   task against Revu.
 
-## 4. Architecture
+## 4. Architecture (as built)
 
-```
-┌───────────────────────── Desktop app ──────────────────────────┐
-│ UI (TypeScript + React, docking layout, canvas/WebGL viewport)  │
-│        ▲ commands / events (typed IPC)                          │
-│ Tauri 2 shell (Windows / macOS / Linux)                         │
-│        ▼                                                        │
-│ ct-core (Rust)                                                  │
-│  ├─ ct-render   : PDFium bindings, tile cache, GPU upload       │
-│  ├─ ct-doc      : PDF object model, incremental save (lopdf)    │
-│  ├─ ct-markup   : annotation model ⇄ PDF annots / XFDF          │
-│  ├─ ct-measure  : calibration, viewports, geometry, quantities  │
-│  ├─ ct-snap     : vector content extraction, snapping, hit-test │
-│  ├─ ct-compare  : raster overlay + vector diff                  │
-│  ├─ ct-ocr      : Tesseract integration                         │
-│  ├─ ct-sign     : PAdES signing / validation                    │
-│  └─ ct-sync     : session op-log client                         │
-└─────────────────────────────────────────────────────────────────┘
-                 │ HTTPS + WebSocket
-┌──────────── ct-server (self-hosted, optional) ──────────────────┐
-│ Rust (axum) · PostgreSQL · S3-compatible storage · OIDC auth    │
-│ Sessions (live markup op-log) · Projects (versioned files)      │
-└─────────────────────────────────────────────────────────────────┘
-```
+Web-first, TypeScript only, so it runs in any browser (Windows, macOS,
+Linux) and can be hosted as a static site:
 
-### Key technology choices (recommended)
+- **UI:** React + zustand, Revu-style workspace (`src/ui`).
+- **Rendering:** pdf.js (legacy build for older browsers), tiled detail
+  canvas for sharp zoom, SVG overlay for markups.
+- **PDF writing:** pdf-lib; markups saved as standard annotations with
+  appearance streams, measurements in Revu's structure (`docs/formats/revu.md`).
+- **Snapping:** vector geometry extracted from the page operator list.
+- **Files stay on the user's machine:** opening and saving happen in the
+  browser; nothing is uploaded unless a shared session is started.
+- A desktop wrapper (Tauri) comes later, mainly for browser-reserved
+  shortcuts (Ctrl+Tab, Ctrl+N) and file associations.
 
-| Concern | Choice | Why |
-|---|---|---|
-| PDF rendering | **PDFium** (BSD/Apache) | Same engine as Chrome. Fast and robust on huge vector construction drawings. Its permissive licence keeps our options open (MuPDF is AGPL). |
-| PDF writing | **lopdf** (Rust) with incremental updates, plus qpdf for repair and linearization | Saves markups without rewriting the whole file, which keeps saves fast and signatures valid |
-| Core language | **Rust** | Memory safety for parsing untrusted PDFs, performance, and it compiles to WASM for a later web client |
-| UI | **Tauri 2 + React/TypeScript** | Native installers on all three OSes. The same UI code can later power the web client. The docking layout is easier to make Revu-like in web tech than in most native toolkits. |
-| Viewport | Tiled raster from PDFium, with markups drawn as vectors on WebGL/Canvas | Smooth pan and zoom on 36"×48" sheets, and markups stay crisp |
-| OCR | Tesseract | Mature and Apache-licensed |
-| Collaboration | Per-markup op-log with last-writer-wins on each field and server ordering | Markups are discrete objects, so a full CRDT is unnecessary. This keeps the server simple and auditable. |
-| Data export | CSV, XLSX (rust_xlsxwriter), XFDF, JSON | Takeoff numbers have to reach estimating spreadsheets |
+## 5. Roadmap (revised after user research)
 
-**Fallback if Tauri's webview proves too slow:** keep `ct-core` and move the
-UI to Qt 6 (LGPL). That is why everything except presentation lives in Rust
-crates behind a command API.
+What Revu users complain about: subscription-only pricing, cost per seat,
+Windows-only, support and licensing hassle. What keeps them on Revu: everyone
+else uses it, Studio sessions (shared live review), and trust that files
+won't break. So the plan now favours **getting real users early, file
+fidelity, and shared sessions** over feature breadth.
 
-### Markup and measurement storage (the interoperability core)
+### Done: v0.1 takeoff core
+Revu-style workspace and published default shortcuts; markup tools; length,
+polylength, area, perimeter, volume, count, angle, radius, diameter;
+calibrate and preset scales; snap to content/markup/grid; Markups List with
+columns, filters and CSV summary; Tool Chest; live measurement preview; save
+and reopen; tested against real Revu files (values match Revu's own).
 
-- Each markup is a standard PDF annotation (`/Square`, `/Circle`, `/Line`,
-  `/PolyLine`, `/Polygon`, `/FreeText`, `/Ink`, `/Stamp`, …) with appearance
-  streams, so any PDF reader can display it.
-- Measurements use the standard `/Measure` dictionary and page `/VP`
-  viewports, which are what Revu itself reads and writes. We also preserve
-  unknown vendor keys on round-trip so we never destroy Revu data.
-- Extra CyanTakeoff data (custom columns, Spaces, tool-set link) goes in a
-  namespaced private key, so other readers ignore it.
-- A **round-trip test corpus**: real drawings marked up in Revu and in
-  CyanTakeoff, checked automatically for markup count, geometry, scale and
-  quantity equality after open → edit → save cycles.
+### Next 1: finish takeoff essentials (days)
+- Revu's Apply Scale to Pages dialog (Preset / Custom / Calibrate, page
+  range, precision, saved presets) and the prompt to set a scale before
+  the first measurement
+- Area/volume cutouts (polygon and ellipse)
+- Viewports (different scales on one sheet)
 
-## 5. Roadmap
+### Next 2: public test build (days)
+- Host on a VPS (static site + HTTPS), with a feedback link and a clear
+  privacy note: drawings never leave the browser
+- Post to Revu user communities; collect real Revu files and bug reports
+- Publish a compatibility report: which Revu markups round-trip, with tests
 
-AI-first build: Claude Code sessions do most of the coding, running in
-parallel (one per crate or feature) while a human steers, tests and merges.
-Writing code is no longer the bottleneck. **Verification is**: correct
-quantities, no data loss on real Revu files, and speed on huge drawings. So
-every phase ends with a usable build and is only "done" when its tests pass
-on the real-drawing corpus.
+### Next 3: shared sessions, the Studio replacement (1–2 weeks)
+- Small server: share a session link, real-time markup sync, attendee
+  list, chat, per-user markups, session report; works in the browser with
+  no install for guests
+- Self-hostable (Docker) so firms keep drawings on their own servers
+- Note: we cannot join Revu's Studio sessions (closed service); the pitch
+  is "anyone can join with a link, on any computer"
 
-### Phase 0: Foundations (days 1–3)
-- Repo, licence, CI (Windows/macOS/Linux), code of conduct, contribution guide
-- Rust workspace + Tauri shell + PDFium bindings
-- Tile renderer with smooth pan/zoom on a 200-page set
-- Performance budget: open a 50 MB drawing in under 2 s, 60 fps pan
-- Collect the test corpus of real-world drawings and Revu-authored PDFs
-
-### Phase 1: Viewer + Markup MVP (week 1–2) → **v0.1**
-- Tabs, thumbnails, bookmarks, text search, page navigation, split view
-- Core markup tools, the Properties panel, undo/redo, incremental save
-- Markups List with sort, filter, status, author, date, comments/replies
-- Revu-like default layout and shortcuts
-- Read and write PDFs marked up in Revu without data loss
-
-### Phase 2: Takeoff (weeks 2–4) → **v0.3, the "CyanTakeoff" release**
-- Calibrate, viewports, and per-viewport scales and precision
-- Length, polylength, area, perimeter, volume, count, angle, radius, diameter
-- Cutouts, snapping to PDF content (endpoints, midpoints, intersections),
-  ortho/angle lock
-- Tool Chest with measurement tool sets (e.g. "Concrete slab 6"" with
-  colour, depth and unit cost)
-- Custom columns with formulas (qty × unit cost), Legends, Spaces
-- Dynamic Fill (flood-fill areas bounded by drawing lines)
-- Export quantities to CSV/XLSX and a summary PDF
-
-### Phase 3: Document productivity (weeks 4–6) → **v0.5**
-- Page operations, combine/split, rotate, insert blank pages, page labels
-- Overlay pages and Compare Documents
-- Sets and batch hyperlinking of sheet references
-- Batch Slip Sheet (carry markups to a new revision), batch stamp/flatten
-- OCR, form fill, redaction
-- Profiles, a customizable toolbar, and a shortcut editor
-
-### Phase 4: Collaboration (weeks 6–8) → **v0.8**
-- `ct-server` with OIDC/SSO, Docker/Helm deployment
-- Live Sessions: invite users, real-time markup sync, attendee list, chat,
-  per-user record, session report
-- Projects: shared folders with check-in/check-out and version history
-- Offline mode with later reconciliation
-
-### Phase 5: Hardening + 1.0 (weeks 8–12) → **v1.0**
-- Digital signatures (PAdES) and validation, certificate stores
-- Accessibility (keyboard-only use, screen readers), localization
-- Import Revu tool sets and profiles (clean-room)
-- Signed installers, auto-update, MSI and group policy for IT departments
-- Security audit of the PDF parsing surface (fuzzing in CI from Phase 0)
+### Next 4: document productivity
+Overlay / compare revisions, Sets and sheet links, slip sheets, page
+operations, then Spaces, Legends, Dynamic Fill, custom columns and Excel
+export.
 
 ### Later
-- Web and tablet client (React UI + Rust core compiled to WASM)
-- 3D/IFC model viewing, BIM links
-- AI-assisted takeoff (auto-count symbols, room detection), kept as an
-  optional plugin
-- Plugin/scripting API (Rust + WASM or Lua) for custom tools and exports
+Desktop wrapper, signatures, OCR, forms, redaction, profiles and shortcut
+editor, Revu tool set (.btx) import, accessibility, localisation.
 
-## 6. Repository layout (target)
+## 6. File fidelity is the headline
 
-```
-CyanTakeoff/
-├── apps/
-│   ├── desktop/          # Tauri app (src-tauri + React UI)
-│   └── server/           # ct-server
-├── crates/
-│   ├── ct-core/  ct-render/  ct-doc/  ct-markup/  ct-measure/
-│   ├── ct-snap/  ct-compare/  ct-ocr/  ct-sign/  ct-sync/
-├── ui/                   # shared React component library + design tokens
-├── docs/
-│   ├── PLAN.md
-│   ├── formats/          # interoperability notes (PDF measure, XFDF, …)
-│   └── ux/               # layout specs, shortcut map, usability results
-├── tests/corpus/         # sample drawings + golden round-trip results
-└── .github/workflows/    # CI, fuzzing, release
-```
+Firms won't adopt a tool that might damage their Revu files. Rules:
 
-## 7. Quality gates
+- Never rewrite an annotation the user didn't change; keep unknown keys and
+  unsupported markups byte-for-byte.
+- Every Revu file we can get joins `tests/fixtures/revu` with a test that
+  compares our values to the values Revu displayed.
+- Round-trip tests (open, edit, save, reopen) run on every change.
 
-- **Correctness:** golden tests for every measurement type, including scale
-  conversions, imperial/metric units and cutouts. Quantities must match
-  hand-checked values exactly at the stated precision.
-- **Interop:** round-trip corpus tests run on every PR.
-- **Performance:** benchmarks in CI that fail on regressions over 10%.
-- **Safety:** `cargo-fuzz` on the PDF parser and annotation reader. No
-  `unsafe` outside the FFI crates.
-- **UX:** usability sessions with Revu users at the end of each phase.
+## 7. Clean-room rule
 
-## 8. Project and community
+CyanTakeoff is built only from public documentation, files users create,
+and our own code. **No decompiled Revu code, no code or data derived from
+it, and no Bluebeam assets** may be used or contributed. This keeps the
+project legally safe and credible.
 
-- **Licence (recommended):** Apache-2.0 for the app and core crates, which is
-  enterprise-friendly and compatible with PDFium. Optionally AGPL-3.0 for
-  `ct-server`, so that hosted forks stay open.
-- Public roadmap on GitHub Projects, "good first issue" labels, RFCs for
-  file-format and UX decisions.
-- Funding options: Open Collective/sponsors, paid support, and hosted
-  `ct-server` for firms that don't want to self-host. The software stays
-  100% open.
+## 8. Competition
+
+OpenRevu (Python/Qt, AGPL, broad features, own file format) and OpenPDF
+Studio (Tauri/Rust) exist. CyanTakeoff's difference: exact Revu
+compatibility proven on real files, Revu's exact UX and shortcuts, and it
+runs in any browser.
 
 ## 9. Open decisions
 
-1. **Licence:** Apache-2.0 everywhere, or AGPL for the server?
-2. **UI stack:** Tauri + React (recommended) or native Qt?
-3. **Platform priority:** Windows-first (most Revu users) with macOS/Linux
-   built in CI from day one? (Recommended.)
-4. **First wedge:** ship takeoff (Phase 2) before compare/sets (Phase 3), as
-   the name suggests? (Recommended.)
-5. **Real Revu users for testing:** who can try each build and send us
-   Revu-marked drawings? This is what sets the real pace.
-
-## 10. Immediate next steps
-
-1. Confirm the open decisions above.
-2. Scaffold the Rust workspace, Tauri app and CI (Phase 0).
-3. Prove the risky part first: a PDFium tile-renderer spike on a heavy
-   E-size drawing, measured against the performance budget.
-4. Start the interop corpus: gather Revu-marked PDFs with measurements and
-   document their annotation structure in `docs/formats/`.
+1. Hosting: domain name and VPS provider for the public test build.
+2. Sessions server: allow anonymous guests by link, or require sign-in?
+3. Real Revu users for testing: who can try builds and share Revu files?
