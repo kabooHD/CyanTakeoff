@@ -1,7 +1,7 @@
 // End-to-end smoke test: drives the built app in Chromium.
 // Usage: npm run build && npx vite preview --port 4173 & node tests/e2e.mjs
 import { chromium } from 'playwright-core';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { PDFDocument, PDFName, PDFArray, PDFDict } from 'pdf-lib';
 
 const URL = process.env.APP_URL ?? 'http://localhost:4173/';
@@ -688,6 +688,70 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForTimeout(1200);
   assert((await page.locator('.doc-tab.active').innerText()).startsWith('Overlay'), 'Overlay Pages opens a two-colour overlay document');
   await page.screenshot({ path: `${OUT}/15-overlay.png` });
+}
+
+// Vector compare with alignment points: a revised sheet that is the original shifted by (36, 24) pt plus one new box.
+{
+  const src = await PDFDocument.load(readFileSync('public/sample-floorplan.pdf'));
+  const out = await PDFDocument.create();
+  const [emb] = await out.embedPdf(src, [0]);
+  const pg = out.addPage([36 * 72, 24 * 72]);
+  pg.drawPage(emb, { x: 36, y: -24 });
+  pg.drawRectangle({ x: 700, y: 900, width: 100, height: 60, borderWidth: 2 });
+  writeFileSync(`${OUT}/revised-shifted.pdf`, await out.save());
+  const fc = await ctrlO();
+  await fc.setFiles(['public/sample-floorplan.pdf', `${OUT}/revised-shifted.pdf`]);
+  await page.waitForFunction(() => [...document.querySelectorAll('.doc-tab')].some((t) => t.textContent?.startsWith('revised-shifted')));
+  await page.waitForTimeout(1000);
+  const openMenu = async (menu, item) => { await page.getByRole('button', { name: menu, exact: true }).click(); await page.getByRole('menuitem', { name: item }).click(); };
+  const differences = async () => Number((await page.locator('.statusbar').innerText()).match(/Compare: (\d+) difference/)?.[1] ?? 0);
+  const setup = async () => {
+    await openMenu('Document', 'Compare Documents…');
+    const cd = page.getByRole('dialog', { name: 'Compare Documents' });
+    await cd.getByLabel('Original document').selectOption({ label: 'sample-floorplan.pdf' });
+    await cd.getByLabel('Original page').fill('1');
+    await cd.getByLabel('Revised document').selectOption({ label: 'revised-shifted.pdf' });
+    await cd.getByLabel('Revised page').fill('1');
+    await cd.getByLabel('Compare method').selectOption('vector');
+    return cd;
+  };
+  let cd = await setup();
+  await cd.getByRole('button', { name: 'OK' }).click();
+  await page.waitForFunction(() => /Compare: (\d+ difference|no diff)/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 30000 });
+  const unaligned = await differences();
+  assert(unaligned > 5, `vector compare without alignment flags the shifted sheet (${unaligned})`);
+  cd = await setup();
+  await cd.getByRole('button', { name: 'Align Points…' }).click();
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(800);
+  // Exterior wall corners: (300, 1328) and (1380, 608) in page space on the original, shifted by (36, 24) on the revision.
+  const click = async (x, y) => {
+    const box = await page.locator('.page .markup-layer').boundingBox();
+    const z = box.width / (36 * 72);
+    await page.mouse.move(box.x + x * z + 3, box.y + y * z - 2);
+    await page.mouse.click(box.x + x * z + 3, box.y + y * z - 2); // a few px off: content snap finds the corner
+    await page.waitForTimeout(300);
+  };
+  await click(300, 1328); await click(1380, 608);
+  await page.waitForTimeout(800);
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(500);
+  await click(336, 1352); await click(1416, 632);
+  cd = page.getByRole('dialog', { name: 'Compare Documents' });
+  assert(await cd.getByText('By 2 point pairs').count() === 1, 'alignment set from two pairs of points');
+  await cd.getByRole('button', { name: 'OK' }).click();
+  await page.waitForFunction(() => /Compare: (\d+ difference|no diff)/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 30000 });
+  const aligned = await differences();
+  assert(aligned === 1, `aligned vector compare finds only the new box (${aligned})`);
+  await page.screenshot({ path: `${OUT}/14b-compare-aligned.png` });
+  for (const name of ['revised-shifted.pdf', 'sample-floorplan.pdf']) {
+    await page.locator('.doc-tab', { hasText: name }).click();
+    const ok = (d) => d.accept().catch(() => {});
+    page.on('dialog', ok);
+    await page.keyboard.press('Control+F4');
+    await page.waitForFunction((n) => ![...document.querySelectorAll('.doc-tab')].some((t) => t.textContent?.startsWith(n)), name);
+    page.off('dialog', ok);
+  }
 }
 
 // Sheets: page labels from title blocks, Batch Link, Sets panel and Slip Sheet (on the clean sample).

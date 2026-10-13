@@ -79,7 +79,7 @@ keys and jump-to-markup; Search (Ctrl+F); split view (Ctrl+2/Ctrl+H); undo/redo 
 continuous side by side: Ctrl+4..7) and Rotate View (Ctrl+Shift+Plus/Minus); page operations (insert,
 blank, delete, extract, replace keeping markups, rotate, reorder by
 thumbnail drag, split, combine) and Flatten; Compare Documents (clouds
-differences) and Overlay Pages (two-colour overlay PDF); Page Labels from
+differences, visual or vector, alignment points) and Overlay Pages (two-colour overlay PDF); Page Labels from
 title-block sheet numbers, Batch Link (incl. across open files), Sets panel
 (open files as one set), Slip Sheet (by sheet number, markups carried);
 Tool Chest tool sets (new/rename/export/import, Properties vs Drawing mode),
@@ -102,8 +102,7 @@ Next (from `docs/PLAN.md`):
 3. Compare versions, Sets, slip sheets, Spaces, Legends, Dynamic Fill, XLSX
 
 Known gaps: Revu cutout storage unknown (ours in CTData); curved segments
-on polygons/cutouts (Ctrl+drag) not supported;
-Compare/Overlay have no alignment points (pages compared as positioned)
-and work on rasterised pages (~100 dpi), not vector content; no
+on polygons/cutouts (Ctrl+drag) not supported; vector Compare ignores
+colour/lineweight-only changes; no
 certificate-based digital signatures; form field creation (Forms editor)
 not built; applying redactions rasterises the page; OCR is English only.

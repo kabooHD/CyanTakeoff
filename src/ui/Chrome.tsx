@@ -8,7 +8,7 @@ import { MenuList, type MenuItem } from './ContextMenu';
 import { allColumns, exportSummaryCsv, exportSummaryPdf, exportSummaryXlsx, openFile, openSample } from './actions';
 import { viewerApi } from './Viewer';
 import { combineFiles, openPagesDialog } from './PagesDialog';
-import { useCompareDialog } from './Compare';
+import { openCompare } from './Compare';
 import { useSheetsDialog } from './Sheets';
 import { usePrefsDialog } from './Prefs';
 import { useSignature } from './Signature';
@@ -109,8 +109,8 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Apply Redactions…', shortcut: 'Shift+A', disabled: noDoc, action: runApplyRedactions },
       { label: 'OCR…', shortcut: 'Ctrl+Shift+O', disabled: noDoc, action: () => openPagesDialog('ocr') },
       { sep: true },
-      { label: 'Compare Documents…', disabled: noDoc, action: () => useCompareDialog.setState({ mode: 'compare' }) },
-      { label: 'Overlay Pages…', disabled: noDoc, action: () => useCompareDialog.setState({ mode: 'overlay' }) },
+      { label: 'Compare Documents…', disabled: noDoc, action: () => openCompare('compare') },
+      { label: 'Overlay Pages…', disabled: noDoc, action: () => openCompare('overlay') },
     ],
     Tools: [
       { label: 'Select', shortcut: 'V', checked: s.tool === 'select', action: () => s.setTool('select') },

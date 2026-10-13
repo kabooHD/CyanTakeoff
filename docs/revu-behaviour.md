@@ -128,7 +128,12 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
   on the revised sheet, optionally removed items on the original too.
 - Overlay Pages: base and overlay sheets in two colours (default red and
   blue); what is in both shows grey. Output is a new PDF.
-- Revu also offers alignment points and vector comparison; not built yet.
+- Alignment: pick the same two points on each sheet (Align Points) when a
+  revision moved or was rescaled; the first sheet is mapped onto the second
+  (move, rotate, scale) before comparing or overlaying.
+- Ours compares either visually (rendered pages, works for scans) or as
+  vectors (lines, curves and text from the PDF content: exact, independent
+  of resolution; colour- or lineweight-only changes are not flagged).
 
 ## Measurement properties: slope, rise/drop, depth
 - Slope (Pitch x/12, Degree or Grade %) adjusts lengths and areas for a

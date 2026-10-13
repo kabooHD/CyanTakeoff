@@ -11,6 +11,8 @@ export interface SnapGeometry {
   points: Float32Array;
   /** Straight segments, flattened x1,y1,x2,y2. */
   segments: Float32Array;
+  /** Curves flattened into short segments (for comparing drawings, not snapping). */
+  curves: Float32Array;
   pointGrid: Map<number, number[]>;
   segGrid: Map<number, number[]>;
 }
@@ -38,6 +40,21 @@ async function extract(page: PDFPageProxy, vp: PageViewport): Promise<SnapGeomet
   const ops = await page.getOperatorList();
   const pts: number[] = [];
   const segs: number[] = [];
+  const curves: number[] = [];
+  /** Flatten a Bezier from `a` through control points into 8 chords. */
+  const bezier = (a: [number, number], c: [number, number][], end: [number, number]) => {
+    const P = [a, ...c, end];
+    let prev = a;
+    for (let k = 1; k <= 8; k++) {
+      const t = k / 8, u = 1 - t;
+      const q: [number, number] = P.length === 4
+        ? [u * u * u * P[0][0] + 3 * u * u * t * P[1][0] + 3 * u * t * t * P[2][0] + t * t * t * P[3][0],
+          u * u * u * P[0][1] + 3 * u * u * t * P[1][1] + 3 * u * t * t * P[2][1] + t * t * t * P[3][1]]
+        : [u * u * P[0][0] + 2 * u * t * P[1][0] + t * t * P[2][0], u * u * P[0][1] + 2 * u * t * P[1][1] + t * t * P[2][1]];
+      curves.push(prev[0], prev[1], q[0], q[1]);
+      prev = q;
+    }
+  };
   // Device transform: PDF user space -> page space (viewport at scale 1).
   let ctm: M = vp.transform as M;
   const stack: M[] = [];
@@ -78,14 +95,18 @@ async function extract(page: PDFPageProxy, vp: PageViewport): Promise<SnapGeomet
             break;
           }
           case 2: { // curveTo
-            j += 4;
-            cur = tp(data[j++], data[j++]);
+            const c1 = tp(data[j++], data[j++]), c2 = tp(data[j++], data[j++]);
+            const n = tp(data[j++], data[j++]);
+            if (cur) bezier(cur, [c1, c2], n);
+            cur = n;
             pts.push(cur[0], cur[1]);
             break;
           }
           case 3: { // quadraticCurveTo
-            j += 2;
-            cur = tp(data[j++], data[j++]);
+            const c1 = tp(data[j++], data[j++]);
+            const n = tp(data[j++], data[j++]);
+            if (cur) bezier(cur, [c1], n);
+            cur = n;
             pts.push(cur[0], cur[1]);
             break;
           }
@@ -122,7 +143,7 @@ async function extract(page: PDFPageProxy, vp: PageViewport): Promise<SnapGeomet
       }
     }
   }
-  return { points, segments, pointGrid, segGrid };
+  return { points, segments, curves: new Float32Array(curves), pointGrid, segGrid };
 }
 
 /** Nearest content vertex within `tol`, else nearest point on a content line. */

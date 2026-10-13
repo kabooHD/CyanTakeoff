@@ -6,6 +6,7 @@ import { MEASURE_TYPES, bounds, dist, distToSegment, pointInPolygon, formatLengt
 import { Icon } from './icons';
 import { eraseStroke, translated, typewriterBox } from '../model/markup';
 import { useSearch } from './Search';
+import { cancelPicking, pickAlignPoint, pickingPrompt, useCompareDialog } from './Compare';
 import { STAMPS, downloadBase64, loadImage, pageText, pickFile, readAsDataUrl, snapshot, textRectsIn } from './toolActions';
 import { applyCutout, ellipsePolygon } from '../model/cutouts';
 import { expandGroups } from '../model/arrange';
@@ -80,6 +81,9 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const [, force] = useState(0);
   const [geom, setGeom] = useState<SnapGeometry | null>(null);
   const [hover, setHover] = useState<string | null>(null);
+  // Compare / Overlay: picking alignment points (two on each sheet).
+  const align = useCompareDialog((c) => (c.picking ? c : null));
+  const alignPts = align?.picking?.filter((_, i) => (i < 2 ? align.aId === doc.id && align.pa === pageIdx : align.bId === doc.id && align.pb === pageIdx)) ?? [];
 
   const pw = page.width * zoom, ph = page.height * zoom;
   // View mode and Rotate View: where each shown page sits in the scroll area.
@@ -303,6 +307,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     const down = (e: KeyboardEvent) => {
       if (isEditable(e.target)) return;
       if (e.code === 'Space') { spaceDown.current = true; force((n) => n + 1); e.preventDefault(); }
+      if (align && e.key === 'Escape') { cancelPicking(); e.stopImmediatePropagation(); return; }
       if (s.tool === 'dynamic-fill' && useFill.getState().draftBoundary.length) {
         if (e.key === 'Enter') { finishBoundary(); e.stopImmediatePropagation(); }
         else if (e.key === 'Escape') { useFill.setState({ draftBoundary: [] }); e.stopImmediatePropagation(); }
@@ -550,6 +555,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     }
     if (e.button !== 0) return;
     const raw = toPage(e);
+    if (align && isActivePane) { pickAlignPoint(snap(raw)); return; }
 
     if (tool === 'dynamic-fill') {
       fillDown(raw);
@@ -802,7 +808,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         setDraft({ ...draft, cursor: p });
         setSnapPt(p !== raw && !e.shiftKey ? p : null);
       }
-    } else if (s.tool !== 'select' && s.tool !== 'pan') {
+    } else if (align || (s.tool !== 'select' && s.tool !== 'pan')) {
       const p = snap(raw);
       setSnapPt(p !== raw ? p : null);
       if (def.interaction === 'cutout' || def.interaction === 'cutout-ellipse') setHover(cutoutTarget(raw)?.id ?? null);
@@ -998,7 +1004,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   }
 
   const editingMarkup = editing ? doc.markups.find((m) => m.id === editing) : null;
-  const cursor = tool === 'pan' ? (drag?.kind === 'pan' ? 'grabbing' : 'grab')
+  const cursor = align ? 'crosshair' : tool === 'pan' ? (drag?.kind === 'pan' ? 'grabbing' : 'grab')
     : tool === 'select' ? 'default' : tool === 'zoom' ? 'zoom-in' : 'crosshair';
 
   return (
@@ -1088,6 +1094,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
             {s.tool === 'eraser' && fillCursor && (
               <circle cx={fillCursor.x} cy={fillCursor.y} r={8 / zoom} fill="none" stroke="#555" strokeWidth={1 / zoom} pointerEvents="none" />
             )}
+            {alignPts.map((q, i) => (
+              <g key={`al${i}`} pointerEvents="none" stroke="#e00000" strokeWidth={1.5 / zoom}>
+                <circle cx={q.x} cy={q.y} r={6 / zoom} fill="none" />
+                <path d={`M${q.x - 10 / zoom} ${q.y}H${q.x + 10 / zoom}M${q.x} ${q.y - 10 / zoom}V${q.y + 10 / zoom}`} />
+              </g>
+            ))}
             {snapPt && (
               <rect x={snapPt.x - 5 / zoom} y={snapPt.y - 5 / zoom} width={10 / zoom} height={10 / zoom}
                 fill="none" stroke="#00b050" strokeWidth={1.5 / zoom} pointerEvents="none" />
@@ -1108,6 +1120,13 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
     </div>
       {s.tool === 'dynamic-fill' && <DynamicFillBar />}
+      {align && isActivePane && (
+        <div className="fill-bar" role="status" aria-label="Alignment points">
+          <strong>Align Points</strong>
+          <span>{pickingPrompt(align.picking!)}</span>
+          <button onClick={cancelPicking}>Cancel</button>
+        </div>
+      )}
       {s.tool === 'stamp' && (
         <div className="fill-bar" role="toolbar" aria-label="Stamp">
           <strong>Stamp</strong>
