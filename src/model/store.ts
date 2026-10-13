@@ -37,6 +37,8 @@ export interface DocState {
   spaces: Space[][];
   /** Pages whose Spaces changed (their /BSISpaces is rewritten on save). */
   dirtySpaces: Set<number>;
+  /** Form field values edited since opening (saved into the form). */
+  formValues: Record<string, string | boolean>;
   /** Custom columns of the Markups List (saved with the document). */
   columns: CustomColumn[];
   dirtyColumns: boolean;
@@ -93,6 +95,8 @@ interface AppState {
   replyTo: string | null;
   /** Markup kinds the next Legend lists (from a selection or a tool set). */
   legendKeys: string[] | null;
+  /** Image the Image tool places next (signature), instead of asking for a file. */
+  pendingImage: { url: string; w: number; h: number; subject: string } | null;
   /** Stamp placed by the Stamp tool. */
   stampName: string;
   /** Hyperlink dialog for a new (or existing, by id) link rectangle. */
@@ -169,6 +173,7 @@ interface AppState {
   transformDoc(fn: (lib: PDFDocument) => Promise<void> | void, done: string, page?: number): Promise<boolean>;
   /** Replace the document's custom columns. */
   setColumns(cols: CustomColumn[]): void;
+  setFieldValue(name: string, value: string | boolean): void;
   /** Add a Space, or replace the one with the same id. */
   setSpace(page: number, sp: Space): void;
   deleteSpaces(page: number, ids: string[]): void;
@@ -226,6 +231,7 @@ export function serialize(d: DocState): Promise<Uint8Array> {
     importedRefs: d.importedRefs, calibrations: d.calibrations, viewports: d.viewports,
     dirtyCalibrations: d.dirtyCalibrations, spaces: d.spaces, dirtySpaces: d.dirtySpaces,
     columns: d.dirtyColumns ? d.columns : undefined,
+    formValues: d.formValues,
   });
 }
 
@@ -296,6 +302,7 @@ export const useApp = create<AppState>((set, get) => {
     calibrateFor: null,
     radiusTool: 'radius',
     stampName: 'APPROVED',
+    pendingImage: null,
     legendKeys: null,
     replyTo: null,
     linkDialog: null,
@@ -324,6 +331,7 @@ export const useApp = create<AppState>((set, get) => {
           dirtySpaces: new Set(),
           columns: loaded.columns,
           dirtyColumns: false,
+          formValues: {},
           page: 0, zoom: 0, selection: [], undo: [], redo: [], dirty: false,
         };
         set((s) => ({ docs: [...s.docs, doc], activeId: doc.id, status: loaded.readOnly ? `${name} opened read-only (file could not be parsed for editing)` : `Opened ${name}` }));
@@ -560,7 +568,7 @@ export const useApp = create<AppState>((set, get) => {
           docs: st.docs.map((x) => x.id === d.id ? {
             ...x, bytes, loaded, markups: loaded.markups, importedRefs: loaded.importedRefs,
             calibrations: loaded.calibrations, viewports: loaded.viewports, dirtyCalibrations: new Set(),
-            spaces: loaded.spaces, dirtySpaces: new Set(), columns: loaded.columns, dirtyColumns: false,
+            spaces: loaded.spaces, dirtySpaces: new Set(), columns: loaded.columns, dirtyColumns: false, formValues: {},
             page: Math.max(0, Math.min(loaded.pages.length - 1, page ?? x.page)), selection: [], undo: [], redo: [], dirty: true,
           } : x),
           status: done,
@@ -573,6 +581,9 @@ export const useApp = create<AppState>((set, get) => {
       } finally {
         set({ busy: false });
       }
+    },
+    setFieldValue(name, value) {
+      withDoc((d) => ({ formValues: { ...d.formValues, [name]: value }, dirty: true }));
     },
     setColumns(columns) {
       withDoc(() => ({ columns, dirtyColumns: true, dirty: true }));
@@ -676,7 +687,7 @@ export const useApp = create<AppState>((set, get) => {
             ...x, name, bytes, fileHandle: handle, loaded, markups,
             importedRefs: loaded.importedRefs,
             calibrations: loaded.calibrations, viewports: loaded.viewports, dirtyCalibrations: new Set(),
-            spaces: loaded.spaces, dirtySpaces: new Set(), columns: loaded.columns, dirtyColumns: false,
+            spaces: loaded.spaces, dirtySpaces: new Set(), columns: loaded.columns, dirtyColumns: false, formValues: {},
             page, zoom, selection: [], undo: [], redo: [], dirty: false,
           } : x),
           status: `Saved ${name}`,

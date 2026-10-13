@@ -101,6 +101,15 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
   taking a shortcut from another command reassigns it.
 - Revu > Profiles: saved workspace (panels, toolbars, Tool Chest, shortcuts).
 
+## Document tools
+- Forms: fields are filled in place; values are saved into the PDF form.
+- Signature: Revu signs with certificates; CyanTakeoff places an image
+  signature (drawn or typed, kept for reuse).
+- Redaction: Mark for Redaction (Shift+R, area), Mark Text for Redaction
+  (Shift+K), Apply Redactions (Shift+A, after confirmation) removes the
+  content underneath for good.
+- OCR (Ctrl+Shift+O): makes scanned pages searchable (invisible text).
+
 ## Compare
 - Compare Documents: pick the original and revised document/page; the
   differences are clouded (subject "Compare", label Added/Removed/Changed)

@@ -20,6 +20,8 @@ import { rotatePages } from './pdf/pages';
 import { CompareDialog } from './ui/Compare';
 import { SheetsDialog } from './ui/Sheets';
 import { PrefsDialogs } from './ui/Prefs';
+import { SignatureDialog } from './ui/Signature';
+import { runApplyRedactions } from './ui/redactUi';
 
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
@@ -111,6 +113,8 @@ export function App() {
         case 'Alt+2': return left('sets');
         case 'Ctrl+F': return run(() => { s.setPanels({ left: 'search' }); useSearch.setState((x) => ({ focusTick: x.focusTick + 1 })); });
         case 'F3': return run(() => nextHit(1));
+        case 'Shift+A': return run(runApplyRedactions);
+        case 'Ctrl+Shift+O': return run(() => d && openPagesDialog('ocr'));
         case 'Ctrl+Shift+I': return run(() => d && openPagesDialog('insert'));
         case 'Ctrl+Shift+N': return run(() => d && openPagesDialog('insert-blank'));
         case 'Ctrl+Shift+D': return run(() => d && openPagesDialog('delete'));
@@ -191,6 +195,7 @@ export function App() {
       <CompareDialog />
       <SheetsDialog />
       <PrefsDialogs />
+      <SignatureDialog />
       {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
       {dialog === 'about' && <AboutDialog onClose={() => setDialog(null)} />}
     </div>

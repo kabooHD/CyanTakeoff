@@ -5,7 +5,7 @@ import type { Markup, Pt } from '../model/types';
 export function outline(m: Markup): { pts: Pt[]; closed: boolean } {
   const P = m.points;
   switch (m.type) {
-    case 'highlight': case 'strikeout': case 'underline': case 'squiggly':
+    case 'highlight': case 'strikeout': case 'underline': case 'squiggly': case 'redaction':
       if (P.length > 2 || m.type !== 'highlight') {
         const b = bounds(P);
         return { pts: rectCorners({ x: b.minX, y: b.minY }, { x: b.maxX, y: b.maxY }), closed: true };
@@ -60,7 +60,7 @@ const inCutout = (m: Markup, p: Pt) => cutoutAt(m, p) >= 0;
 export function hitTest(m: Markup, p: Pt, tol: number): boolean {
   const { pts, closed } = outline(m);
   const t = tol + m.style.width / 2;
-  if ((m.type === 'strikeout' || m.type === 'underline' || m.type === 'squiggly' || (m.type === 'highlight' && m.points.length > 2))) {
+  if ((m.type === 'strikeout' || m.type === 'underline' || m.type === 'squiggly' || m.type === 'redaction' || (m.type === 'highlight' && m.points.length > 2))) {
     return rectPairs(m.points).some(([a, b]) => { const r = bounds([a, b]); return p.x >= r.minX - tol && p.x <= r.maxX + tol && p.y >= r.minY - tol && p.y <= r.maxY + tol; });
   }
   if (m.type === 'count') return pts.some((q) => Math.hypot(q.x - p.x, q.y - p.y) <= 5 + t);

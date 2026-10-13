@@ -336,3 +336,10 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
 .labels-list { max-height: 50vh; overflow: auto; }
 .tool-mode { font-size: 9px; font-weight: bold; color: var(--accent); border: 1px solid var(--accent); border-radius: 2px; padding: 0 2px; margin-left: 4px; }
 .toolset-gear { float: right; border: 0; background: none; cursor: pointer; color: var(--muted); padding: 0 4px; }
+
+/* Form fields */
+.form-layer { position: absolute; inset: 0; }
+.form-field { position: absolute; box-sizing: border-box; margin: 0; padding: 0 2px; border: 1px solid #7aa7e8; background: rgba(204, 224, 255, 0.55); font-family: Helvetica, Arial, sans-serif; color: #000; }
+.form-field:focus { outline: 2px solid var(--accent); background: rgba(255, 255, 255, 0.9); }
+.signature-field { display: flex; align-items: center; justify-content: center; color: #345; font-style: italic; }
+.signature-pad { width: 100%; max-width: 600px; aspect-ratio: 600 / 160; border: 1px dashed var(--border); background: #fff; touch-action: none; cursor: crosshair; }

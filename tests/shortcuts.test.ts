@@ -12,7 +12,7 @@ const REVU: Record<string, string> = {
   count: 'Shift+Alt+C', 'dynamic-fill': 'J',
   cloudplus: 'K', typewriter: 'W', arc: 'Shift+C', dimension: 'Shift+L', stamp: 'S', flag: 'Shift+F',
   strikeout: 'D', underline: 'U', squiggly: 'Shift+U', image: 'I', snapshot: 'G', link: 'Shift+H',
-  attachment: 'F', eraser: 'Shift+E',
+  attachment: 'F', eraser: 'Shift+E', redaction: 'Shift+R', 'redact-text': 'Shift+K',
 };
 
 describe('default shortcuts', () => {

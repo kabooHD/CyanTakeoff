@@ -14,12 +14,14 @@
     "e2e": "node tests/e2e.mjs"
   },
   "dependencies": {
+    "@tesseract.js-data/eng": "^1.0.0",
     "fflate": "^0.8.2",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.4.299",
     "polygon-clipping": "^0.15.7",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "tesseract.js": "^7.0.0",
     "zustand": "^5.0.15"
   },
   "devDependencies": {

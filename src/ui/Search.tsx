@@ -12,15 +12,19 @@ export interface Hit { page: number; rect: [Pt, Pt]; context: string }
 interface SearchState {
   query: string; matchCase: boolean; wholeWord: boolean;
   hits: Hit[]; index: number; running: boolean; docId: string | null; focusTick: number;
+  /** The query (and options) the current hits are for. */
+  searched: string;
 }
-export const useSearch = create<SearchState>(() => ({ query: '', matchCase: false, wholeWord: false, hits: [], index: -1, running: false, docId: null, focusTick: 0 }));
+export const useSearch = create<SearchState>(() => ({ query: '', matchCase: false, wholeWord: false, hits: [], index: -1, running: false, docId: null, focusTick: 0, searched: '' }));
+
+const signature = (s: Pick<SearchState, 'query' | 'matchCase' | 'wholeWord'>, docId: string) => `${docId}|${s.matchCase}|${s.wholeWord}|${s.query}`;
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export async function runSearch(doc: DocState) {
   const { query, matchCase, wholeWord } = useSearch.getState();
   if (!query.trim()) { useSearch.setState({ hits: [], index: -1 }); return; }
-  useSearch.setState({ running: true, hits: [], index: -1, docId: doc.id });
+  useSearch.setState({ running: true, hits: [], index: -1, docId: doc.id, searched: signature(useSearch.getState(), doc.id) });
   const re = new RegExp(wholeWord ? `\\b${escapeRe(query)}\\b` : escapeRe(query), matchCase ? 'g' : 'gi');
   const hits: Hit[] = [];
   for (const info of doc.loaded.pages) {
@@ -69,7 +73,13 @@ export function SearchPanel({ doc }: { doc: DocState }) {
       <div className="search-row">
         <input ref={input} aria-label="Search text" placeholder="Search" value={st.query}
           onChange={(e) => useSearch.setState({ query: e.target.value })}
-          onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') { if (e.shiftKey) nextHit(-1); else if (hits.length && st.query) nextHit(1); else runSearch(doc); } }} />
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key !== 'Enter') return;
+            // Enter searches; pressed again for the same query it steps through the results.
+            if (st.searched !== signature(st, doc.id) || !hits.length) runSearch(doc);
+            else nextHit(e.shiftKey ? -1 : 1);
+          }} />
         <button onClick={() => runSearch(doc)}>Search</button>
       </div>
       <div className="search-row small">

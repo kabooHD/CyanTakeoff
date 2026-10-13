@@ -34,7 +34,8 @@ export function cutoutPath(c: Cutout): string {
 
 /** Points shown as edit handles for a markup. */
 export function handlePoints(m: Markup): Pt[] {
-  if (m.type === 'highlight' && m.points.length > 2) return [];
+  if ((m.type === 'highlight' || m.type === 'redaction') && m.points.length > 2) return [];
+  if (m.type === 'redaction') return [m.points[0], m.points[1]];
   if (['rectangle', 'ellipse', 'highlight', 'textbox', 'typewriter', 'stamp', 'image', 'link'].includes(m.type)) {
     return [m.points[0], m.points[1]];
   }
@@ -171,6 +172,9 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
       shape = <rect x={b.minX} y={b.minY} width={b.w} height={b.h} fill="#0066ff" fillOpacity={0.06} stroke={st.color} strokeWidth={0.75} strokeDasharray="4 3" />;
       break;
     }
+    case 'redaction':
+      shape = <>{rectPairs(P).map(([a, b], i) => { const r = bounds([a, b]); return <rect key={i} {...c} x={r.minX} y={r.minY} width={r.w} height={r.h} />; })}</>;
+      break;
     case 'strikeout': case 'underline': case 'squiggly':
       shape = <>{rectPairs(P).map(([a, b], i) => <path key={i} {...c} fill="none" strokeWidth={Math.max(st.width, 0.8)} d={textLine(m.type, a, b)} />)}</>;
       break;

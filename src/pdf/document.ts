@@ -5,6 +5,7 @@ import { PDFDocument } from 'pdf-lib';
 import type { PDFDocumentProxy, PageViewport } from 'pdfjs-dist';
 import type { CustomColumn, Markup, Pt, Scale, Space, Viewport } from '../model/types';
 import { importAnnotations, readColumns, removeAnnots } from './importAnnots';
+import { readFields, type FormField } from './forms';
 
 export { refKey, removeAnnots, type CTData } from './importAnnots';
 
@@ -30,6 +31,8 @@ export interface LoadedDoc {
   spaces: Space[][];
   /** Custom columns saved with the document. */
   columns: CustomColumn[];
+  /** Form fields (AcroForm), widget rectangles in page space. */
+  fields: FormField[];
   /** refKeys of every annotation represented by a markup. */
   importedRefs: Set<string>;
   /** True when pdf-lib could not parse the file; markups cannot be saved into it. */
@@ -92,6 +95,15 @@ export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
     markups,
     spaces,
     columns: lib ? readColumns(lib) : [],
+    fields: lib ? readFields(lib).map((f) => ({
+      ...f,
+      widgets: f.widgets.filter((w) => pages[w.page]).map((w) => {
+        const vp = pages[w.page].viewport;
+        const [ax, ay] = vp.convertToViewportPoint(w.rect[0], w.rect[1]);
+        const [bx, by] = vp.convertToViewportPoint(w.rect[2], w.rect[3]);
+        return { ...w, rect: [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)] as [number, number, number, number] };
+      }),
+    })) : [],
     calibrations: pages.map((_, i) => result.pageScales[i] ?? null),
     viewports,
     importedRefs: new Set(result.imported.flatMap((s) => [...s])),

@@ -713,6 +713,78 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert(links === 2, `Slip Sheet replaces both sheets and keeps their markups (${links} links)`);
 }
 
+// Forms, signature and redaction.
+{
+  // Redact the "SEE C-101 FOR SITE PLAN" note on the sample's A-101 (the active document).
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(800);
+  const box = await svg.boundingBox();
+  const z = box.width / (36 * 72);
+  const at = (x, y) => ({ x: box.x + x * z, y: box.y + (H - y) * z });
+  await page.keyboard.press('Shift+K');
+  { const a = at(295, 1555), b = at(450, 1535); await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 6 }); await page.mouse.up(); }
+  await page.waitForFunction(() => document.querySelector('.ml-table tbody')?.textContent?.includes('Redaction'));
+  page.once('dialog', (d) => d.accept());
+  await page.keyboard.press('Shift+A');
+  await page.waitForFunction(() => /Redactions applied on 1 page/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 30000 });
+  await page.keyboard.press('Control+F');
+  await page.getByLabel('Search text').fill('SITE PLAN');
+  await page.getByLabel('Search text').press('Enter');
+  await page.waitForFunction(() => /\d+ results?/.test(document.querySelector('.search-panel')?.textContent ?? ''));
+  const pagesWithHits = await page.locator('.search-hit .muted').allInnerTexts();
+  assert(!pagesWithHits.includes('A-101'), `redacted text is gone from A-101 (hits on: ${pagesWithHits.join(', ') || 'none'})`);
+  await page.locator('.ml-table-wrap').focus();
+  await page.keyboard.press('Alt+1');
+  await page.keyboard.press('Home');
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${OUT}/16-redacted.png` });
+
+  // OCR the now image-only A-101: its text becomes searchable again.
+  await page.keyboard.press('Control+Shift+O');
+  const od = page.getByRole('dialog', { name: 'OCR' });
+  await od.getByLabel('Page range').selectOption('current');
+  await od.getByRole('button', { name: 'OK' }).click();
+  await page.waitForFunction(() => /OCR: \d+ word/.test(document.querySelector('.statusbar')?.textContent ?? '') || /OCR failed/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 240000 });
+  const ocrStatus = await page.locator('.statusbar').innerText();
+  assert(/OCR: \d+ word/.test(ocrStatus), `OCR recognised text (${ocrStatus.match(/OCR[^\n]*/)?.[0]})`);
+  await page.keyboard.press('Control+F');
+  await page.getByLabel('Search text').fill('FLOOR PLAN');
+  await page.getByLabel('Search text').press('Enter');
+  await page.waitForFunction(() => /\d+ results?/.test(document.querySelector('.search-panel')?.textContent ?? ''));
+  const ocrHits = await page.locator('.search-hit .muted').allInnerTexts();
+
+  assert(ocrHits.includes('A-101'), `OCR text is searchable on A-101 (hits on: ${ocrHits.join(', ')})`);
+  await page.locator('.ml-table-wrap').focus();
+  await page.keyboard.press('Alt+1');
+
+  // Fill a PDF form and save it.
+  const tabs = await page.locator('.doc-tab').count();
+  const fc = await ctrlO();
+  await fc.setFiles('tests/fixtures/form.pdf');
+  await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs);
+  await page.waitForTimeout(1000);
+  await page.getByLabel('inspector').fill('Sam Rivera');
+  await page.getByLabel('passed').check();
+  await page.getByLabel('trade').selectOption('Plumbing');
+  await page.getByLabel('priority high').check();
+  // Sign: type a signature and place it.
+  await page.getByRole('button', { name: 'Document', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Signature…' }).click();
+  const sd = page.getByRole('dialog', { name: 'Signature' });
+  await sd.getByLabel('Type').check();
+  await sd.getByLabel('Signature name').fill('Sam Rivera');
+  await sd.getByRole('button', { name: 'Place' }).click();
+  { const b = await svg.boundingBox(); await page.mouse.click(b.x + b.width * 0.5, b.y + b.height * 0.5); }
+  assert((await page.locator('.ml-table tbody').innerText()).includes('Signature'), 'signature placed as a markup');
+  const [fd] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
+  await fd.saveAs(`${OUT}/saved-form.pdf`);
+  const filled = await PDFDocument.load(readFileSync(`${OUT}/saved-form.pdf`));
+  const form = filled.getForm();
+  assert(form.getTextField('inspector').getText() === 'Sam Rivera' && form.getCheckBox('passed').isChecked()
+    && form.getDropdown('trade').getSelected()[0] === 'Plumbing' && form.getRadioGroup('priority').getSelected() === 'high', 'form values saved into the PDF form');
+}
+
 // Keyboard Shortcuts editor: reassign Length to Ctrl+Shift+K; Tool Chest Drawing mode.
 {
   await page.getByRole('button', { name: 'CyanTakeoff', exact: true }).click();

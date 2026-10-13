@@ -57,6 +57,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const detailRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [pdfPage, setPdfPage] = useState<PDFPageProxy | null>(null);
+  const renderedPage = useRef<PDFPageProxy | null>(null);
   const [baseScale, setBaseScale] = useState(0);
   const [detail, setDetail] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -179,13 +180,16 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       const vp = pdfPage.getViewport({ scale: wantBase });
       const off = document.createElement('canvas');
       off.width = Math.ceil(vp.width); off.height = Math.ceil(vp.height);
-      task = pdfPage.render({ canvas: off, viewport: vp });
+      // Form fields are drawn as live inputs (FormLayer), so the canvas leaves them out.
+      task = pdfPage.render({ canvas: off, viewport: vp, annotationMode: doc.loaded.fields.length ? 2 : 1 });
       task.promise.then(() => {
         canvas.width = off.width; canvas.height = off.height;
         canvas.getContext('2d')!.drawImage(off, 0, 0);
+        renderedPage.current = pdfPage;
         setBaseScale(wantBase);
       }).catch(() => {});
-    }, baseScale ? 200 : 0);
+      // Debounce re-renders while zooming; a different page renders at once.
+    }, baseScale && renderedPage.current === pdfPage ? 200 : 0);
     return () => { clearTimeout(t); task?.cancel(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfPage, Math.round(wantBase * 20)]);
@@ -208,6 +212,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         canvas: off,
         viewport: pdfPage.getViewport({ scale: sc }),
         transform: [1, 0, 0, 1, -x * sc, -y * sc],
+        annotationMode: doc.loaded.fields.length ? 2 : 1,
       });
       task.promise.then(() => {
         const c = detailRef.current;
@@ -361,6 +366,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
 
   // ----- tools that need text, files or a rendered snapshot -----
   const placeImage = async (p: Pt) => {
+    const pending = s.pendingImage;
+    if (pending) {
+      useApp.setState({ pendingImage: null });
+      finish('image', [p, { x: p.x + pending.w, y: p.y + pending.h }], { image: pending.url, subject: pending.subject });
+      return;
+    }
     const f = await pickFile('image/*');
     if (!f) return;
     const img = await loadImage(f);
@@ -655,7 +666,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     if (draft.tool === 'cloudplus') { setDraft({ ...draft, points: [a, p], dragFrom: undefined }); return; }
     if (def.interaction === 'text') {
       setDraft(null);
-      textMarkup(draft.tool as MarkupType, a, p).then((ok) => { if (!ok) s.setStatus('No text found there. Drag across text on the drawing.'); });
+      textMarkup((draft.tool === 'redact-text' ? 'redaction' : draft.tool) as MarkupType, a, p).then((ok) => { if (!ok) s.setStatus('No text found there. Drag across text on the drawing.'); });
       return;
     }
     if (draft.tool === 'link') {
@@ -901,7 +912,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     };
   } else if (draft && draft.cursor) {
     const pts = def.interaction === 'freehand' ? draft.points : [...draft.points, draft.cursor];
-    const boxed = draft.tool === 'lasso' || draft.tool === 'viewport' || draft.tool === 'snapshot' || draft.tool === 'link' || def.interaction === 'text';
+    const boxed = draft.tool === 'lasso' || draft.tool === 'redact-text' || draft.tool === 'viewport' || draft.tool === 'snapshot' || draft.tool === 'link' || def.interaction === 'text';
     let type = (draft.tool === 'calibrate' ? 'length' : boxed ? 'rectangle' : draft.tool) as MarkupType;
     let P = pts;
     if (draft.tool === 'cloudplus' && pts.length >= 3) P = [pts[0], pts[1], pts[2], { x: pts[2].x + 144, y: pts[2].y + 40 }];
@@ -1007,6 +1018,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
                 fill="none" stroke="#00b050" strokeWidth={1.5 / zoom} pointerEvents="none" />
             )}
           </svg>
+          {doc.loaded.fields.length > 0 && <FormLayer doc={doc} pageIdx={pageIdx} zoom={zoom} interactive={s.tool === 'select' || s.tool === 'pan'} />}
           {editingMarkup && (
             <TextEditor m={editingMarkup} zoom={zoom} onDone={(text) => {
               if (text !== (editingMarkup.text ?? '')) {
@@ -1109,5 +1121,44 @@ function TextEditor({ m, zoom, onDone }: { m: Markup; zoom: number; onDone: (t: 
         e.stopPropagation();
         if (e.key === 'Escape' || (e.key === 'Enter' && e.ctrlKey)) (e.target as HTMLTextAreaElement).blur();
       }} />
+  );
+}
+
+/** Live inputs for the page's form fields (text, check boxes, radio buttons, lists). */
+function FormLayer({ doc, pageIdx, zoom, interactive }: { doc: DocState; pageIdx: number; zoom: number; interactive: boolean }) {
+  const s = useApp();
+  const items = doc.loaded.fields.flatMap((f) => f.widgets.filter((w) => w.page === pageIdx).map((w, i) => ({ f, w, i })));
+  return (
+    <div className="form-layer" style={{ pointerEvents: 'none' }}>
+      {items.map(({ f, w, i }) => {
+        const [x0, y0, x1, y1] = w.rect;
+        const style: React.CSSProperties = { left: x0 * zoom, top: y0 * zoom, width: (x1 - x0) * zoom, height: (y1 - y0) * zoom, fontSize: Math.max(8, Math.min(14, (y1 - y0) * 0.65)) * zoom, pointerEvents: interactive && !f.readOnly ? 'auto' : 'none' };
+        const value = f.name in doc.formValues ? doc.formValues[f.name] : f.value;
+        const set = (v: string | boolean) => s.setFieldValue(f.name, v);
+        const key = `${f.name}:${i}`;
+        const stop = { onPointerDown: (e: React.PointerEvent) => e.stopPropagation(), onKeyDown: (e: React.KeyboardEvent) => e.stopPropagation() };
+        switch (f.type) {
+          case 'text':
+            return f.multiline
+              ? <textarea key={key} className="form-field" aria-label={f.name} style={style} value={String(value)} onChange={(e) => set(e.target.value)} {...stop} />
+              : <input key={key} className="form-field" aria-label={f.name} style={style} value={String(value)} onChange={(e) => set(e.target.value)} {...stop} />;
+          case 'checkbox':
+            return <input key={key} type="checkbox" className="form-field" aria-label={f.name} style={style} checked={!!value} onChange={(e) => set(e.target.checked)} {...stop} />;
+          case 'radio':
+            return <input key={key} type="radio" className="form-field" aria-label={`${f.name} ${w.option}`} style={style} name={`${doc.id}:${f.name}`} checked={value === w.option} onChange={() => set(w.option ?? '')} {...stop} />;
+          case 'dropdown': case 'list':
+            return (
+              <select key={key} className="form-field" aria-label={f.name} style={style} value={String(value)} onChange={(e) => set(e.target.value)} {...stop}>
+                <option value="" />
+                {(f.options ?? []).map((o) => <option key={o}>{o}</option>)}
+              </select>
+            );
+          case 'signature':
+            return <div key={key} className="form-field signature-field" style={style} title="Signature field: use the Signature tool to sign">Sign here</div>;
+          default:
+            return <div key={key} className="form-field button-field" style={style} />;
+        }
+      })}
+    </div>
   );
 }

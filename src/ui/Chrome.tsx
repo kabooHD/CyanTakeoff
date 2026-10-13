@@ -11,6 +11,8 @@ import { combineFiles, openPagesDialog } from './PagesDialog';
 import { useCompareDialog } from './Compare';
 import { useSheetsDialog } from './Sheets';
 import { usePrefsDialog } from './Prefs';
+import { useSignature } from './Signature';
+import { runApplyRedactions } from './redactUi';
 import { effectiveCombo } from './commands';
 import { arrangeItems } from './arrangeMenu';
 import { useCursor } from './cursor';
@@ -93,6 +95,12 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Batch Link…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'batch-link' }) },
       { sep: true },
       { label: 'Flatten Markups…', shortcut: 'Ctrl+Shift+M', disabled: noDoc, action: () => openPagesDialog('flatten') },
+      { sep: true },
+      { label: 'Signature…', disabled: noDoc, action: () => useSignature.setState({ open: true }) },
+      { label: 'Mark for Redaction', shortcut: 'Shift+R', disabled: noDoc, action: () => s.setTool('redaction') },
+      { label: 'Mark Text for Redaction', shortcut: 'Shift+K', disabled: noDoc, action: () => s.setTool('redact-text') },
+      { label: 'Apply Redactions…', shortcut: 'Shift+A', disabled: noDoc, action: runApplyRedactions },
+      { label: 'OCR…', shortcut: 'Ctrl+Shift+O', disabled: noDoc, action: () => openPagesDialog('ocr') },
       { sep: true },
       { label: 'Compare Documents…', disabled: noDoc, action: () => useCompareDialog.setState({ mode: 'compare' }) },
       { label: 'Overlay Pages…', disabled: noDoc, action: () => useCompareDialog.setState({ mode: 'overlay' }) },
@@ -182,7 +190,7 @@ export function Toolbar() {
         <ToolButton id="select" /><ToolButton id="pan" /><ToolButton id="zoom" />
       </div>
       <div className="tb-group">
-        {TOOLS.filter((t) => t.group === 'markup' && t.id !== 'legend').map((t) => <ToolButton key={t.id} id={t.id} />)}
+        {TOOLS.filter((t) => t.group === 'markup' && !['legend', 'redaction', 'redact-text'].includes(t.id)).map((t) => <ToolButton key={t.id} id={t.id} />)}
       </div>
       <div className="tb-group">
         {TOOLS.filter((t) => t.group === 'measure' && t.id !== 'viewport' && t.id !== 'space').map((t) => <ToolButton key={t.id} id={t.id} />)}

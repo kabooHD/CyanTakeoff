@@ -83,7 +83,9 @@ title-block sheet numbers, Batch Link (incl. across open files), Sets panel
 (open files as one set), Slip Sheet (by sheet number, markups carried);
 Tool Chest tool sets (new/rename/export/import, Properties vs Drawing mode),
 Keyboard Shortcuts editor (src/ui/commands.ts), Profiles; CyanTakeoff (=Revu)
-and Batch menus;
+and Batch menus; form filling (AcroForm inputs saved into the form), image
+signatures (draw/type, reusable), redaction (mark area/text, apply =
+page rasterised), OCR (tesseract.js, assets served from /ocr/, invisible text);
 length, polylength, area, perimeter, volume, count, angle, radius, diameter;
 cutouts (polygon/ellipse, Revu fuse/trim rules); Dynamic Fill;
 separate X/Y scales; 3-point radius; viewports (regions with their own scale, Revu
@@ -102,4 +104,6 @@ Known gaps: Revu cutout storage unknown (ours in CTData); curved segments
 on polygons/cutouts (Ctrl+drag) not supported; view modes other than
 single page (continuous, side by side) and Rotate View not built;
 Compare/Overlay have no alignment points (pages compared as positioned)
-and work on rasterised pages (~100 dpi), not vector content.
+and work on rasterised pages (~100 dpi), not vector content; no
+certificate-based digital signatures; form field creation (Forms editor)
+not built; applying redactions rasterises the page; OCR is English only.

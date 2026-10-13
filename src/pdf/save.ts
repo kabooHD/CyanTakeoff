@@ -8,6 +8,7 @@ import { LEGEND_HEADERS, legendLayout, legendRows, type LegendRow } from '../mod
 import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import { refKey, removeAnnots, type CTData, type PageInfo } from './document';
 import { COLUMNS_KEY, isRulerViewport } from './importAnnots';
+import { writeFields, type FieldValue } from './forms';
 import { N, hexToRgb, pdfDate, writeMeasure } from './pdfutil';
 
 const f = (n: number) => String(+n.toFixed(3));
@@ -260,6 +261,9 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
     case 'link':
       o.grow(P[0]); o.grow(P[1]);
       break;
+    case 'redaction':
+      for (const [a, c] of rectPairs(P)) { o.poly(rectCorners(a, c), true); o.add(fillRgb && st.width > 0 ? 'B' : fillRgb ? 'f' : 'S'); }
+      break;
     case 'strikeout': case 'underline': case 'squiggly':
       for (const [a, c] of rectPairs(P)) {
         const r = bounds([a, c]);
@@ -396,7 +400,7 @@ const SUBTYPE: Record<Markup['type'], string> = {
   angle: 'PolyLine', radius: 'Polygon', diameter: 'Circle',
   dimension: 'Line', typewriter: 'FreeText', cloudplus: 'Polygon', arc: 'PolyLine', flag: 'Text', stamp: 'Stamp',
   strikeout: 'StrikeOut', underline: 'Underline', squiggly: 'Squiggly', image: 'Stamp', link: 'Link', attachment: 'FileAttachment',
-  legend: 'Stamp',
+  legend: 'Stamp', redaction: 'Redact',
 };
 
 /** Measurement intents, as Revu writes them. */
@@ -542,6 +546,10 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
     case 'StrikeOut': case 'Underline': case 'Squiggly':
       entries.QuadPoints = quads(P);
       break;
+    case 'Redact':
+      entries.QuadPoints = quads(P);
+      entries.IC = [0, 0, 0]; // fill colour once applied
+      break;
     case 'Stamp': {
       const b = bounds(P);
       entries.Rect = [b.minX, b.minY, b.maxX, b.maxY];
@@ -622,6 +630,8 @@ export interface SaveInput {
   dirtySpaces?: Set<number>;
   /** Custom column definitions, when changed. */
   columns?: CustomColumn[];
+  /** Form field values that changed, by field name. */
+  formValues?: Record<string, FieldValue>;
 }
 
 /** A Revu-style /NM: 16 random capital letters. */
@@ -639,6 +649,7 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
   for (let p = 0; p < doc.getPageCount(); p++) removeAnnots(doc, p, remove);
 
   const font = await doc.embedFont(StandardFonts.Helvetica);
+  if (input.formValues && Object.keys(input.formValues).length) writeFields(doc, input.formValues, font);
   const pageRefs = doc.getPages().map((pg) => pg.ref);
   // Groups are written as Revu writes them: members point to the first via /IRT with /RT /Group.
   const groupHead = new Map<string, PDFRef>();

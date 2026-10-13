@@ -10,16 +10,17 @@ import {
 } from '../pdf/pages';
 import { pickFile } from './toolActions';
 import { openPdf } from '../pdf/document';
+import { addTextLayer, ocrPages } from './ocr';
 import { detectSheetNumbers } from './Sheets';
 import type { DocState } from '../model/store';
 
-export type PagesOp = 'insert' | 'insert-blank' | 'delete' | 'extract' | 'rotate' | 'replace' | 'flatten' | 'split' | 'slip-sheet';
+export type PagesOp = 'insert' | 'insert-blank' | 'delete' | 'extract' | 'rotate' | 'replace' | 'flatten' | 'split' | 'slip-sheet' | 'ocr';
 export const usePagesDialog = create<{ op: PagesOp | null }>(() => ({ op: null }));
 export const openPagesDialog = (op: PagesOp) => usePagesDialog.setState({ op });
 
 const TITLES: Record<PagesOp, string> = {
   insert: 'Insert Pages', 'insert-blank': 'Insert Blank Page', delete: 'Delete Pages', extract: 'Extract Pages',
-  rotate: 'Rotate Pages', replace: 'Replace Pages', flatten: 'Flatten Markups', split: 'Split Document', 'slip-sheet': 'Slip Sheet',
+  rotate: 'Rotate Pages', replace: 'Replace Pages', flatten: 'Flatten Markups', split: 'Split Document', 'slip-sheet': 'Slip Sheet', ocr: 'OCR',
 };
 
 function download(bytes: Uint8Array, name: string) {
@@ -96,6 +97,14 @@ function PagesForm({ op }: { op: PagesOp }) {
       case 'flatten':
         await s.transformDoc((lib) => { for (const p of pages) flattenPage(lib, lib.getPage(p)); }, `Flattened markups on ${pages.length} page(s)`);
         break;
+      case 'ocr': {
+        try {
+          const words = await ocrPages(doc, pages, (msg) => s.setStatus(msg));
+          const total = [...words.values()].reduce((t, ls) => t + ls.reduce((n, l) => n + l.text.split(' ').length, 0), 0);
+          await s.transformDoc(async (lib) => { for (const [p, w] of words) await addTextLayer(lib, p, w); }, `OCR: ${total} word(s) recognised on ${pages.length} page(s); the text is now searchable`);
+        } catch (e) { s.setStatus(`OCR failed: ${(e as Error).message}`); }
+        break;
+      }
       case 'slip-sheet': {
         if (!file) return;
         // Match the new revision's sheets to this document's by page label (sheet number).
@@ -153,7 +162,8 @@ function PagesForm({ op }: { op: PagesOp }) {
         <div className="scale-dialog">
           {op === 'insert' && <>{fileRow}{position}</>}
           {op === 'insert-blank' && <>{position}<div className="form-row"><span>Count</span><input aria-label="Count" type="number" min={1} value={count} onChange={(e) => setCount(e.target.value)} style={{ width: 60 }} /></div></>}
-          {(op === 'delete' || op === 'extract' || op === 'rotate' || op === 'flatten') && range_}
+          {(op === 'delete' || op === 'extract' || op === 'rotate' || op === 'flatten' || op === 'ocr') && range_}
+          {op === 'ocr' && <p className="muted small">Recognises text on scanned pages (English) and adds it as invisible text, so Search, text markups and copying work. Runs in your browser; large sheets take a while.</p>}
           {op === 'rotate' && (
             <div className="form-row"><span>Direction</span>
               <select aria-label="Direction" value={dir} onChange={(e) => setDir(e.target.value as '90')}>

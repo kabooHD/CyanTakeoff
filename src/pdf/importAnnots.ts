@@ -211,6 +211,11 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
       type = intent === 'LineDimension' ? (/^dimension/i.test(subj) ? 'dimension' : 'length') : ends.some((e) => /Arrow/.test(e)) ? 'arrow' : 'line';
       break;
     }
+    case 'Redact':
+      pts = quadRects();
+      if (!pts.length && rect.length === 4) pts = rectPts(rect);
+      type = 'redaction';
+      break;
     case 'StrikeOut': case 'Underline': case 'Squiggly':
       pts = quadRects();
       type = subtype === 'StrikeOut' ? 'strikeout' : subtype === 'Underline' ? 'underline' : 'squiggly';

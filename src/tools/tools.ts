@@ -65,6 +65,8 @@ export const TOOLS: ToolDef[] = [
   { id: 'snapshot', name: 'Snapshot', group: 'markup', shortcut: 'G', interaction: 'box', subject: 'Snapshot' },
   { id: 'link', name: 'Hyperlink', group: 'markup', shortcut: 'Shift+H', interaction: 'box', subject: 'Hyperlink' },
   { id: 'attachment', name: 'File Attachment', group: 'markup', shortcut: 'F', interaction: 'point', subject: 'File Attachment' },
+  { id: 'redaction', name: 'Mark for Redaction', group: 'markup', shortcut: 'Shift+R', interaction: 'box', subject: 'Redaction' },
+  { id: 'redact-text', name: 'Mark Text for Redaction', group: 'markup', shortcut: 'Shift+K', interaction: 'text', subject: 'Redaction' },
   { id: 'legend', name: 'Legend', group: 'markup', interaction: 'point', subject: 'Legend' },
   { id: 'eraser', name: 'Eraser', group: 'markup', shortcut: 'Shift+E', interaction: 'erase', subject: '' },
 
@@ -135,6 +137,7 @@ export const DEFAULT_STYLES: Record<MarkupType, MarkupStyle> = {
   link: { ...base, color: '#0066ff', lineStyle: 'dashed' },
   attachment: { ...base, color: '#0066ff' },
   legend: { ...base, color: '#000000', fill: '#ffffff', fillOpacity: 1, fontSize: 10 },
+  redaction: { ...base, color: '#ff0000', fill: '#000000', fillOpacity: 0.25, width: 1.5, lineStyle: 'dashed' },
 };
 
 /** Normalised combo string for a keyboard event, e.g. "Ctrl+Shift+S". */
