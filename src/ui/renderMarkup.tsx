@@ -295,16 +295,19 @@ function LegendShape({ m }: { m: Markup }) {
   const rows = def && doc ? legendRows(def, doc.markups, m.page) : [];
   const L = def ? legendLayout(def, rows, m.style.fontSize) : null;
   const P = m.points;
-  // Keep the stored bottom-right corner in step with the table's size (used for selection and saving).
+  // Anchored at the centre of its box: stable when the page is rotated and back
+  // (the stored box keeps its orientation while the table is drawn upright).
+  const tl = L && P[1] ? { x: (P[0].x + P[1].x) / 2 - L.w / 2, y: (P[0].y + P[1].y) / 2 - L.h / 2 } : P[0];
+  // Keep the stored corners in step with the table's size (used for selection and saving).
   useEffect(() => {
-    if (!L || !P[0] || m.id === 'draft') return;
-    const want = { x: P[0].x + L.w, y: P[0].y + L.h };
-    if (!P[1] || Math.abs(P[1].x - want.x) > 0.5 || Math.abs(P[1].y - want.y) > 0.5) {
-      useApp.getState().updateMarkups([m.id], () => ({ points: [P[0], want] }), { history: false });
+    if (!L || !tl || m.id === 'draft') return;
+    const want = { x: tl.x + L.w, y: tl.y + L.h };
+    if (!P[1] || Math.abs(P[0].x - tl.x) > 0.01 || Math.abs(P[0].y - tl.y) > 0.01 || Math.abs(P[1].x - want.x) > 0.5 || Math.abs(P[1].y - want.y) > 0.5) {
+      useApp.getState().updateMarkups([m.id], () => ({ points: [tl, want] }), { history: false });
     }
   });
   if (!def || !L) return null;
-  const st = m.style, x0 = P[0].x, y0 = P[0].y, fs = st.fontSize;
+  const st = m.style, x0 = tl.x, y0 = tl.y, fs = st.fontSize;
   let x = x0;
   const colX = L.cols.map((c) => { const at = x; x += c.w; return at; });
   const text = (t: string | number, cx: number, cy: number, bold = false, anchor: 'start' | 'end' | 'middle' = 'start') => (

@@ -601,6 +601,43 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert(await page.locator('.split-view').count() === 0, 'Ctrl+Shift+2 unsplits');
 }
 
+// Page operations (Document menu / Revu shortcuts): insert blank, rotate, delete, flatten.
+{
+  const pagesOf = async () => Number((await page.locator('.statusbar').innerText()).match(/of (\d+)\)/)[1]);
+  await page.keyboard.press('Home');
+  const n0 = await pagesOf();
+  await page.keyboard.press('Control+Shift+N');
+  await page.getByRole('dialog', { name: 'Insert Blank Page' }).getByRole('button', { name: 'OK' }).click();
+  await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n + 1})`), n0);
+  assert(await pagesOf() === n0 + 1, 'Insert Blank Page adds a page');
+  const markupsBefore = await page.locator('.ml-table tbody tr:not(.reply-row)').count();
+  assert(markupsBefore > 0, 'markups kept through the page operation');
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByRole('dialog', { name: 'Delete Pages' }).getByRole('button', { name: 'OK' }).click();
+  await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n})`), n0);
+  assert(await pagesOf() === n0, 'Delete Pages removes it again');
+  await page.keyboard.press('Home');
+  await page.waitForTimeout(500);
+  const legendBox = async () => page.locator('.markup-layer g.legend > rect').first().evaluate((r) => { const b = r.getBBox(); return [b.x, b.y, b.width, b.height].map(Math.round).join(','); });
+  const lb0 = await legendBox();
+  await page.keyboard.press('Shift+Alt+=');
+  await page.waitForTimeout(1200);
+  { const sb = await page.locator('.statusbar').innerText(); assert(sb.includes('24.00 x 36.00'), `Rotate Clockwise turns the sheet (24 × 36 in): ${sb.replace(/\s+/g, ' ')}`); }
+  await page.keyboard.press('Shift+Alt+-');
+  await page.waitForTimeout(1200);
+  const lb1 = await legendBox();
+  assert(lb0 === lb1, `markups stay in place through rotate and rotate back (legend ${lb0} -> ${lb1})`);
+  const onPage1 = async () => (await page.locator('.ml-table tbody tr:not(.reply-row)').allInnerTexts()).filter((t) => t.split('\t')[1]?.trim() === '1' && !t.startsWith('Hyperlink')).length; // links stay links
+  const p1 = await onPage1();
+  await page.keyboard.press('Control+Shift+M');
+  const fd = page.getByRole('dialog', { name: 'Flatten Markups' });
+  await fd.getByLabel('Page range').selectOption('current');
+  await fd.getByRole('button', { name: 'OK' }).click();
+  await page.waitForTimeout(1500);
+  assert(p1 > 0 && await onPage1() === 0, `Flatten burns page 1's ${p1} markups into the page (${await onPage1()} left; ${(await page.locator('.statusbar').innerText()).replace(/\s+/g, ' ')})`);
+  await page.screenshot({ path: `${OUT}/13-flattened.png` });
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],

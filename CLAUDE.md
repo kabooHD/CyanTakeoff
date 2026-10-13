@@ -75,7 +75,9 @@ Attachment, Eraser); Group/Ungroup, Arrange, Lock, Align, Flip, Format
 Painter, Lasso; Spaces (Revu /BSISpaces, panel, Space column); slope, rise/drop, wall area;
 custom columns incl. formulas; Summary to Excel (.xlsx), CSV or PDF report;
 Legends; Markups List replies, Checkmark/Lock/Creation Date columns, arrow
-keys and jump-to-markup; Search (Ctrl+F); split view (Ctrl+2/Ctrl+H);
+keys and jump-to-markup; Search (Ctrl+F); split view (Ctrl+2/Ctrl+H); page operations (insert,
+blank, delete, extract, replace keeping markups, rotate, reorder by
+thumbnail drag, split, combine) and Flatten;
 length, polylength, area, perimeter, volume, count, angle, radius, diameter;
 cutouts (polygon/ellipse, Revu fuse/trim rules); Dynamic Fill;
 separate X/Y scales; 3-point radius; viewports (regions with their own scale, Revu

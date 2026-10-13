@@ -7,6 +7,7 @@ import { Icon } from './icons';
 import { MenuList, type MenuItem } from './ContextMenu';
 import { exportSummaryCsv, openFile, openSample } from './actions';
 import { viewerApi } from './Viewer';
+import { combineFiles, openPagesDialog } from './PagesDialog';
 import { arrangeItems } from './arrangeMenu';
 import { useCursor } from './cursor';
 
@@ -33,6 +34,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
     File: [
       { label: 'Open…', shortcut: 'Ctrl+O', action: openFile },
       { label: 'Open Sample Drawing', action: openSample },
+      { label: 'Combine Files…', action: combineFiles },
       { label: 'Close', shortcut: 'Ctrl+F4', disabled: noDoc, action: () => doc && s.closeDoc(doc.id) },
       { sep: true },
       { label: 'Save', shortcut: 'Ctrl+S', disabled: noDoc, action: () => s.save() },
@@ -69,6 +71,16 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Previous Page', shortcut: 'Ctrl+Left', disabled: noDoc, action: () => doc && s.setPage(doc.page - 1) },
       { label: 'Next Page', shortcut: 'Ctrl+Right', disabled: noDoc, action: () => doc && s.setPage(doc.page + 1) },
       { label: 'Last Page', shortcut: 'End', disabled: noDoc, action: () => doc && s.setPage(doc.loaded.pages.length - 1) },
+      { sep: true },
+      { label: 'Insert Pages…', shortcut: 'Ctrl+Shift+I', disabled: noDoc, action: () => openPagesDialog('insert') },
+      { label: 'Insert Blank Page…', shortcut: 'Ctrl+Shift+N', disabled: noDoc, action: () => openPagesDialog('insert-blank') },
+      { label: 'Delete Pages…', shortcut: 'Ctrl+Shift+D', disabled: noDoc, action: () => openPagesDialog('delete') },
+      { label: 'Extract Pages…', shortcut: 'Ctrl+Shift+X', disabled: noDoc, action: () => openPagesDialog('extract') },
+      { label: 'Replace Pages…', shortcut: 'Ctrl+Shift+Y', disabled: noDoc, action: () => openPagesDialog('replace') },
+      { label: 'Rotate Pages…', shortcut: 'Ctrl+Shift+R', disabled: noDoc, action: () => openPagesDialog('rotate') },
+      { label: 'Split Document…', disabled: noDoc, action: () => openPagesDialog('split') },
+      { sep: true },
+      { label: 'Flatten Markups…', shortcut: 'Ctrl+Shift+M', disabled: noDoc, action: () => openPagesDialog('flatten') },
     ],
     Tools: [
       { label: 'Select', shortcut: 'V', checked: s.tool === 'select', action: () => s.setTool('select') },

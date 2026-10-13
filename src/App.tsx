@@ -13,6 +13,8 @@ import { openFile, openFileObject, openSample } from './ui/actions';
 import { Icon } from './ui/icons';
 import { SpaceDialog } from './ui/SpacesPanel';
 import { nextHit, useSearch } from './ui/Search';
+import { PagesDialog, openPagesDialog } from './ui/PagesDialog';
+import { rotatePages } from './pdf/pages';
 
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
@@ -97,6 +99,15 @@ export function App() {
         case 'Alt+1': return left('search');
         case 'Ctrl+F': return run(() => { s.setPanels({ left: 'search' }); useSearch.setState((x) => ({ focusTick: x.focusTick + 1 })); });
         case 'F3': return run(() => nextHit(1));
+        case 'Ctrl+Shift+I': return run(() => d && openPagesDialog('insert'));
+        case 'Ctrl+Shift+N': return run(() => d && openPagesDialog('insert-blank'));
+        case 'Ctrl+Shift+D': return run(() => d && openPagesDialog('delete'));
+        case 'Ctrl+Shift+X': return run(() => d && openPagesDialog('extract'));
+        case 'Ctrl+Shift+Y': return run(() => d && openPagesDialog('replace'));
+        case 'Ctrl+Shift+R': return run(() => d && openPagesDialog('rotate'));
+        case 'Ctrl+Shift+M': return run(() => d && openPagesDialog('flatten'));
+        case 'Shift+Alt++': case 'Shift+Alt+=': return run(() => d && s.transformDoc((lib) => rotatePages(lib, [d.page], 90), 'Rotated clockwise'));
+        case 'Shift+Alt+-': case 'Shift+Alt+_': return run(() => d && s.transformDoc((lib) => rotatePages(lib, [d.page], -90), 'Rotated counterclockwise'));
         case 'Ctrl+H': return run(() => s.splitView('h'));
         case 'Ctrl+2': return run(() => s.splitView('v'));
         case 'Ctrl+Shift+2': case 'Ctrl+Shift+@': return run(s.unsplit);
@@ -164,6 +175,7 @@ export function App() {
       <ScaleDialog />
       <LinkDialog />
       <SpaceDialog />
+      <PagesDialog />
       {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
       {dialog === 'about' && <AboutDialog onClose={() => setDialog(null)} />}
     </div>

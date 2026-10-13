@@ -9,7 +9,7 @@ import { STAMPS, downloadBase64, loadImage, pageText, pickFile, readAsDataUrl, s
 import { applyCutout, ellipsePolygon } from '../model/cutouts';
 import { expandGroups } from '../model/arrange';
 import { arrangeItems } from './arrangeMenu';
-import { legendKey, type LegendDef } from '../model/legend';
+import { legendKey, legendLayout, legendRows, type LegendDef } from '../model/legend';
 import { DynamicFillBar, FillOverlay, buildMask, fillDown, fillMove, fillUp, finishBoundary, resetFill, useFill } from './DynamicFill';
 import type { Markup, MarkupType, Pt, ToolId, Viewport } from '../model/types';
 import { toolById } from '../tools/tools';
@@ -354,7 +354,9 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     const keys = s.legendKeys ?? [...new Set(markups.filter((m) => !['legend', 'link', 'image', 'attachment'].includes(m.type)).map(legendKey))];
     const def: LegendDef = { title: 'Legend', keys, source: 'page', showQuantity: true, showMeasurement: keys.some((k) => MEASURE_TYPES.has(k.split('|')[0])) };
     useApp.setState({ legendKeys: null });
-    finish('legend', [p, { x: p.x + 10, y: p.y + 10 }], { legend: def });
+    // The click is the table's top-left corner.
+    const L = legendLayout(def, legendRows(def, doc.markups, pageIdx), (s.preset?.style ?? s.toolDefaults.legend).fontSize);
+    finish('legend', [p, { x: p.x + L.w, y: p.y + L.h }], { legend: def });
   };
 
   // ----- tools that need text, files or a rendered snapshot -----

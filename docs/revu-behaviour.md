@@ -70,6 +70,16 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - CyanTakeoff: holes larger than ~0.5% of the room (columns, shafts) become
   cutouts on Area/Volume; small pockets (room labels) are ignored.
 
+## Page operations (Document menu)
+- Insert Pages (Ctrl+Shift+I), Insert Blank Page (Ctrl+Shift+N), Delete
+  (Ctrl+Shift+D), Extract (Ctrl+Shift+X, optionally deleting), Replace
+  (Ctrl+Shift+Y), Rotate Pages (Ctrl+Shift+R; current page Shift+Alt+Plus/
+  Minus), Flatten (Ctrl+Shift+M), thumbnails: drag to reorder, right-click.
+- CyanTakeoff writes pending changes into the PDF, applies the operation
+  and reloads; undo history restarts after a page operation.
+- Replace Pages keeps the old page's markups, page scale and Spaces (the
+  basis of slip sheeting). Flatten keeps hyperlinks and form fields.
+
 ## Measurement properties: slope, rise/drop, depth
 - Slope (Pitch x/12, Degree or Grade %) adjusts lengths and areas for a
   sloped plane: sloped = plan × sqrt(1 + slope²).

@@ -6,6 +6,9 @@ import { toolById } from '../tools/tools';
 import { Icon } from './icons';
 import { SpacesPanel } from './SpacesPanel';
 import { SearchPanel } from './Search';
+import { ContextMenu, type MenuItem } from './ContextMenu';
+import { openPagesDialog } from './PagesDialog';
+import { deletePages, movePage, rotatePages } from '../pdf/pages';
 import { legendKey } from '../model/legend';
 
 // ---------------- side tab strips ----------------
@@ -95,7 +98,42 @@ function Thumb({ doc, index }: { doc: DocState; index: number }) {
 }
 
 function Thumbnails({ doc }: { doc: DocState }) {
-  return <div className="thumbs">{doc.loaded.pages.map((p) => <Thumb key={`${doc.id}-${p.index}`} doc={doc} index={p.index} />)}</div>;
+  const s = useApp();
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const [drag, setDrag] = useState<number | null>(null);
+  const onMenu = (e: React.MouseEvent, index: number) => {
+    e.preventDefault();
+    s.setPage(index);
+    const rot = (d: 90 | -90) => s.transformDoc((lib) => rotatePages(lib, [index], d), d > 0 ? 'Rotated clockwise' : 'Rotated counterclockwise');
+    setMenu({ x: e.clientX, y: e.clientY, items: [
+      { label: 'Insert Pages…', action: () => openPagesDialog('insert') },
+      { label: 'Insert Blank Page…', action: () => openPagesDialog('insert-blank') },
+      { label: 'Extract Pages…', action: () => openPagesDialog('extract') },
+      { label: 'Replace Pages…', action: () => openPagesDialog('replace') },
+      { label: 'Delete Page', disabled: doc.loaded.pages.length < 2, action: () => s.transformDoc((lib) => deletePages(lib, [index]), 'Page deleted') },
+      { sep: true },
+      { label: 'Rotate Clockwise', shortcut: 'Shift+Alt+Plus', action: () => rot(90) },
+      { label: 'Rotate Counterclockwise', shortcut: 'Shift+Alt+Minus', action: () => rot(-90) },
+    ] });
+  };
+  return (
+    <div className="thumbs">
+      {doc.loaded.pages.map((p) => (
+        <div key={`${doc.id}-${p.index}`} draggable onDragStart={(e) => { setDrag(p.index); e.dataTransfer.effectAllowed = 'move'; }}
+          onDragOver={(e) => { if (drag !== null) e.preventDefault(); }}
+          onDrop={(e) => {
+            e.preventDefault(); e.stopPropagation();
+            const from = drag; setDrag(null);
+            if (from !== null && from !== p.index) s.transformDoc((lib) => movePage(lib, from, p.index), `Moved page ${from + 1} to ${p.index + 1}`, p.index);
+          }}
+          onDragEnd={() => setDrag(null)}
+          onContextMenu={(e) => onMenu(e, p.index)}>
+          <Thumb doc={doc} index={p.index} />
+        </div>
+      ))}
+      {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
+    </div>
+  );
 }
 
 // ---------------- Bookmarks ----------------

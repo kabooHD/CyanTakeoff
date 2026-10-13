@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { PDFDocument } from 'pdf-lib';
 import type { LoadedDoc } from '../pdf/document';
 import { openPdf } from '../pdf/document';
 import { savePdf } from '../pdf/save';
@@ -154,6 +155,12 @@ interface AppState {
   setViewport(page: number, v: Viewport): void;
   /** Delete viewports by id, or all on `pages`. */
   deleteViewports(pages: number[], ids?: string[]): void;
+  /**
+   * Restructure the document's PDF (page operations): changes so far are
+   * written in, `fn` edits the pdf-lib document, and the result is reloaded.
+   * Returns false if it failed (the status bar says why).
+   */
+  transformDoc(fn: (lib: PDFDocument) => Promise<void> | void, done: string, page?: number): Promise<boolean>;
   /** Replace the document's custom columns. */
   setColumns(cols: CustomColumn[]): void;
   /** Add a Space, or replace the one with the same id. */
@@ -205,6 +212,16 @@ const now = () => new Date().toISOString();
 
 /** Viewport id, in the style of Revu's /NM (16 capital letters). */
 export const newViewportId = () => Array.from({ length: 16 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
+
+/** The document with all its changes written into the PDF. */
+export function serialize(d: DocState): Promise<Uint8Array> {
+  return savePdf({
+    original: d.bytes, pages: d.loaded.pages, markups: d.markups,
+    importedRefs: d.importedRefs, calibrations: d.calibrations, viewports: d.viewports,
+    dirtyCalibrations: d.dirtyCalibrations, spaces: d.spaces, dirtySpaces: d.dirtySpaces,
+    columns: d.dirtyColumns ? d.columns : undefined,
+  });
+}
 
 /** State after applying an undo entry, plus the entry that reverses it. */
 function restore(d: DocState, e: UndoEntry): [Partial<DocState>, UndoEntry] {
@@ -516,6 +533,36 @@ export const useApp = create<AppState>((set, get) => {
       });
     },
     setActiveViewport: (activeViewport) => set({ activeViewport }),
+    async transformDoc(fn, done, page) {
+      const d = activeDoc();
+      if (!d) return false;
+      if (d.loaded.readOnly) { set({ status: 'This file could not be parsed for editing.' }); return false; }
+      set({ busy: true, status: 'Updating pages…' });
+      try {
+        const lib = await PDFDocument.load(await serialize(d), { updateMetadata: false });
+        await fn(lib);
+        const bytes = await lib.save({ useObjectStreams: false });
+        const loaded = await openPdf(bytes);
+        const old = get().docs.find((x) => x.id === d.id)!;
+        old.loaded.pdf.loadingTask.destroy();
+        set((st) => ({
+          docs: st.docs.map((x) => x.id === d.id ? {
+            ...x, bytes, loaded, markups: loaded.markups, importedRefs: loaded.importedRefs,
+            calibrations: loaded.calibrations, viewports: loaded.viewports, dirtyCalibrations: new Set(),
+            spaces: loaded.spaces, dirtySpaces: new Set(), columns: loaded.columns, dirtyColumns: false,
+            page: Math.max(0, Math.min(loaded.pages.length - 1, page ?? x.page)), selection: [], undo: [], redo: [], dirty: true,
+          } : x),
+          status: done,
+        }));
+        return true;
+      } catch (e) {
+        console.error(e);
+        set({ status: `Could not update pages: ${(e as Error).message}` });
+        return false;
+      } finally {
+        set({ busy: false });
+      }
+    },
     setColumns(columns) {
       withDoc(() => ({ columns, dirtyColumns: true, dirty: true }));
     },
@@ -582,12 +629,7 @@ export const useApp = create<AppState>((set, get) => {
       if (d.loaded.readOnly) { alert('This file could not be parsed for editing, so markups cannot be saved into it.'); return; }
       set({ busy: true, status: `Saving ${d.name}…` });
       try {
-        const bytes = await savePdf({
-          original: d.bytes, pages: d.loaded.pages, markups: d.markups,
-          importedRefs: d.importedRefs, calibrations: d.calibrations, viewports: d.viewports,
-          dirtyCalibrations: d.dirtyCalibrations, spaces: d.spaces, dirtySpaces: d.dirtySpaces,
-          columns: d.dirtyColumns ? d.columns : undefined,
-        });
+        const bytes = await serialize(d);
         let handle = saveAs ? undefined : d.fileHandle;
         let name = d.name;
         const w = window as unknown as { showSaveFilePicker?: (o: unknown) => Promise<FileSystemFileHandle> };
