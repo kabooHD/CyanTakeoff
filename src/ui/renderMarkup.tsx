@@ -1,6 +1,9 @@
 import { calloutAttach } from '../pdf/save';
 import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
-import type { Cutout, Markup, Pt } from '../model/types';
+import type { Cutout, Markup, MarkupStyle, MarkupType, Pt } from '../model/types';
+import { useEffect } from 'react';
+import { useApp } from '../model/store';
+import { LEGEND_HEADERS, legendLayout, legendRows } from '../model/legend';
 
 const pts = (p: Pt[]) => p.map((q) => `${q.x},${q.y}`).join(' ');
 
@@ -35,7 +38,7 @@ export function handlePoints(m: Markup): Pt[] {
   if (['rectangle', 'ellipse', 'highlight', 'textbox', 'typewriter', 'stamp', 'image', 'link'].includes(m.type)) {
     return [m.points[0], m.points[1]];
   }
-  if (m.type === 'strikeout' || m.type === 'underline' || m.type === 'squiggly' || m.type === 'flag' || m.type === 'attachment') return [];
+  if (m.type === 'strikeout' || m.type === 'underline' || m.type === 'squiggly' || m.type === 'flag' || m.type === 'attachment' || m.type === 'legend') return [];
   return m.points;
 }
 
@@ -171,6 +174,9 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     case 'strikeout': case 'underline': case 'squiggly':
       shape = <>{rectPairs(P).map(([a, b], i) => <path key={i} {...c} fill="none" strokeWidth={Math.max(st.width, 0.8)} d={textLine(m.type, a, b)} />)}</>;
       break;
+    case 'legend':
+      shape = <LegendShape m={m} />;
+      break;
     case 'line': case 'length':
       if (P.length < 2) break;
       shape = <line {...c} x1={P[0].x} y1={P[0].y} x2={P[1].x} y2={P[1].y} />;
@@ -268,6 +274,62 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
         <text x={label.at.x} y={label.at.y} fontSize={m.style.fontSize} fill={st.color}
           textAnchor="middle" dominantBaseline="middle" className="measure-label">{label.text}</text>
       )}
+    </g>
+  );
+}
+
+/** A small sample of a markup kind for a Legend's Symbol column. */
+export function LegendSymbol({ type, style, x, y, w, h }: { type: MarkupType; style: MarkupStyle; x: number; y: number; w: number; h: number }) {
+  const c = { stroke: style.color, strokeWidth: Math.min(style.width || 1, 3), fill: 'none' };
+  const fill = style.fill ?? style.color;
+  if (type === 'count') return <circle cx={x + w / 2} cy={y + h / 2} r={Math.min(w, h) * 0.3} fill={fill} fillOpacity={style.fillOpacity} stroke={style.color} />;
+  if (type === 'area' || type === 'volume' || type === 'polygon' || type === 'rectangle' || type === 'highlight' || type === 'cloud' || type === 'ellipse') {
+    return <rect x={x + w * 0.15} y={y + h * 0.2} width={w * 0.7} height={h * 0.6} {...c} fill={style.fill ?? 'none'} fillOpacity={style.fillOpacity} />;
+  }
+  return <line x1={x + w * 0.1} y1={y + h / 2} x2={x + w * 0.9} y2={y + h / 2} {...c} />;
+}
+
+function LegendShape({ m }: { m: Markup }) {
+  const doc = useApp((s) => s.docs.find((d) => d.id === s.activeId));
+  const def = m.legend;
+  const rows = def && doc ? legendRows(def, doc.markups, m.page) : [];
+  const L = def ? legendLayout(def, rows, m.style.fontSize) : null;
+  const P = m.points;
+  // Keep the stored bottom-right corner in step with the table's size (used for selection and saving).
+  useEffect(() => {
+    if (!L || !P[0] || m.id === 'draft') return;
+    const want = { x: P[0].x + L.w, y: P[0].y + L.h };
+    if (!P[1] || Math.abs(P[1].x - want.x) > 0.5 || Math.abs(P[1].y - want.y) > 0.5) {
+      useApp.getState().updateMarkups([m.id], () => ({ points: [P[0], want] }), { history: false });
+    }
+  });
+  if (!def || !L) return null;
+  const st = m.style, x0 = P[0].x, y0 = P[0].y, fs = st.fontSize;
+  let x = x0;
+  const colX = L.cols.map((c) => { const at = x; x += c.w; return at; });
+  const text = (t: string | number, cx: number, cy: number, bold = false, anchor: 'start' | 'end' | 'middle' = 'start') => (
+    <text x={cx} y={cy} fontSize={fs} fontWeight={bold ? 'bold' : undefined} fill={st.color} textAnchor={anchor} dominantBaseline="middle" fontFamily="Helvetica, Arial, sans-serif">{t}</text>
+  );
+  const cell = (id: string, r: (typeof rows)[number], i: number, cy: number) => {
+    const cx = colX[i], w = L.cols[i].w;
+    if (id === 'symbol') return <LegendSymbol key={id} type={r.type} style={r.style} x={cx} y={cy - L.row / 2} w={w} h={L.row} />;
+    if (id === 'description') return <g key={id}>{text(r.description, cx + 5, cy)}</g>;
+    if (id === 'quantity') return <g key={id}>{text(r.quantity, cx + w - 5, cy, false, 'end')}</g>;
+    return <g key={id}>{text(r.measurement, cx + w - 5, cy, false, 'end')}</g>;
+  };
+  return (
+    <g className="legend">
+      <rect x={x0} y={y0} width={L.w} height={L.h} fill={st.fill ?? '#fff'} fillOpacity={st.fillOpacity} stroke={st.color} strokeWidth={0.8} />
+      <line x1={x0} x2={x0 + L.w} y1={y0 + L.title} y2={y0 + L.title} stroke={st.color} strokeWidth={0.8} />
+      {text(def.title, x0 + L.w / 2, y0 + L.title / 2, true, 'middle')}
+      {L.cols.map((c, i) => <g key={c.id}>{text(LEGEND_HEADERS[c.id], colX[i] + (c.id === 'description' ? 5 : c.w - 5), y0 + L.title + L.row / 2, true, c.id === 'description' ? 'start' : 'end')}</g>)}
+      {rows.map((r, k) => {
+        const cy = y0 + L.title + L.row * (k + 1.5);
+        return <g key={r.key}>
+          <line x1={x0} x2={x0 + L.w} y1={cy - L.row / 2} y2={cy - L.row / 2} stroke={st.color} strokeWidth={0.4} />
+          {L.cols.map((c, i) => cell(c.id, r, i, cy))}
+        </g>;
+      })}
     </g>
   );
 }

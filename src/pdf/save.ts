@@ -4,6 +4,7 @@ import {
 } from 'pdf-lib';
 import type { CustomColumn, Cutout, Markup, Pt, Scale, Space, Viewport } from '../model/types';
 import { spaceTree, type SpaceNode } from '../model/spaces';
+import { LEGEND_HEADERS, legendLayout, legendRows, type LegendRow } from '../model/legend';
 import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import { refKey, removeAnnots, type CTData, type PageInfo } from './document';
 import { COLUMNS_KEY, isRulerViewport } from './importAnnots';
@@ -126,7 +127,7 @@ function textInBox(o: Ops, font: PDFFont, text: string, size: number, a: Pt, c: 
   }
 }
 
-function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], rot = 0) {
+function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], rot = 0, rows: LegendRow[] = []) {
   const fr = textFrame(rot);
   const o = new Ops();
   const st = m.style;
@@ -207,6 +208,47 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
       const sub = safeText(font, `${m.author} ${new Date(m.created).toLocaleDateString()}`);
       const s2 = Math.max(5, size * 0.38);
       textAt(o, font, sub, s2, q.u - font.widthOfTextAtSize(sub, s2) / 2, q.v - b.h * 0.36, rgb, fr);
+      break;
+    }
+    case 'legend': {
+      if (!m.legend) break;
+      // The table, drawn in the page's reading direction from the top-left corner.
+      const L = legendLayout(m.legend, rows, st.fontSize);
+      const cs = P.map((q) => proj(fr, q));
+      const u0 = Math.min(...cs.map((c) => c.u)), v0 = Math.max(...cs.map((c) => c.v));
+      const pt = (u: number, v: number) => at(fr, u0 + u, v0 - v);
+      const box = [pt(0, 0), pt(L.w, 0), pt(L.w, L.h), pt(0, L.h)];
+      o.add(`${fillRgb ?? '1 1 1'} rg`); o.poly(box, true); o.add('f');
+      o.add(`${rgb} RG 0.8 w`); o.poly(box, true); o.add('S');
+      o.add('0.4 w');
+      for (let k = 0; k <= rows.length; k++) { o.moveTo(pt(0, L.title + L.row * k)); o.lineTo(pt(L.w, L.title + L.row * k)); o.add('S'); }
+      const fs = st.fontSize;
+      const put = (t: string, u: number, v: number, align: 'start' | 'end' | 'middle') => {
+        const s2 = safeText(font, t);
+        const w = font.widthOfTextAtSize(s2, fs);
+        const du = align === 'end' ? -w : align === 'middle' ? -w / 2 : 0;
+        textAt(o, font, s2, fs, u0 + u + du, v0 - v - fs * 0.35, rgb, fr);
+      };
+      put(m.legend.title, L.w / 2, L.title / 2, 'middle');
+      let cx = 0;
+      L.cols.forEach((c) => {
+        if (c.id !== 'symbol') put(LEGEND_HEADERS[c.id], c.id === 'description' ? cx + 5 : cx + c.w - 5, L.title + L.row / 2, c.id === 'description' ? 'start' : 'end');
+        rows.forEach((r, k) => {
+          const cy = L.title + L.row * (k + 1.5);
+          if (c.id === 'symbol') {
+            const [rr, gg, bb] = hexToRgb(r.style.color).map(f);
+            const fillC = (r.style.fill ? hexToRgb(r.style.fill) : hexToRgb(r.style.color)).map(f).join(' ');
+            o.add(`q ${rr} ${gg} ${bb} RG ${fillC} rg 1 w`);
+            if (['area', 'volume', 'polygon', 'rectangle', 'highlight', 'cloud', 'ellipse', 'count'].includes(r.type)) {
+              o.poly([pt(cx + c.w * 0.15, cy - L.row * 0.3), pt(cx + c.w * 0.85, cy - L.row * 0.3), pt(cx + c.w * 0.85, cy + L.row * 0.3), pt(cx + c.w * 0.15, cy + L.row * 0.3)], true);
+              o.add(r.style.fill || r.type === 'count' ? 'B' : 'S');
+            } else { o.moveTo(pt(cx + c.w * 0.1, cy)); o.lineTo(pt(cx + c.w * 0.9, cy)); o.add('S'); }
+            o.add('Q');
+          } else if (c.id === 'description') put(r.description, cx + 5, cy, 'start');
+          else put(c.id === 'quantity' ? String(r.quantity) : r.measurement, cx + c.w - 5, cy, 'end');
+        });
+        cx += c.w;
+      });
       break;
     }
     case 'image': {
@@ -354,6 +396,7 @@ const SUBTYPE: Record<Markup['type'], string> = {
   angle: 'PolyLine', radius: 'Polygon', diameter: 'Circle',
   dimension: 'Line', typewriter: 'FreeText', cloudplus: 'Polygon', arc: 'PolyLine', flag: 'Text', stamp: 'Stamp',
   strikeout: 'StrikeOut', underline: 'Underline', squiggly: 'Squiggly', image: 'Stamp', link: 'Link', attachment: 'FileAttachment',
+  legend: 'Stamp',
 };
 
 /** Measurement intents, as Revu writes them. */
@@ -381,6 +424,7 @@ function ctData(m: Markup, P: Pt[]): CTData {
     slope: m.slope,
     rise: m.rise,
     custom: m.custom && Object.keys(m.custom).length ? m.custom : undefined,
+    legend: m.legend,
   };
 }
 
@@ -437,13 +481,13 @@ function quads(P: Pt[]): number[] {
 
 const base64ToBytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
 
-function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, image?: PDFRef, pageRefs: PDFRef[] = []): PDFRef[] {
+function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, image?: PDFRef, pageRefs: PDFRef[] = [], rows: LegendRow[] = []): PDFRef[] {
   if (m.type === 'count') return buildCount(doc, m, page);
   const ctx = doc.context;
   const P = toPdf(m, page);
   const ct = ctData(m, P);
   const cutouts = m.cutouts?.map((c) => ({ ...c, points: c.points.map((q) => toPdfPt(q, page)) }));
-  const { ops, bbox } = buildAppearance(m, P, font, cutouts, (page.viewport as { rotation?: number }).rotation ?? 0);
+  const { ops, bbox } = buildAppearance(m, P, font, cutouts, (page.viewport as { rotation?: number }).rotation ?? 0, rows);
   if (cutouts?.length) ct.cutouts = cutouts.map((c) => ({ kind: c.kind, points: c.points.flatMap((q) => [q.x, q.y]) }));
   const st = m.style;
   const gs = ctx.obj({
@@ -500,7 +544,7 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
     case 'Stamp': {
       const b = bounds(P);
       entries.Rect = [b.minX, b.minY, b.maxX, b.maxY];
-      entries.Name = N(m.type === 'image' ? 'Image' : (m.text ?? 'Draft').replace(/[^A-Za-z0-9]+/g, ''));
+      entries.Name = N(m.type === 'image' ? 'Image' : m.type === 'legend' ? 'Legend' : (m.text ?? 'Draft').replace(/[^A-Za-z0-9]+/g, ''));
       break;
     }
     case 'Link': {
@@ -583,8 +627,10 @@ const randomNM = () => Array.from({ length: 16 }, () => String.fromCharCode(65 +
 
 export async function savePdf(input: SaveInput): Promise<Uint8Array> {
   const doc = await PDFDocument.load(input.original, { updateMetadata: false });
+  // Legends summarise other markups, so they are always rewritten with current totals.
+  const unchanged = (m: Markup): m is Markup & { source: NonNullable<Markup['source']> } => !!m.source && !m.source.dirty && m.type !== 'legend';
   const keep = new Set(
-    input.markups.filter((m) => m.source && !m.source.dirty)
+    input.markups.filter(unchanged)
       .flatMap((m) => [m.source!, ...(m.source!.extraRefs ?? [])].map(refKey)),
   );
   const remove = new Set([...input.importedRefs].filter((r) => !keep.has(r)));
@@ -596,12 +642,12 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
   const groupHead = new Map<string, PDFRef>();
   const pendingMembers: { ref: PDFRef; group: string }[] = [];
   for (const m of input.markups) {
-    if (m.groupId && m.source && !m.source.dirty && !groupHead.has(m.groupId)) {
+    if (m.groupId && unchanged(m) && !groupHead.has(m.groupId)) {
       groupHead.set(m.groupId, PDFRef.of(m.source.objectNumber, m.source.generation));
     }
   }
   for (const m of input.markups) {
-    if (m.source && !m.source.dirty) continue;
+    if (unchanged(m)) continue;
     let image: PDFRef | undefined;
     if (m.type === 'image' && m.image) {
       const [, mime, b64] = /^data:([^;]+);base64,(.*)$/.exec(m.image) ?? [];
@@ -616,7 +662,8 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
       annots = doc.context.obj([]);
       page.node.set(N('Annots'), annots);
     }
-    const built = buildAnnot(doc, font, m, input.pages[m.page], image, pageRefs);
+    const rows = m.type === 'legend' && m.legend ? legendRows(m.legend, input.markups, m.page) : [];
+    const built = buildAnnot(doc, font, m, input.pages[m.page], image, pageRefs, rows);
     if (m.groupId) {
       if (!groupHead.has(m.groupId)) groupHead.set(m.groupId, built[0]);
       else pendingMembers.push({ ref: built[0], group: m.groupId });

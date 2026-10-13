@@ -37,6 +37,7 @@ export interface CTData {
   slope?: Markup['slope'];
   rise?: number;
   custom?: Markup['custom'];
+  legend?: Markup['legend'];
   groupId?: string; // Revu-style markup group
 }
 
@@ -162,6 +163,7 @@ function baseMarkup(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number, 
     slope: ct?.slope,
     rise: ct?.rise,
     custom: ct?.custom,
+    legend: ct?.legend,
     locked: ((getNumber(doc, dict, 'F') ?? 0) & 128) !== 0 || undefined,
   } satisfies Omit<Markup, 'points'>;
 }
@@ -213,7 +215,7 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
       break;
     case 'Stamp': {
       // Only CyanTakeoff's own stamps and images are editable; other stamps keep their artwork untouched.
-      if (!inner || (ct?.type !== 'stamp' && ct?.type !== 'image')) return null;
+      if (!inner || (ct?.type !== 'stamp' && ct?.type !== 'image' && ct?.type !== 'legend')) return null;
       pts = rectPts(inner);
       if (ct.type === 'image') {
         const image = readImage(doc, dict);

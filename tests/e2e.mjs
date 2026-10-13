@@ -525,6 +525,23 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert((await page.locator('.ml-table tbody tr').filter({ hasText: '419.43 sf' }).first().innerText()).includes('$838.87'), 'custom columns and values survive save and reload');
 }
 
+// Legend: right-click the office Area > Create Legend, click to place; it totals live.
+{
+  const p = await toScreen(20, 38);
+  await page.mouse.click(p.x, p.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Create Legend' }).click();
+  const q = await toScreen(62, 38);
+  await page.mouse.click(q.x, q.y);
+  await page.waitForTimeout(300);
+  const legendText = await page.locator('.markup-layer g.legend').innerHTML();
+  assert(legendText.includes('Area Measurement') && legendText.includes('419.43 sf'), 'Legend lists the area kind with its total');
+  await page.screenshot({ path: `${OUT}/11-legend.png` });
+  const [ld] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
+  await ld.saveAs(`${OUT}/saved-legend.pdf`);
+  await page.waitForTimeout(800);
+  assert((await page.locator('.markup-layer g.legend').count()) === 1, 'Legend survives save and reload');
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],

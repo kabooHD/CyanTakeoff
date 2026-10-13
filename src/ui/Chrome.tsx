@@ -147,7 +147,7 @@ export function Toolbar() {
         <ToolButton id="select" /><ToolButton id="pan" /><ToolButton id="zoom" />
       </div>
       <div className="tb-group">
-        {TOOLS.filter((t) => t.group === 'markup').map((t) => <ToolButton key={t.id} id={t.id} />)}
+        {TOOLS.filter((t) => t.group === 'markup' && t.id !== 'legend').map((t) => <ToolButton key={t.id} id={t.id} />)}
       </div>
       <div className="tb-group">
         {TOOLS.filter((t) => t.group === 'measure' && t.id !== 'viewport' && t.id !== 'space').map((t) => <ToolButton key={t.id} id={t.id} />)}

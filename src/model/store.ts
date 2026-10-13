@@ -84,6 +84,8 @@ interface AppState {
   scaleDialog: ScaleDialogState | null;
   /** The dialog to reopen once the Calibrate tool has picked two points. */
   calibrateFor: ScaleDialogState | null;
+  /** Markup kinds the next Legend lists (from a selection or a tool set). */
+  legendKeys: string[] | null;
   /** Stamp placed by the Stamp tool. */
   stampName: string;
   /** Hyperlink dialog for a new (or existing, by id) link rectangle. */
@@ -254,6 +256,7 @@ export const useApp = create<AppState>((set, get) => {
     calibrateFor: null,
     radiusTool: 'radius',
     stampName: 'APPROVED',
+    legendKeys: null,
     linkDialog: null,
     activeViewport: null,
     savedScales: prefs.savedScales ?? [],

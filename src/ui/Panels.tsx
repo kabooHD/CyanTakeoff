@@ -5,6 +5,7 @@ import type { LineStyle, Markup, MarkupStyle, MarkupType, Scale, ToolPreset } fr
 import { toolById } from '../tools/tools';
 import { Icon } from './icons';
 import { SpacesPanel } from './SpacesPanel';
+import { legendKey } from '../model/legend';
 
 // ---------------- side tab strips ----------------
 
@@ -193,6 +194,21 @@ function Properties() {
       <Row label="Author"><input value={m.author} readOnly /></Row>
       <Row label="Date"><input value={new Date(m.modified).toLocaleString()} readOnly /></Row>
       <StyleEditor style={m.style} type={m.type} onChange={(p) => upd((x) => ({ style: { ...x.style, ...p } }))} />
+      {m.type === 'legend' && m.legend && (
+        <>
+          <div className="prop-section">Legend</div>
+          <Row label="Title"><input aria-label="Legend title" value={m.legend.title} onChange={(e) => upd((x) => ({ legend: { ...x.legend!, title: e.target.value } }))} /></Row>
+          <Row label="Source Pages">
+            <select aria-label="Source pages" value={m.legend.source} onChange={(e) => upd((x) => ({ legend: { ...x.legend!, source: e.target.value as 'page' } }))}>
+              <option value="page">This page</option><option value="all">All pages</option>
+            </select>
+          </Row>
+          <Row label="Columns">
+            <label><input type="checkbox" checked={m.legend.showQuantity} onChange={(e) => upd((x) => ({ legend: { ...x.legend!, showQuantity: e.target.checked } }))} /> Quantity</label>
+            <label><input type="checkbox" checked={m.legend.showMeasurement} onChange={(e) => upd((x) => ({ legend: { ...x.legend!, showMeasurement: e.target.checked } }))} /> Measurement</label>
+          </Row>
+        </>
+      )}
       {meas && (
         <>
           <div className="prop-section">Measurement</div>
@@ -258,6 +274,13 @@ function ToolChest() {
         <summary>My Tools</summary>
         {s.toolChest.map((p) => <ToolItem key={p.id} p={p} onRemove={() => s.removeFromToolChest(p.id)} />)}
         <p className="muted pad small">Right-click a markup and choose “Add to My Tools” to save it here.</p>
+        <div className="prop-actions pad">
+          <button disabled={!s.toolChest.length} onClick={() => {
+            useApp.setState({ legendKeys: [...new Set(s.toolChest.map(legendKey))] });
+            s.setTool('legend');
+            s.setStatus('Click on the drawing to place the Legend for My Tools.');
+          }}>Create Legend</button>
+        </div>
       </details>
     </div>
   );

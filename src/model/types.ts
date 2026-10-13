@@ -37,7 +37,8 @@ export type MarkupType =
   | 'squiggly'
   | 'image'
   | 'link'
-  | 'attachment';
+  | 'attachment'
+  | 'legend';
 
 export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cutout' | 'ellipse-cutout' | 'viewport' | 'radius-3pt' | 'dynamic-fill' | 'snapshot' | 'eraser' | 'lasso' | 'space';
 
@@ -162,6 +163,8 @@ export interface Markup {
   groupId?: string;
   /** Locked markups cannot be moved, resized or deleted (Revu Lock). */
   locked?: boolean;
+  /** Legend settings (Legend markups). */
+  legend?: import('./legend').LegendDef;
   /** Values of the document's custom columns, by column id. */
   custom?: Record<string, string | number | boolean>;
   /** Original PDF annotation reference when imported from the file. */

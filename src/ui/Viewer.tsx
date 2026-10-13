@@ -8,6 +8,7 @@ import { STAMPS, downloadBase64, loadImage, pageText, pickFile, readAsDataUrl, s
 import { applyCutout, ellipsePolygon } from '../model/cutouts';
 import { expandGroups } from '../model/arrange';
 import { arrangeItems } from './arrangeMenu';
+import { legendKey, type LegendDef } from '../model/legend';
 import { DynamicFillBar, FillOverlay, buildMask, fillDown, fillMove, fillUp, finishBoundary, resetFill, useFill } from './DynamicFill';
 import type { Markup, MarkupType, Pt, ToolId, Viewport } from '../model/types';
 import { toolById } from '../tools/tools';
@@ -332,6 +333,14 @@ export function Viewer({ doc }: { doc: DocState }) {
     if (changed) s.setMarkups(next, { history: false });
   };
 
+  /** Place a Legend for the chosen markup kinds (default: every kind on this page). */
+  const placeLegend = (p: Pt) => {
+    const keys = s.legendKeys ?? [...new Set(markups.filter((m) => !['legend', 'link', 'image', 'attachment'].includes(m.type)).map(legendKey))];
+    const def: LegendDef = { title: 'Legend', keys, source: 'page', showQuantity: true, showMeasurement: keys.some((k) => MEASURE_TYPES.has(k.split('|')[0])) };
+    useApp.setState({ legendKeys: null });
+    finish('legend', [p, { x: p.x + 10, y: p.y + 10 }], { legend: def });
+  };
+
   // ----- tools that need text, files or a rendered snapshot -----
   const placeImage = async (p: Pt) => {
     const f = await pickFile('image/*');
@@ -564,7 +573,8 @@ export function Viewer({ doc }: { doc: DocState }) {
         (e.target as Element).setPointerCapture?.(e.pointerId);
         break;
       case 'point':
-        if (s.tool === 'image') placeImage(p);
+        if (s.tool === 'legend') placeLegend(p);
+        else if (s.tool === 'image') placeImage(p);
         else if (s.tool === 'attachment') placeAttachment(p);
         else finish(s.tool as MarkupType, [p]);
         break;
@@ -821,6 +831,12 @@ export function Viewer({ doc }: { doc: DocState }) {
         { sep: true },
         { label: 'Copy', shortcut: 'Ctrl+C', action: () => s.copy() },
         { label: 'Delete', shortcut: 'Del', action: () => s.deleteMarkups(ids), disabled: !!hit.locked },
+        { label: 'Create Legend', action: () => {
+          const sel = doc.markups.filter((m) => ids.includes(m.id) && m.type !== 'legend');
+          useApp.setState({ legendKeys: [...new Set(sel.map(legendKey))] });
+          s.setTool('legend');
+          s.setStatus('Click on the drawing to place the Legend.');
+        } },
         { sep: true },
         ...arrangeItems(),
       );

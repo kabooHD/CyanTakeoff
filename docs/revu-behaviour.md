@@ -87,6 +87,16 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
   known yet.
 - Summary export: Excel (.xlsx) or CSV of the rows and columns shown.
 
+## Legends
+- A table markup: Symbol, Description and other columns (quantities,
+  measurements...), updated live from markups on its source pages.
+- Ad-hoc Legend: select markups > right-click > Legend > Create New Legend,
+  click to place; matching markups (same type and appearance) added later
+  are included. Tool set Legend: from a Tool Chest tool set.
+- Properties: Title (+ show), Source Pages, columns, fonts, table colours.
+- CyanTakeoff: kinds match on type, subject and colour; saved as a Stamp
+  with the current table as its appearance (rewritten on every save).
+
 ## Spaces (Alt+S)
 - Spaces panel: Add Space (drag a rectangle or click corners, close on the
   first point or Enter, then name it), Highlight toggle, Edit; per page
