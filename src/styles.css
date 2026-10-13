@@ -253,3 +253,15 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
   .panel { width: 200px; }
   .sb-pos, .sb-size { display: none; }
 }
+
+/* Measurements panel: Viewports */
+.viewport-list { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 4px; }
+.viewport-list th { text-align: left; font-weight: 600; color: var(--muted, #666); padding: 2px 4px; }
+.viewport-list td { padding: 2px; }
+.viewport-list tr.selected { background: var(--accent-soft); }
+.viewport-list input, .viewport-list select { width: 100%; min-width: 0; }
+.viewport-list td:last-child { width: 26px; }
+.menu-anchor { position: relative; display: inline-block; }
+.menu-anchor .dropdown { position: absolute; bottom: 100%; left: 0; z-index: 50; display: flex; flex-direction: column;
+  background: var(--panel, #fff); border: 1px solid var(--border, #ccc); box-shadow: 0 2px 8px rgba(0,0,0,.15); white-space: nowrap; }
+.menu-anchor .dropdown button { border: 0; text-align: left; border-radius: 0; }

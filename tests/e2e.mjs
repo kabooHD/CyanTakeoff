@@ -249,6 +249,42 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.screenshot({ path: `${OUT}/06-scale-dialog.png` });
 }
 
+// Viewports: a detail on sheet 2 drawn at 1" = 10' while the sheet is 1" = 20'.
+{
+  const box = await svg.boundingBox();
+  const z = box.width / (36 * 72);
+  const site = (x, y) => ({ x: box.x + (400 + x * 3.6) * z, y: box.y + (H - (300 + y * 3.6)) * z });
+  if (!(await page.getByRole('button', { name: 'Add Viewport' }).isVisible())) await page.locator('.side-right button[title="Measurements"]').click();
+  await page.getByRole('button', { name: 'Add Viewport' }).click();
+  let a = site(450, 120), b = site(600, 0);
+  await page.mouse.move(a.x, a.y); await page.mouse.down();
+  await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up();
+  const dlg = page.getByRole('dialog', { name: 'Apply Scale to Viewport' });
+  assert(await dlg.isVisible(), 'dragging a rectangle opens Apply Scale to Viewport');
+  await dlg.getByPlaceholder('Viewport name').fill('Detail A');
+  await dlg.locator('select').first().selectOption(`1" = 10'`);
+  await dlg.getByRole('button', { name: 'Apply' }).click();
+  assert(await page.locator('.viewport-list input[aria-label="Viewport name"]').inputValue() === 'Detail A', 'viewport listed in the Measurements panel');
+  await page.keyboard.press('Control+Shift+F8'); // exact clicks: content snap off
+  await page.keyboard.press('Shift+Alt+L');
+  a = site(460, 20); await page.mouse.click(a.x, a.y);
+  assert(await page.locator('.viewport-box').count() > 0, 'viewports are highlighted while measuring');
+  b = site(560, 20); await page.mouse.click(b.x, b.y);
+  await page.keyboard.press('Control+Shift+F8');
+  const rows = await page.locator('.ml-table tbody').innerText();
+  assert(rows.includes('50 ft'), 'length inside the viewport uses its scale (50 ft at 1" = 10\')');
+  await page.screenshot({ path: `${OUT}/07-viewport.png` });
+
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
+  const f = `${OUT}/saved-viewport.pdf`;
+  await dl.saveAs(f);
+  await page.waitForTimeout(800);
+  const doc = await PDFDocument.load(readFileSync(f));
+  const vp = doc.getPage(1).node.lookup(PDFName.of('VP'), PDFArray).asArray().map((r) => doc.context.lookup(r, PDFDict));
+  assert(vp.length === 2 && vp.some((d) => d.get(PDFName.of('Name'))?.decodeText?.() === 'Detail A'), 'page scale and named viewport written to /VP');
+  assert(await page.locator('.viewport-list input[aria-label="Viewport name"]').inputValue() === 'Detail A', 'viewport survives save and reload');
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],

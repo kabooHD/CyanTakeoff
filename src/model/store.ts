@@ -3,10 +3,10 @@ import type { LoadedDoc } from '../pdf/document';
 import { openPdf } from '../pdf/document';
 import { savePdf } from '../pdf/save';
 import { DEFAULT_STYLES, toolById } from '../tools/tools';
-import { MEASURE_TYPES } from './measure';
+import { MEASURE_TYPES, scaleAt } from './measure';
 import { translated } from './markup';
 import type {
-  Markup, MarkupStyle, MarkupType, Scale, ToolId, ToolPreset, Toggles,
+  Markup, MarkupStyle, MarkupType, Pt, Scale, ToolId, ToolPreset, Toggles, Viewport,
 } from './types';
 
 export type LeftPanel = 'thumbnails' | 'bookmarks' | null;
@@ -21,6 +21,9 @@ export interface DocState {
   markups: Markup[];
   importedRefs: Set<string>;
   calibrations: (Scale | null)[];
+  /** Regions with their own scale, per page. */
+  viewports: Viewport[][];
+  /** Pages whose scale or viewports changed (their /VP is rewritten on save). */
   dirtyCalibrations: Set<number>;
   page: number;
   zoom: number;
@@ -28,6 +31,19 @@ export interface DocState {
   undo: Markup[][];
   redo: Markup[][];
   dirty: boolean;
+}
+
+/**
+ * Apply Scale dialog state. `pagePts` is set after calibrating (distance
+ * between the two picked points); `then` is the measure tool to resume;
+ * `viewport` switches it to "Apply Scale to Viewport".
+ */
+export interface ScaleDialogState {
+  page: number;
+  pagePts?: number;
+  then?: ToolId;
+  reuse?: boolean;
+  viewport?: { rect: [Pt, Pt]; id?: string; name?: string };
 }
 
 interface AppState {
@@ -48,7 +64,11 @@ interface AppState {
    * Apply Scale to Pages dialog. `pagePts` is set after calibrating (distance
    * between the two picked points); `then` is the measure tool to resume.
    */
-  scaleDialog: { page: number; pagePts?: number; then?: ToolId; reuse?: boolean } | null;
+  scaleDialog: ScaleDialogState | null;
+  /** The dialog to reopen once the Calibrate tool has picked two points. */
+  calibrateFor: ScaleDialogState | null;
+  /** Viewport highlighted from the Measurements panel. */
+  activeViewport: string | null;
   /** Scales saved with "+ Add Preset", listed first among presets. */
   savedScales: Scale[];
   status: string;
@@ -83,6 +103,13 @@ interface AppState {
   addToToolChest(m: Markup): void;
   removeFromToolChest(id: string): void;
   openScaleDialog(d: AppState['scaleDialog']): void;
+  /** Start the Calibrate tool; the dialog `d` reopens with the picked length. */
+  startCalibrate(d?: ScaleDialogState | null): void;
+  /** Add a viewport, or replace the one with the same id; re-scales measurements inside. */
+  setViewport(page: number, v: Viewport): void;
+  /** Delete viewports by id, or all on `pages`. */
+  deleteViewports(pages: number[], ids?: string[]): void;
+  setActiveViewport(id: string | null): void;
   save(saveAs?: boolean): Promise<void>;
   setStatus(s: string): void;
 }
@@ -121,6 +148,29 @@ const prefs = loadPrefs();
 
 const now = () => new Date().toISOString();
 
+/** Viewport id, in the style of Revu's /NM (16 capital letters). */
+export const newViewportId = () => Array.from({ length: 16 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
+
+/**
+ * Apply new page scales/viewports to `pages`, re-scaling the measurements
+ * whose governing scale changed (as Revu does). Other markups are untouched,
+ * so unchanged imported annotations are not rewritten.
+ */
+function rescoped(d: DocState, pages: number[], calibrations: (Scale | null)[], viewports: Viewport[][]): Partial<DocState> {
+  const target = new Set(pages);
+  const key = (s: Scale | null) => JSON.stringify(s);
+  const markups = d.markups.map((m) => {
+    if (!target.has(m.page) || !MEASURE_TYPES.has(m.type)) return m;
+    const before = scaleAt(d.calibrations[m.page], d.viewports[m.page], m.points[0]);
+    const after = scaleAt(calibrations[m.page], viewports[m.page], m.points[0]);
+    if (key(before) === key(after)) return m;
+    return { ...m, scale: after ?? undefined, modified: now(), source: m.source ? { ...m.source, dirty: true } : undefined };
+  });
+  const dirtyCalibrations = new Set(d.dirtyCalibrations);
+  pages.forEach((p) => dirtyCalibrations.add(p));
+  return { calibrations, viewports, dirtyCalibrations, markups, undo: [...d.undo, d.markups], dirty: true };
+}
+
 export const useApp = create<AppState>((set, get) => {
   /** Mutate the active document. */
   const withDoc = (fn: (d: DocState) => Partial<DocState>) => {
@@ -143,6 +193,8 @@ export const useApp = create<AppState>((set, get) => {
     toolChest: prefs.toolChest ?? SAMPLE_TOOL_CHEST,
     recentTools: prefs.recentTools ?? [],
     scaleDialog: null,
+    calibrateFor: null,
+    activeViewport: null,
     savedScales: prefs.savedScales ?? [],
     status: 'Ready',
     busy: false,
@@ -154,13 +206,14 @@ export const useApp = create<AppState>((set, get) => {
         const loaded = await openPdf(bytes);
         const markups = loaded.markups.map((m) =>
           MEASURE_TYPES.has(m.type) && !m.scale
-            ? { ...m, scale: loaded.calibrations[m.page] ?? undefined }
+            ? { ...m, scale: scaleAt(loaded.calibrations[m.page], loaded.viewports[m.page], m.points[0]) ?? undefined }
             : m);
         const doc: DocState = {
           id: crypto.randomUUID(),
           name, bytes, fileHandle: handle, loaded, markups,
           importedRefs: loaded.importedRefs,
           calibrations: loaded.calibrations,
+          viewports: loaded.viewports,
           dirtyCalibrations: new Set(),
           page: 0, zoom: 0, selection: [], undo: [], redo: [], dirty: false,
         };
@@ -187,7 +240,7 @@ export const useApp = create<AppState>((set, get) => {
     setZoom: (zoom) => withDoc(() => ({ zoom: Math.max(0.02, Math.min(64, zoom)) })),
 
     setTool(tool, opts = {}) {
-      set({ tool, toolLocked: opts.locked ?? false, preset: opts.preset ?? null });
+      set({ tool, toolLocked: opts.locked ?? false, preset: opts.preset ?? null, calibrateFor: null });
       if (tool !== 'select') withDoc(() => ({ selection: [] }));
     },
 
@@ -205,7 +258,7 @@ export const useApp = create<AppState>((set, get) => {
         comment: '',
         ...partial,
       } as Markup;
-      if (MEASURE_TYPES.has(m.type) && !m.scale) m.scale = d.calibrations[m.page] ?? undefined;
+      if (MEASURE_TYPES.has(m.type) && !m.scale) m.scale = scaleAt(d.calibrations[m.page], d.viewports[m.page], m.points[0]) ?? undefined;
       withDoc((doc) => ({
         markups: [...doc.markups, m], undo: [...doc.undo, doc.markups], redo: [], dirty: true,
       }));
@@ -288,19 +341,29 @@ export const useApp = create<AppState>((set, get) => {
     setScale(pages, scale) {
       withDoc((d) => {
         const calibrations = [...d.calibrations];
-        const dirtyCalibrations = new Set(d.dirtyCalibrations);
-        for (const p of pages) { calibrations[p] = scale; dirtyCalibrations.add(p); }
-        const target = new Set(pages);
-        // Re-scale existing measurements on those pages, as Revu does.
-        const markups = d.markups.map((m) =>
-          target.has(m.page) && MEASURE_TYPES.has(m.type)
-            ? { ...m, scale: scale ?? undefined, modified: now(), source: m.source ? { ...m.source, dirty: true } : undefined }
-            : m);
-        return { calibrations, dirtyCalibrations, markups, undo: [...d.undo, d.markups], dirty: true };
+        for (const p of pages) calibrations[p] = scale;
+        return rescoped(d, pages, calibrations, d.viewports);
       });
       const n = pages.length;
       set({ scaleDialog: null, status: scale ? `Scale set to ${scale.label} on ${n} page${n === 1 ? '' : 's'}` : 'Scale cleared' });
     },
+    setViewport(page, v) {
+      withDoc((d) => {
+        const viewports = [...d.viewports];
+        const list = viewports[page] ?? [];
+        viewports[page] = list.some((x) => x.id === v.id) ? list.map((x) => (x.id === v.id ? v : x)) : [...list, v];
+        return rescoped(d, [page], d.calibrations, viewports);
+      });
+      set({ scaleDialog: null, activeViewport: v.id, status: `Viewport ${v.name || '(unnamed)'}: ${v.scale.label}` });
+    },
+    deleteViewports(pages, ids) {
+      withDoc((d) => {
+        const viewports = [...d.viewports];
+        for (const p of pages) viewports[p] = ids ? (viewports[p] ?? []).filter((x) => !ids.includes(x.id)) : [];
+        return rescoped(d, pages, d.calibrations, viewports);
+      });
+    },
+    setActiveViewport: (activeViewport) => set({ activeViewport }),
     addSavedScale(scale) {
       set((st) => ({ savedScales: [scale, ...st.savedScales.filter((x) => x.label !== scale.label)], status: `Saved preset ${scale.label}` }));
       savePrefs(get());
@@ -330,6 +393,10 @@ export const useApp = create<AppState>((set, get) => {
       savePrefs(get());
     },
     openScaleDialog: (scaleDialog) => set({ scaleDialog }),
+    startCalibrate(d) {
+      set({ scaleDialog: null, calibrateFor: d ?? null, tool: 'calibrate', toolLocked: false, preset: null,
+        status: 'Calibrate: click the two ends of a known length on the drawing.' });
+    },
     setStatus: (status) => set({ status }),
 
     async save(saveAs) {
@@ -340,7 +407,8 @@ export const useApp = create<AppState>((set, get) => {
       try {
         const bytes = await savePdf({
           original: d.bytes, pages: d.loaded.pages, markups: d.markups,
-          importedRefs: d.importedRefs, calibrations: d.calibrations, dirtyCalibrations: d.dirtyCalibrations,
+          importedRefs: d.importedRefs, calibrations: d.calibrations, viewports: d.viewports,
+          dirtyCalibrations: d.dirtyCalibrations,
         });
         let handle = saveAs ? undefined : d.fileHandle;
         let name = d.name;
@@ -370,7 +438,7 @@ export const useApp = create<AppState>((set, get) => {
           docs: s.docs.map((x) => x.id === d.id ? {
             ...x, name, bytes, fileHandle: handle, loaded, markups,
             importedRefs: loaded.importedRefs,
-            calibrations: loaded.calibrations, dirtyCalibrations: new Set(),
+            calibrations: loaded.calibrations, viewports: loaded.viewports, dirtyCalibrations: new Set(),
             page, zoom, selection: [], undo: [], redo: [], dirty: false,
           } : x),
           status: `Saved ${name}`,

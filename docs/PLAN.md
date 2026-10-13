@@ -132,12 +132,12 @@ calibrate and preset scales; snap to content/markup/grid; Markups List with
 columns, filters and CSV summary; Tool Chest; live measurement preview; save
 and reopen; tested against real Revu files (values match Revu's own).
 
-### Next 1: finish takeoff essentials (days)
+### Done: Next 1, takeoff essentials
 - Revu's Apply Scale to Pages dialog (Preset / Custom / Calibrate, page
   range, precision, saved presets) and the prompt to set a scale before
   the first measurement
 - Area/volume cutouts (polygon and ellipse)
-- Viewports (different scales on one sheet)
+- Viewports (different scales on one sheet), saved in Revu's `/VP` layout
 
 ### Next 2: public test build in local mode (days)
 - Host on a VPS (static site + HTTPS), with a feedback link

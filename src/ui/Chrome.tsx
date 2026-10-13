@@ -147,7 +147,7 @@ export function Toolbar() {
         {TOOLS.filter((t) => t.group === 'markup').map((t) => <ToolButton key={t.id} id={t.id} />)}
       </div>
       <div className="tb-group">
-        {TOOLS.filter((t) => t.group === 'measure').map((t) => <ToolButton key={t.id} id={t.id} />)}
+        {TOOLS.filter((t) => t.group === 'measure' && t.id !== 'viewport').map((t) => <ToolButton key={t.id} id={t.id} />)}
       </div>
       <div className="tb-group">
         <button className="tb-btn" title="Fit Page (Ctrl+9)" disabled={!doc} onClick={() => viewerApi.fitPage()}><Icon name="fitpage" /></button>

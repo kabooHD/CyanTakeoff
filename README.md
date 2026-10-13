@@ -20,7 +20,8 @@ shortcuts, and markups saved as standard PDF annotations.
 - **Takeoff:** Calibrate (two points + known distance) or pick a preset scale
   (architectural, engineering, metric); Length, Polylength, Area, Perimeter,
   Volume (area × depth) and Count. Feet-inches display with fractions.
-  Re-calibrating updates existing measurements on the page.
+  Re-calibrating updates existing measurements on the page. Viewports give
+  part of a sheet (a detail) its own scale.
 - **Markups List:** sortable, filterable, editable status, totals, and
   Summary export to CSV (opens in Excel).
 - **Tool Chest:** Recent Tools and My Tools (with a sample takeoff set); add

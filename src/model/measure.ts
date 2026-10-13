@@ -1,4 +1,4 @@
-import type { Cutout, LengthUnit, Markup, Pt, Scale, ScaleFormat } from './types';
+import type { Cutout, LengthUnit, Markup, Pt, Scale, ScaleFormat, Viewport } from './types';
 
 // ---------- geometry ----------
 
@@ -349,4 +349,22 @@ export function measure(m: Pick<Markup, 'type' | 'points' | 'scale' | 'depth' | 
       return { count: m.points.length, text: String(m.points.length) };
   }
   return null;
+}
+
+// ---------- viewports ----------
+
+export function inRect(p: Pt, [a, b]: [Pt, Pt]): boolean {
+  return p.x >= Math.min(a.x, b.x) && p.x <= Math.max(a.x, b.x) && p.y >= Math.min(a.y, b.y) && p.y <= Math.max(a.y, b.y);
+}
+
+/** The viewport containing `p`; the last one wins where they overlap (PDF /VP order). */
+export function viewportAt(vps: Viewport[] | undefined, p: Pt | undefined): Viewport | undefined {
+  if (!vps || !p) return undefined;
+  for (let i = vps.length - 1; i >= 0; i--) if (inRect(p, vps[i].rect)) return vps[i];
+  return undefined;
+}
+
+/** Scale for a measurement starting at `p`: its viewport's, else the page scale. */
+export function scaleAt(pageScale: Scale | null | undefined, vps: Viewport[] | undefined, p: Pt | undefined): Scale | null {
+  return viewportAt(vps, p)?.scale ?? pageScale ?? null;
 }

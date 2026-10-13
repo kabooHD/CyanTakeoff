@@ -58,18 +58,19 @@ preview server can die between turns: restart it if e2e cannot connect.
 ## Status (2026-10-13)
 Done: Revu-style workspace and official default shortcuts; markup tools;
 length, polylength, area, perimeter, volume, count, angle, radius, diameter;
-cutouts (polygon/ellipse); Apply Scale to Pages dialog (preset/custom/
+cutouts (polygon/ellipse); viewports (regions with their own scale, Revu
+`/VP` layout); Apply Scale to Pages dialog (preset/custom/
 calibrate, page range, precision, saved presets) and scale prompt; snap to
 content/markup/grid; live measurement preview; Markups List (columns,
 filters, reorder, CSV summary); Tool Chest; save/reopen; Revu round-trip.
 
 Next (from `docs/PLAN.md`):
-1. Viewports (different scales on one sheet), the last piece of Next 1
-2. Public test build in local mode (deploy only when the owner says so)
-3. Cloud documents: sign-in, versions, share links (guests join by link
+1. Public test build in local mode (deploy only when the owner says so)
+2. Cloud documents: sign-in, versions, share links (guests join by link
    with a display name), live collaboration, self-hostable
-4. Compare versions, Sets, slip sheets, Spaces, Legends, Dynamic Fill, XLSX
+3. Compare versions, Sets, slip sheets, Spaces, Legends, Dynamic Fill, XLSX
 
 Known gaps: Revu cutout storage unknown (ours in CTData); overlapping
-cutouts not merged; separate X/Y scales; 3-point radius; partial-arc radius
+cutouts not merged; separate X/Y scales (pages and viewports); viewports
+can't be moved/resized after drawing; scale changes are not undoable; 3-point radius; partial-arc radius
 preserved but not editable; text in saved markups ignores page rotation.

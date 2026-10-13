@@ -7,6 +7,12 @@ Clean-room notes from inspecting Revu-authored PDFs
 
 - Page scale: page `/VP` array of `/Viewport` dicts, each with a standard
   `/Measure` (`/Subtype /RL`), `/BBox` and `/NM`.
+- The page scale is the `/Viewport` whose `/BBox` is the whole page and that
+  has no `/Name`. Revu viewports (regions with their own scale) are further
+  entries with a `/Name` and the region's `/BBox`. Per ISO 32000, where
+  entries overlap the last one in the array wins, so the page scale goes
+  first. CyanTakeoff writes the same layout and keeps non-ruler entries
+  (e.g. geospatial) untouched.
 - `/Measure /R` is the ratio label, e.g. `(0.25 in = 1 ft' in")`.
 - `/X[0] /C` converts PDF points to the base unit (0.05555556 ft/pt for
   1/4" = 1'-0"). Feet are written as `'`, inches as `"`.

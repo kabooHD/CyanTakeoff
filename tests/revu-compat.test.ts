@@ -98,3 +98,40 @@ describe('round trip: Revu file -> CyanTakeoff save -> reopen', () => {
     expect(intents).toContain('/PolyLineAngle');
   });
 });
+
+describe('viewports (regions with their own scale)', () => {
+  it('Revu page scale (whole page, no /Name) is not a viewport', async () => {
+    const { pageScales, pageViewports } = await load('measure.pdf');
+    expect(pageScales[0]).not.toBeNull();
+    expect(pageViewports[0]).toEqual([]);
+  });
+
+  it('saves page scale and named viewports in /VP, and reads them back', async () => {
+    const { savePdf } = await import('../src/pdf/save');
+    const { customScale } = await import('../src/model/measure');
+    const bytes = readFileSync('tests/fixtures/revu/measure.pdf');
+    const first = importAnnotations(await PDFDocument.load(bytes, { updateMetadata: false }));
+    const identity = { convertToPdfPoint: (x: number, y: number) => [x, y] };
+    const pages = [{ index: 0, label: '', width: 0, height: 0, viewport: identity }] as never;
+    const detail = customScale(1, 'in', 2, 'ft-in'); // 1 in = 2 ft
+    const out = await savePdf({
+      original: bytes, pages, markups: first.raws.map((r) => ({ ...r.markup, points: r.pdfPoints })),
+      importedRefs: new Set(first.imported.flatMap((s) => [...s])),
+      calibrations: first.pageScales,
+      viewports: [[{ id: 'ABCDEFGHIJKLMNOP', name: 'Detail 3', rect: [{ x: 300, y: 100 }, { x: 100, y: 50 }], scale: detail }]],
+      dirtyCalibrations: new Set([0]),
+    });
+    const again = await PDFDocument.load(out, { updateMetadata: false });
+    const vp = again.getPage(0).node.lookup(N('VP'), PDFArray);
+    expect(vp.size()).toBe(2);
+    const second = importAnnotations(again);
+    expect(second.pageScales[0]!.factor).toBeCloseTo(first.pageScales[0]!.factor, 6);
+    expect(second.pageViewports[0]).toHaveLength(1);
+    const v = second.pageViewports[0][0];
+    expect(v).toMatchObject({ id: 'ABCDEFGHIJKLMNOP', name: 'Detail 3', bbox: [100, 50, 300, 100] });
+    expect(v.scale.factor).toBeCloseTo(detail.factor, 6);
+    expect(v.scale.unit).toBe('ft-in');
+    // Existing annotations were not touched.
+    expect(second.raws.map((r) => r.displayed).sort()).toEqual(first.raws.map((r) => r.displayed).sort());
+  });
+});

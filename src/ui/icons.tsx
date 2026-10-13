@@ -22,6 +22,7 @@ const P: Record<string, ReactNode> = {
   polygon: <path d="M10 2.5l7.5 5.5-3 9h-9l-3-9z" />,
   cloud: <path d="M4 8a2 2 0 013-2 2 2 0 013-1 2 2 0 013 1 2 2 0 013 2 2 2 0 010 4 2 2 0 01-3 2 2 2 0 01-3 1 2 2 0 01-3-1 2 2 0 01-3-2 2 2 0 010-4z" />,
   calibrate: <><path d="M2 14h16M2 11v6M18 11v6M6 14v-2M10 14v-3M14 14v-2" /><path d="M7 5h6M7 5l2-2M7 5l2 2" /></>,
+  viewport: <><path d="M2.5 3.5h15v13h-15z" /><path d="M5 12h7v3H5z" /><path d="M6 13.5h5" opacity=".6" /></>,
   length: <path d="M2 10h16M2 6v8M18 6v8M5 10l2-2M5 10l2 2M15 10l-2-2M15 10l-2 2" />,
   polylength: <><path d="M2 16l5-8 5 5 6-9" /><circle cx="2" cy="16" r="1" /><circle cx="18" cy="4" r="1" /></>,
   area: <><path d="M3 4h10l4 5v7H3z" /><path d="M6 13l4-4M9 13l4-4M3 10l3-3" opacity=".6" /></>,

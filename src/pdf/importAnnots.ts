@@ -10,6 +10,8 @@
 // - Counts are one /Polygon per item with /IT /PolygonCount and /BBMeasure;
 //   items in a count group point to the first via /IRT with /RT /Group.
 // - /FillOpacity holds fill opacity; /Label holds the markup label.
+// - Page /VP: the page scale is a /Viewport covering the whole page with no
+//   /Name; viewports (regions with their own scale) carry a /Name and BBox.
 import { PDFArray, PDFDict, PDFRef, type PDFDocument } from 'pdf-lib';
 import type { Markup, MarkupStatus, MarkupStyle, MarkupType, Pt, Scale } from '../model/types';
 import { DEFAULT_STYLES, toolById } from '../tools/tools';
@@ -298,10 +300,15 @@ function readCounts(doc: PDFDocument, items: { ref: PDFRef; dict: PDFDict }[], p
   return out;
 }
 
+/** A /VP viewport with its own scale; `bbox` is in PDF user space. */
+export interface RawViewport { id: string; name: string; bbox: [number, number, number, number]; scale: Scale }
+
 export interface ImportResult {
   raws: RawImport[];
-  /** Page scale from the first /VP viewport with a measure dictionary. */
+  /** Page scale: the /VP viewport that covers the whole page and has no /Name. */
   pageScales: (Scale | null)[];
+  /** Named /VP viewports (regions with their own scale), per page. */
+  pageViewports: RawViewport[][];
   /** refKeys of annotations represented by markups, per page. */
   imported: Set<string>[];
 }
@@ -309,6 +316,7 @@ export interface ImportResult {
 export function importAnnotations(doc: PDFDocument): ImportResult {
   const raws: RawImport[] = [];
   const pageScales: (Scale | null)[] = [];
+  const pageViewports: RawViewport[][] = [];
   const imported: Set<string>[] = [];
   for (let p = 0; p < doc.getPageCount(); p++) {
     const taken = new Set<string>();
@@ -330,16 +338,39 @@ export function importAnnotations(doc: PDFDocument): ImportResult {
     }
     imported.push(taken);
 
-    let scale: Scale | null = null;
-    const vp = doc.getPage(p).node.lookup(N('VP'));
-    if (vp instanceof PDFArray) {
-      for (let i = 0; i < vp.size() && !scale; i++) {
-        const v = lookup(doc, vp.get(i));
-        const m = v instanceof PDFDict ? getDict(doc, v, 'Measure') : undefined;
-        if (m) scale = readMeasure(doc, m) ?? null;
-      }
-    }
+    const { scale, viewports } = readViewports(doc, p);
     pageScales.push(scale);
+    pageViewports.push(viewports);
   }
-  return { raws, pageScales, imported };
+  return { raws, pageScales, pageViewports, imported };
+}
+
+/** True for a /VP entry that holds a ruler (/RL) scale. */
+export function isRulerViewport(doc: PDFDocument, v: PDFDict): boolean {
+  const m = getDict(doc, v, 'Measure');
+  return !!m && (getName(doc, m, 'Subtype') ?? 'RL') === 'RL';
+}
+
+function readViewports(doc: PDFDocument, p: number): { scale: Scale | null; viewports: RawViewport[] } {
+  let scale: Scale | null = null;
+  const viewports: RawViewport[] = [];
+  const page = doc.getPage(p);
+  const vp = page.node.lookup(N('VP'));
+  if (!(vp instanceof PDFArray)) return { scale, viewports };
+  const box = page.getCropBox();
+  for (let i = 0; i < vp.size(); i++) {
+    const v = lookup(doc, vp.get(i));
+    if (!(v instanceof PDFDict) || !isRulerViewport(doc, v)) continue;
+    const s = readMeasure(doc, getDict(doc, v, 'Measure')!);
+    const b = numbers(doc, getArray(doc, v, 'BBox'));
+    if (!s || b.length !== 4) continue;
+    const bbox: RawViewport['bbox'] = [Math.min(b[0], b[2]), Math.min(b[1], b[3]), Math.max(b[0], b[2]), Math.max(b[1], b[3])];
+    const name = getText(doc, v, 'Name');
+    const whole = bbox[0] <= box.x + 1 && bbox[1] <= box.y + 1
+      && bbox[2] >= box.x + box.width - 1 && bbox[3] >= box.y + box.height - 1;
+    // Earlier CyanTakeoff builds named the page scale "CyanTakeoff".
+    if (whole && (!name || name === 'CyanTakeoff') && !scale) { scale = s; continue; }
+    viewports.push({ id: getText(doc, v, 'NM') || crypto.randomUUID(), name: name ?? '', bbox, scale: s });
+  }
+  return { scale, viewports };
 }

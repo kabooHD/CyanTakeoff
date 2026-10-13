@@ -49,6 +49,7 @@ export const TOOLS: ToolDef[] = [
   { id: 'cloud', name: 'Cloud', group: 'markup', shortcut: 'C', interaction: 'box', subject: 'Cloud', closed: true },
 
   { id: 'calibrate', name: 'Calibrate', group: 'measure', interaction: 'two-point', subject: '' },
+  { id: 'viewport', name: 'Add Viewport', group: 'measure', interaction: 'box', subject: '' },
   { id: 'length', name: 'Length', group: 'measure', shortcut: 'Shift+Alt+L', interaction: 'two-point', subject: 'Length Measurement' },
   { id: 'polylength', name: 'Polylength', group: 'measure', shortcut: 'Shift+Alt+Q', interaction: 'poly', subject: 'Polylength Measurement' },
   { id: 'area', name: 'Area', group: 'measure', shortcut: 'Shift+Alt+A', interaction: 'poly', subject: 'Area Measurement', closed: true },

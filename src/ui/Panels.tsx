@@ -246,6 +246,65 @@ function ToolChest() {
 
 // ---------------- Measurements ----------------
 
+/** Revu's Viewports section: regions of the page with their own scale. */
+function Viewports() {
+  const s = useApp();
+  const doc = useActiveDoc()!;
+  const list = doc.viewports[doc.page] ?? [];
+  const sel = list.find((v) => v.id === s.activeViewport);
+  const presets = [...s.savedScales, ...SCALE_PRESETS.flatMap((g) => g.items)];
+  const [menu, setMenu] = useState(false);
+  return (
+    <>
+      <div className="prop-section">Viewports</div>
+      {list.length > 0 ? (
+        <table className="viewport-list">
+          <thead><tr><th>Name</th><th>Scale</th><th /></tr></thead>
+          <tbody>
+            {list.map((v) => (
+              <tr key={v.id} className={v.id === s.activeViewport ? 'selected' : ''} onClick={() => s.setActiveViewport(v.id)}>
+                <td>
+                  <input aria-label="Viewport name" defaultValue={v.name} key={v.name} placeholder="(unnamed)"
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    onBlur={(e) => e.target.value.trim() !== v.name && s.setViewport(doc.page, { ...v, name: e.target.value.trim() })} />
+                </td>
+                <td>
+                  <select aria-label="Viewport scale" value={v.scale.label} onChange={(e) => {
+                    const p = presets.find((x) => x.label === e.target.value);
+                    if (p) s.setViewport(doc.page, { ...v, scale: { factor: p.factor, unit: p.unit, label: p.label, format: (p as Scale).format } });
+                  }}>
+                    {!presets.some((p) => p.label === v.scale.label) && <option>{v.scale.label}</option>}
+                    {s.savedScales.length > 0 && <optgroup label="Saved">{s.savedScales.map((p) => <option key={p.label}>{p.label}</option>)}</optgroup>}
+                    {SCALE_PRESETS.map((g) => (
+                      <optgroup key={g.group} label={g.group}>{g.items.map((p) => <option key={p.label}>{p.label}</option>)}</optgroup>
+                    ))}
+                  </select>
+                </td>
+                <td>
+                  <button title="More Options" onClick={() => s.openScaleDialog({ page: doc.page, viewport: { rect: v.rect, id: v.id, name: v.name } })}>…</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : <p className="muted small">No viewports on this page.</p>}
+      <div className="prop-actions">
+        <button onClick={() => { s.setTool('viewport'); s.setStatus('Add Viewport: drag a rectangle around the area that uses a different scale (Shift for a square).'); }}>Add Viewport</button>
+        <button disabled={!sel} onClick={() => { if (sel) { s.deleteViewports([doc.page], [sel.id]); s.setActiveViewport(null); } }}>Delete Viewport</button>
+        <span className="menu-anchor">
+          <button onClick={() => setMenu(!menu)}>Clear All ▾</button>
+          {menu && (
+            <div className="dropdown" onMouseLeave={() => setMenu(false)}>
+              <button onClick={() => { s.deleteViewports([doc.page]); setMenu(false); }}>Clear All from Page</button>
+              <button onClick={() => { s.deleteViewports(doc.viewports.flatMap((v, i) => (v.length ? [i] : []))); setMenu(false); }}>Clear All from Document</button>
+            </div>
+          )}
+        </span>
+      </div>
+    </>
+  );
+}
+
 function Measurements() {
   const s = useApp();
   const doc = useActiveDoc();
@@ -291,6 +350,7 @@ function Measurements() {
         {scale && <button onClick={() => s.setScale([doc.page], null)}>Clear</button>}
       </div>
       <p className="muted small">Calibrate: pick two points on a known dimension, then enter its real length. Changing the scale updates existing measurements on the page.</p>
+      <Viewports />
       {sel.length > 0 && (
         <>
           <div className="prop-section">Selection ({sel.length})</div>

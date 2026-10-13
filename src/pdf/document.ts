@@ -3,7 +3,7 @@ import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { PDFDocument } from 'pdf-lib';
 import type { PDFDocumentProxy, PageViewport } from 'pdfjs-dist';
-import type { Markup, Pt, Scale } from '../model/types';
+import type { Markup, Pt, Scale, Viewport } from '../model/types';
 import { importAnnotations, removeAnnots } from './importAnnots';
 
 export { refKey, removeAnnots, type CTData } from './importAnnots';
@@ -24,6 +24,8 @@ export interface LoadedDoc {
   pages: PageInfo[];
   markups: Markup[];
   calibrations: (Scale | null)[];
+  /** Regions with their own scale, per page (page space). */
+  viewports: Viewport[][];
   /** refKeys of every annotation represented by a markup. */
   importedRefs: Set<string>;
   /** True when pdf-lib could not parse the file; markups cannot be saved into it. */
@@ -38,7 +40,7 @@ export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
     console.warn('pdf-lib could not parse file; opening read-only', e);
   }
 
-  const result = lib ? importAnnotations(lib) : { raws: [], pageScales: [], imported: [] };
+  const result = lib ? importAnnotations(lib) : { raws: [], pageScales: [], pageViewports: [], imported: [] };
   let displayBytes = bytes;
   if (lib && result.raws.length) {
     // Render a copy without the annotations we draw ourselves, so that the
@@ -69,11 +71,18 @@ export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
     };
   });
 
+  const viewports = pages.map((pg, i) => (result.pageViewports[i] ?? []).map(({ bbox, ...v }): Viewport => {
+    const [ax, ay] = pg.viewport.convertToViewportPoint(bbox[0], bbox[1]);
+    const [bx, by] = pg.viewport.convertToViewportPoint(bbox[2], bbox[3]);
+    return { ...v, rect: [{ x: Math.min(ax, bx), y: Math.min(ay, by) }, { x: Math.max(ax, bx), y: Math.max(ay, by) }] };
+  }));
+
   return {
     pdf,
     pages,
     markups,
     calibrations: pages.map((_, i) => result.pageScales[i] ?? null),
+    viewports,
     importedRefs: new Set(result.imported.flatMap((s) => [...s])),
     readOnly: !lib,
   };

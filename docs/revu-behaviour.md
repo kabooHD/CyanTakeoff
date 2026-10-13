@@ -38,6 +38,20 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - Precision dropdown: decimal or fractional depending on the scale.
 - Revu prompts for a scale before placing a measurement on an unscaled page.
 
+## Viewports
+- Regions of a sheet with their own scale (e.g. a detail drawn at a larger
+  scale); units and systems may differ from the page scale.
+- Measurements panel > Viewports: Add Viewport, then drag a rectangle
+  (Shift = square). The Apply Scale to Viewport dialog opens: Label, plus
+  the same Preset / Custom / Calibrate choices and Precision; + Add Preset.
+- The list shows Name (click to rename) and Scale (pick a preset in place);
+  a More Options button reopens the dialog. Delete Viewport removes the
+  selected one; Clear All > from Page / from Document.
+- Viewports are highlighted with name and scale while measuring; picking
+  one in the list highlights it on the drawing.
+- A measurement uses the scale of the viewport it is placed in.
+- Revu also allows a separate Y scale per viewport (not built yet).
+
 ## Cutouts
 - Polygon Cutout and Ellipse Cutout subtract from an existing Area or
   Volume; hovering the target measurement highlights it.

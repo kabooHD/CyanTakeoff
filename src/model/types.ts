@@ -27,7 +27,7 @@ export type MarkupType =
   | 'radius'
   | 'diameter';
 
-export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cutout' | 'ellipse-cutout';
+export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cutout' | 'ellipse-cutout' | 'viewport';
 
 /** A hole subtracted from an Area or Volume measurement. Ellipse: two opposite corners. */
 export interface Cutout { kind: 'polygon' | 'ellipse'; points: Pt[] }
@@ -54,6 +54,18 @@ export interface ScaleFormat {
   trim?: boolean;
   areaLabel?: string;
   volumeLabel?: string;
+}
+
+/**
+ * A region of a page with its own scale (Revu "Viewports"). Measurements
+ * whose first point falls inside use its scale instead of the page scale.
+ */
+export interface Viewport {
+  id: string;
+  name: string;
+  /** Two opposite corners, page space. */
+  rect: [Pt, Pt];
+  scale: Scale;
 }
 
 export type MarkupStatus = 'None' | 'Accepted' | 'Rejected' | 'Cancelled' | 'Completed';

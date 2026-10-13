@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Pt } from '../src/model/types';
 import {
   SCALE_PRESETS, calibrate, cloudSegments, formatLength, measure, polygonArea,
 } from '../src/model/measure';
@@ -105,5 +106,24 @@ describe('cutouts', async () => {
     const scale = { factor: 1 / 72, unit: 'ft' as const, label: '' };
     const m = measure({ type: 'area', points: sq(0, 0, 720), scale, cutouts: [{ kind: 'polygon', points: sq(0, 0, 360) }] });
     expect(m!.area).toBeCloseTo(75);
+  });
+});
+
+describe('viewports', async () => {
+  const { scaleAt, viewportAt, customScale } = await import('../src/model/measure');
+  const page = customScale(0.25, 'in', 1, 'ft-in');
+  const detail = customScale(1, 'in', 1, 'ft-in');
+  const vps = [
+    { id: 'a', name: 'A', rect: [{ x: 100, y: 100 }, { x: 0, y: 0 }] as [Pt, Pt], scale: detail },
+    { id: 'b', name: 'B', rect: [{ x: 50, y: 50 }, { x: 200, y: 200 }] as [Pt, Pt], scale: page },
+  ];
+  it('uses the viewport containing the first point, else the page scale', () => {
+    expect(scaleAt(page, vps, { x: 10, y: 10 })).toBe(detail);
+    expect(scaleAt(page, vps, { x: 300, y: 300 })).toBe(page);
+    expect(scaleAt(null, vps, { x: 300, y: 300 })).toBeNull();
+    expect(scaleAt(null, vps, { x: 10, y: 10 })).toBe(detail);
+  });
+  it('the later viewport wins where they overlap (PDF /VP order)', () => {
+    expect(viewportAt(vps, { x: 75, y: 75 })?.id).toBe('b');
   });
 });

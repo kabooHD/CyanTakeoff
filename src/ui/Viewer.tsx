@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PDFPageProxy, RenderTask } from 'pdfjs-dist';
 import { useApp, type DocState } from '../model/store';
-import { MEASURE_TYPES, dist, pointInPolygon, formatLength, formatNumber, measure, ortho, rectCorners, resolveFormat } from '../model/measure';
+import { MEASURE_TYPES, dist, pointInPolygon, formatLength, formatNumber, measure, ortho, rectCorners, resolveFormat, scaleAt } from '../model/measure';
 import { Icon } from './icons';
 import { translated } from '../model/markup';
-import type { Markup, MarkupType, Pt, ToolId } from '../model/types';
+import type { Markup, MarkupType, Pt, ToolId, Viewport } from '../model/types';
 import { toolById } from '../tools/tools';
 import { MarkupShape, handlePoints } from './renderMarkup';
 import { cutoutAt, hitTest, markupBounds } from './hit';
@@ -62,6 +62,9 @@ export function Viewer({ doc }: { doc: DocState }) {
   const innerW = Math.max(size.w, pw + PAD * 2), innerH = Math.max(size.h, ph + PAD * 2);
   const left = (innerW - pw) / 2, top = (innerH - ph) / 2;
   const markups = doc.markups.filter((m) => m.page === doc.page);
+  const viewports = doc.viewports[doc.page] ?? [];
+  /** Scale a measurement starting at `p` would use (viewport, else page). */
+  const scaleFor = (p: Pt | undefined) => scaleAt(doc.calibrations[doc.page], viewports, p);
   const selected = new Set(doc.selection);
 
   // ----- container size -----
@@ -253,6 +256,11 @@ export function Viewer({ doc }: { doc: DocState }) {
   /** Apply snapping and Shift-ortho relative to the previous point. */
   const constrain = (raw: Pt, e: { shiftKey: boolean }, prev?: Pt, exclude?: string): Pt => {
     let p = snap(raw, exclude);
+    if (e.shiftKey && prev && s.tool === 'viewport') {
+      // Shift draws the viewport as a square (Revu).
+      const d = Math.max(Math.abs(p.x - prev.x), Math.abs(p.y - prev.y));
+      return { x: prev.x + Math.sign(p.x - prev.x || 1) * d, y: prev.y + Math.sign(p.y - prev.y || 1) * d };
+    }
     if (e.shiftKey && prev) p = ortho(prev, p);
     return p;
   };
@@ -381,7 +389,7 @@ export function Viewer({ doc }: { doc: DocState }) {
     }
 
     // Like Revu, ask for a page scale before the first measurement on an unscaled page.
-    if (!draft && MEASURE_TYPES.has(s.tool) && s.tool !== 'count' && !doc.calibrations[doc.page]) {
+    if (!draft && MEASURE_TYPES.has(s.tool) && s.tool !== 'count' && !scaleFor(raw)) {
       s.openScaleDialog({ page: doc.page, then: s.tool });
       return;
     }
@@ -444,7 +452,16 @@ export function Viewer({ doc }: { doc: DocState }) {
     if (draft.tool === 'cutout') { finishCutout(rectCorners(a, p), 'polygon'); return; }
     if (draft.tool === 'calibrate') {
       setDraft(null);
-      s.openScaleDialog({ page: doc.page, pagePts: dist(a, p) });
+      const back = s.calibrateFor;
+      s.setTool('select');
+      useApp.setState({ calibrateFor: null });
+      s.openScaleDialog({ ...back, page: back?.page ?? doc.page, pagePts: dist(a, p) });
+      return;
+    }
+    if (draft.tool === 'viewport') {
+      setDraft(null);
+      s.setTool('select');
+      s.openScaleDialog({ page: doc.page, viewport: { rect: [{ x: Math.min(a.x, p.x), y: Math.min(a.y, p.y) }, { x: Math.max(a.x, p.x), y: Math.max(a.y, p.y) }] } });
       return;
     }
     finish(draft.tool as MarkupType, [a, p]);
@@ -452,7 +469,7 @@ export function Viewer({ doc }: { doc: DocState }) {
 
   const onPointerMove = (e: React.PointerEvent) => {
     const raw = toPage(e);
-    setCursor(raw, doc.calibrations[doc.page]);
+    setCursor(raw, scaleFor(raw));
     if (drag) {
       if (drag.kind === 'pan') {
         const el = scrollRef.current!;
@@ -613,15 +630,17 @@ export function Viewer({ doc }: { doc: DocState }) {
     };
   } else if (draft && draft.cursor) {
     const pts = def.interaction === 'freehand' ? draft.points : [...draft.points, draft.cursor];
-    const type = (draft.tool === 'calibrate' ? 'length' : draft.tool) as MarkupType;
+    const type = (draft.tool === 'calibrate' ? 'length' : draft.tool === 'viewport' ? 'rectangle' : draft.tool) as MarkupType;
     let P = pts;
     if (type === 'cloud' && pts.length === 2) P = rectCorners(pts[0], pts[1]);
     if (type === 'callout') P = [pts[0], pts[1], { x: pts[1].x + 144, y: pts[1].y + 40 }];
     preview = {
       id: 'draft', type, page: doc.page, points: P,
-      style: draft.tool === 'calibrate' ? { ...s.toolDefaults.length, color: '#00a000' } : s.preset?.style ?? s.toolDefaults[type],
+      style: draft.tool === 'calibrate' ? { ...s.toolDefaults.length, color: '#00a000' }
+        : draft.tool === 'viewport' ? { ...s.toolDefaults.rectangle, color: '#1a73e8', fill: null, width: 1, lineStyle: 'dashed' }
+          : s.preset?.style ?? s.toolDefaults[type],
       subject: '', label: '', comment: '', author: '', created: '', modified: '', status: 'None',
-      scale: doc.calibrations[doc.page] ?? undefined, depth: s.preset?.depth ?? 1,
+      scale: scaleFor(draft.points[0]) ?? undefined, depth: s.preset?.depth ?? 1,
     };
   }
 
@@ -653,6 +672,12 @@ export function Viewer({ doc }: { doc: DocState }) {
                 <rect width={page.width} height={page.height} fill="url(#grid)" pointerEvents="none" />
               </>
             )}
+            {(MEASURE_TYPES.has(s.tool) || s.tool === 'viewport' || s.tool === 'calibrate') && viewports.map((v) => (
+              <ViewportBox key={v.id} v={v} zoom={zoom} />
+            ))}
+            {s.activeViewport && !MEASURE_TYPES.has(s.tool) && viewports.filter((v) => v.id === s.activeViewport).map((v) => (
+              <ViewportBox key={v.id} v={v} zoom={zoom} active />
+            ))}
             {markups.map((m) => <MarkupShape key={m.id} m={m} />)}
             {preview && <g pointerEvents="none"><MarkupShape m={preview} ghost /></g>}
             {hover && !draft && (s.tool === 'cutout' || s.tool === 'ellipse-cutout') && (() => {
@@ -694,8 +719,26 @@ export function Viewer({ doc }: { doc: DocState }) {
       </div>
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
     </div>
-      <MeasurePreview markup={preview && MEASURE_TYPES.has(preview.type) && doc.calibrations[doc.page] ? preview : null} />
+      <MeasurePreview markup={preview && MEASURE_TYPES.has(preview.type) && preview.scale ? preview : null} />
     </div>
+  );
+}
+
+/**
+ * A viewport outline with its name and scale. Revu highlights viewports
+ * while measuring, and the one picked in the Measurements panel.
+ */
+function ViewportBox({ v, zoom, active }: { v: Viewport; zoom: number; active?: boolean }) {
+  const [a, b] = v.rect;
+  const fs = 11 / zoom;
+  return (
+    <g className="viewport-box" pointerEvents="none">
+      <rect x={a.x} y={a.y} width={b.x - a.x} height={b.y - a.y} fill="#1a73e8" fillOpacity={active ? 0.1 : 0.04}
+        stroke="#1a73e8" strokeWidth={(active ? 2 : 1) / zoom} strokeDasharray={`${6 / zoom} ${3 / zoom}`} />
+      <text x={a.x + 4 / zoom} y={a.y + fs + 3 / zoom} fontSize={fs} fill="#1a73e8" fontFamily="sans-serif">
+        {`${v.name || '(unnamed)'}: ${v.scale.label}`}
+      </text>
+    </g>
   );
 }
 

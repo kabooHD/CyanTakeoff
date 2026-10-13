@@ -1,10 +1,11 @@
 import {
   PDFArray, PDFDict, PDFDocument, PDFHexString, PDFString, StandardFonts,
-  type PDFFont, type PDFRef,
+  type PDFFont, type PDFObject, type PDFRef,
 } from 'pdf-lib';
-import type { Cutout, Markup, Pt, Scale } from '../model/types';
+import type { Cutout, Markup, Pt, Scale, Viewport } from '../model/types';
 import { centroid, cloudSegments, measure } from '../model/measure';
 import { refKey, removeAnnots, type CTData, type PageInfo } from './document';
+import { isRulerViewport } from './importAnnots';
 import { N, hexToRgb, pdfDate, writeMeasure } from './pdfutil';
 
 const f = (n: number) => String(+n.toFixed(3));
@@ -385,8 +386,13 @@ export interface SaveInput {
   /** refKeys of annotations imported at load time. */
   importedRefs: Set<string>;
   calibrations: (Scale | null)[];
+  viewports?: Viewport[][];
+  /** Pages whose scale or viewports changed; their /VP is rewritten. */
   dirtyCalibrations: Set<number>;
 }
+
+/** A Revu-style /NM: 16 random capital letters. */
+const randomNM = () => Array.from({ length: 16 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
 
 export async function savePdf(input: SaveInput): Promise<Uint8Array> {
   const doc = await PDFDocument.load(input.original, { updateMetadata: false });
@@ -415,17 +421,35 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
 
   for (const p of input.dirtyCalibrations) {
     const s = input.calibrations[p];
+    const vps = input.viewports?.[p] ?? [];
     const page = doc.getPage(p);
-    if (!s) { page.node.delete(N('VP')); continue; }
-    const { x, y, width, height } = page.getMediaBox();
-    page.node.set(N('VP'), doc.context.obj([
-      doc.context.obj({
+    const ctx = doc.context;
+    // Keep viewports we don't edit (e.g. geospatial ones).
+    const old = page.node.lookup(N('VP'));
+    const others = old instanceof PDFArray
+      ? old.asArray().filter((o) => { const v = ctx.lookup(o); return v instanceof PDFDict && !isRulerViewport(doc, v); })
+      : [];
+    const entries: PDFObject[] = [];
+    if (s) {
+      // Page scale, as Revu writes it: the whole page, no /Name.
+      const { x, y, width, height } = page.getMediaBox();
+      entries.push(ctx.obj({ Type: 'Viewport', BBox: [x, y, x + width, y + height], Measure: writeMeasure(doc, s), NM: PDFString.of(randomNM()) }));
+    }
+    const vp = input.pages[p].viewport;
+    for (const v of vps) {
+      const [ax, ay] = vp.convertToPdfPoint(v.rect[0].x, v.rect[0].y);
+      const [bx, by] = vp.convertToPdfPoint(v.rect[1].x, v.rect[1].y);
+      entries.push(ctx.obj({
         Type: 'Viewport',
-        BBox: [x, y, x + width, y + height],
-        Name: PDFString.of('CyanTakeoff'),
-        Measure: writeMeasure(doc, s),
-      }),
-    ]));
+        BBox: [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)],
+        Name: PDFHexString.fromText(v.name),
+        Measure: writeMeasure(doc, v.scale),
+        NM: PDFString.of(/^[A-Z]{16}$/.test(v.id) ? v.id : randomNM()),
+      }));
+    }
+    entries.push(...others);
+    if (entries.length) page.node.set(N('VP'), ctx.obj(entries));
+    else page.node.delete(N('VP'));
   }
   return doc.save({ useObjectStreams: false });
 }

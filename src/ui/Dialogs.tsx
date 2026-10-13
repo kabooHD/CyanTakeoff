@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useApp, useActiveDoc } from '../model/store';
+import { newViewportId, useApp, useActiveDoc } from '../model/store';
 import {
   DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, calibrate, customScale, parsePageRange,
   precisionOf, withPrecision, type PaperUnit,
@@ -40,8 +40,11 @@ function ScaleDialogForm() {
   const s = useApp();
   const doc = useActiveDoc();
   const dlg = s.scaleDialog;
-  const current = doc && dlg ? doc.calibrations[dlg.page] : null;
-  const [mode, setMode] = useState<Mode>(dlg?.reuse && current ? 'existing' : dlg?.pagePts ? 'calibrate' : 'preset');
+  const vpd = dlg?.viewport;
+  const existingVp = vpd?.id && doc && dlg ? doc.viewports[dlg.page]?.find((v) => v.id === vpd.id) : undefined;
+  const current = vpd ? existingVp?.scale ?? null : doc && dlg ? doc.calibrations[dlg.page] : null;
+  const [mode, setMode] = useState<Mode>(dlg?.pagePts ? 'calibrate' : (dlg?.reuse || existingVp) && current ? 'existing' : 'preset');
+  const [name, setName] = useState(vpd?.name ?? existingVp?.name ?? '');
   const [presetLabel, setPresetLabel] = useState(current?.label ?? '');
   const [paper, setPaper] = useState('1');
   const [paperUnit, setPaperUnit] = useState<PaperUnit>('in');
@@ -77,15 +80,18 @@ function ScaleDialogForm() {
 
   const close = () => s.openScaleDialog(null);
   const apply = () => {
-    if (!scale || !pages.length) return;
+    if (!scale) return;
+    if (vpd) {
+      s.setViewport(dlg.page, { id: vpd.id ?? newViewportId(), name: name.trim(), rect: vpd.rect, scale });
+      s.setTool('select');
+      return;
+    }
+    if (!pages.length) return;
     s.setScale(pages, scale);
     s.setTool(dlg.then ?? 'select');
   };
-  const startCalibrate = () => {
-    s.openScaleDialog(null);
-    s.setTool('calibrate');
-    s.setStatus('Calibrate: click the two ends of a known length on the drawing.');
-  };
+  // Reopens this dialog (with the label typed so far) once two points are picked.
+  const startCalibrate = () => s.startCalibrate({ ...dlg, pagePts: undefined, viewport: vpd && { ...vpd, name } });
   const realInputs = (
     <>
       <input type="number" min={0} value={real} onChange={(e) => setReal(e.target.value)} style={{ width: 70 }} />
@@ -97,9 +103,15 @@ function ScaleDialogForm() {
   );
 
   return (
-    <Modal title="Apply Scale to Pages" onClose={close}>
+    <Modal title={vpd ? 'Apply Scale to Viewport' : 'Apply Scale to Pages'} onClose={close}>
       <div className="scale-dialog" onKeyDown={(e) => e.key === 'Enter' && apply()}>
-        <div className="form-row">
+        {vpd && (
+          <div className="form-row">
+            <span>Label</span>
+            <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Viewport name" style={{ width: 200 }} />
+          </div>
+        )}
+        {!vpd && <div className="form-row">
           <span>Pages</span>
           <select value={pagesMode} onChange={(e) => setPagesMode(e.target.value as typeof pagesMode)}>
             <option value="current">Current ({doc.loaded.pages[dlg.page]?.label ?? dlg.page + 1})</option>
@@ -107,9 +119,9 @@ function ScaleDialogForm() {
             <option value="custom">Custom</option>
           </select>
           {pagesMode === 'custom' && <input placeholder="1-3, 5, 9" value={range} onChange={(e) => setRange(e.target.value)} style={{ width: 110 }} />}
-        </div>
+        </div>}
         {mode === 'existing' && current && (
-          <div className="form-row"><span>Scale</span><strong>{current.label}</strong> (this page's scale)</div>
+          <div className="form-row"><span>Scale</span><strong>{current.label}</strong> ({vpd ? 'current' : "this page's scale"})</div>
         )}
         <div className="form-row scale-modes">
           <label><input type="radio" checked={mode === 'preset'} onChange={() => setMode('preset')} /> Preset</label>
@@ -158,12 +170,12 @@ function ScaleDialogForm() {
               : DECIMAL_PRECISIONS.map((d) => <option key={d} value={d}>{d === 0 ? '1' : (0).toFixed(d).slice(0, -1) + '1'}</option>)}
           </select>
         </div>
-        {scale && <p className="muted">Scale: <strong>{scale.label}</strong> on {pages.length} page{pages.length === 1 ? '' : 's'}</p>}
+        {scale && !vpd && <p className="muted">Scale: <strong>{scale.label}</strong> on {pages.length} page{pages.length === 1 ? '' : 's'}</p>}
         {!current && dlg.then && <p className="muted small">This page has no scale yet. Set one to measure.</p>}
         <div className="modal-actions">
           <button disabled={!scale || mode === 'preset'} onClick={() => scale && s.addSavedScale(scale)}>+ Add Preset</button>
           <span className="spacer" />
-          <button className="primary" disabled={!scale || !pages.length} onClick={apply}>Apply Scale</button>
+          <button className="primary" disabled={!scale || (!vpd && !pages.length)} onClick={apply}>{vpd ? 'Apply' : 'Apply Scale'}</button>
           <button onClick={close}>Cancel</button>
         </div>
       </div>
