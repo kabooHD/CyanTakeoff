@@ -1,0 +1,23 @@
+# Caddy serves the built app and gets HTTPS certificates automatically.
+cyantakeoff.com {
+	root * /var/www/cyantakeoff
+	encode zstd gzip
+	try_files {path} /index.html
+	file_server
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+	}
+	# Built assets have content hashes in their names, so they can be cached forever.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@html path / /index.html
+	header @html Cache-Control "no-cache"
+}
+
+www.cyantakeoff.com {
+	redir https://cyantakeoff.com{uri} permanent
+}

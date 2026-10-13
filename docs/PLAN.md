@@ -200,11 +200,18 @@ Goal: about $2,000/month for the maintainer, plus running costs.
   month's price or becomes account credit, rather than card refunds.
 - Rough target: 150–220 paying users, or 25–45 small teams.
 
-## 9. Open decisions
+## 9. Decisions
 
-1. Hosting: domain name and VPS provider for the public test build.
-2. Sign-in: email links, or Google / Microsoft accounts?
-3. Hosted only, self-hosted only, or both (recommended)?
-4. Business registration and payments (Stripe / Open Collective), with local
+- **Hosting:** cyantakeoff.com on the existing VPS (8 vCPU, 16 GB RAM,
+  160 GB disk, 20 TB traffic); Caddy for HTTPS; deployed by GitHub Actions.
+  Add object storage when stored drawings outgrow the disk.
+- **Guests:** anyone with a share link can join without an account (they
+  type a display name); creating and owning documents needs an account.
+  Link permissions: view, comment, or edit, set by the owner.
+- **Testers:** recruit Revu users on Reddit (r/Bluebeam and similar); ask
+  only for non-confidential drawings.
+
+### Still open
+1. Sign-in method: email links, or Google / Microsoft accounts?
+2. Business registration and payments (Stripe / Open Collective), with local
    tax advice.
-5. Real Revu users for testing: who can try builds and share Revu files?

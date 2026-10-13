@@ -1,0 +1,70 @@
+name: Deploy
+
+# Builds the app and publishes it to the VPS behind cyantakeoff.com.
+# Needs repository secrets: VPS_HOST (server IP), optional VPS_USER (default
+# root), and either VPS_SSH_KEY (private key) or VPS_PASSWORD.
+on:
+  push:
+    branches: [claude/cyantakeoff-bluebeam-alternative-ke6po9, main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER || 'root' }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+    steps:
+      - name: Check configuration
+        id: cfg
+        run: |
+          if [ -z "$VPS_HOST" ]; then
+            echo "VPS_HOST secret not set; skipping deploy."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.cfg.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - name: Build
+        if: steps.cfg.outputs.ready == 'true'
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+      - name: Prepare SSH
+        if: steps.cfg.outputs.ready == 'true'
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          if [ -n "$VPS_SSH_KEY" ]; then
+            printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_deploy
+            chmod 600 ~/.ssh/id_deploy
+            echo "SSH=ssh -i $HOME/.ssh/id_deploy" >> "$GITHUB_ENV"
+          else
+            sudo apt-get install -y sshpass
+            echo "SSH=sshpass -e ssh" >> "$GITHUB_ENV"
+            echo "SSHPASS=$VPS_PASSWORD" >> "$GITHUB_ENV"
+          fi
+      - name: Set up server
+        if: steps.cfg.outputs.ready == 'true'
+        run: |
+          rsync -az --delete -e "$SSH" deploy/ "$VPS_USER@$VPS_HOST:/opt/cyantakeoff-deploy/"
+          $SSH "$VPS_USER@$VPS_HOST" 'bash /opt/cyantakeoff-deploy/setup-vps.sh'
+      - name: Publish
+        if: steps.cfg.outputs.ready == 'true'
+        run: |
+          rsync -az --delete -e "$SSH" dist/ "$VPS_USER@$VPS_HOST:/var/www/cyantakeoff/"
+          echo "Published to https://cyantakeoff.com"
