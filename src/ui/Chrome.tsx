@@ -143,6 +143,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Properties', shortcut: 'Alt+P', checked: s.right === 'properties', action: () => s.setPanels({ right: s.right === 'properties' ? null : 'properties' }) },
       { label: 'Tool Chest', shortcut: 'Alt+X', checked: s.right === 'toolchest', action: () => s.setPanels({ right: s.right === 'toolchest' ? null : 'toolchest' }) },
       { label: 'Measurements', shortcut: 'Alt+U', checked: s.right === 'measurements', action: () => s.setPanels({ right: s.right === 'measurements' ? null : 'measurements' }) },
+      { label: 'Layers', shortcut: 'Alt+Y', checked: s.left === 'layers', action: () => s.setPanels({ left: s.left === 'layers' ? null : 'layers' }) },
       { label: 'Markups List', shortcut: 'Alt+L', checked: s.markupsList, action: () => s.setPanels({ markupsList: !s.markupsList }) },
       { sep: true },
       { label: 'Reset Layout', action: () => s.setPanels({ left: 'thumbnails', right: 'properties', markupsList: true }) },

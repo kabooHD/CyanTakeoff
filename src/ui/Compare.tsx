@@ -6,6 +6,8 @@
 import { useState } from 'react';
 import { create } from 'zustand';
 import { PDFDocument } from 'pdf-lib';
+import { addLayerFromPage, readLayers, refId, writeLayers } from '../pdf/layers';
+import { invert, mul } from '../pdf/redactContent';
 import { useApp, type DocState } from '../model/store';
 import { alignTransform, diffBoxes, diffMask, inkOf, invertMat, mapBox, overlayImage, vectorDiff, vectorMask, type Mat, type VectorPage } from '../model/compare';
 import type { Pt } from '../model/types';
@@ -16,7 +18,8 @@ import { toolById } from '../tools/tools';
 
 type Method = 'raster' | 'vector';
 interface CompareState {
-  mode: 'compare' | 'overlay' | null;
+  /** 'layer': Revu's Add Layer from Page (sheet A is added to sheet B as a new layer). */
+  mode: 'compare' | 'overlay' | 'layer' | null;
   aId: string; bId: string; pa: number; pb: number;
   method: Method;
   /** Alignment from picked points: maps the original/base page onto the revised/overlay page. */
@@ -26,7 +29,34 @@ interface CompareState {
 }
 export const useCompareDialog = create<CompareState>(() => ({ mode: null, aId: '', bId: '', pa: 0, pb: 0, method: 'raster', align: null, picking: null }));
 
-export function openCompare(mode: 'compare' | 'overlay') {
+const TITLES = { compare: 'Compare Documents', overlay: 'Overlay Pages', layer: 'Add Layer from Page' } as const;
+
+/**
+ * Revu's Add Layer from Page: draw page `pa` of `a` onto page `pb` of `b`
+ * as a new layer. `align` maps a's page space onto b's (alignment points).
+ */
+export async function addLayerFromPageAction(a: DocState, pa: number, b: DocState, pb: number, name: string, align: Mat | null) {
+  const app = useApp.getState();
+  app.setActive(b.id);
+  const src = await PDFDocument.load(a.bytes, { updateMetadata: false });
+  let m: Mat | null = null;
+  if (align) {
+    // Source PDF space -> source page -> (alignment) -> target page -> target PDF space.
+    const vs = a.loaded.pages[pa].viewport.transform as Mat, vt = b.loaded.pages[pb].viewport.transform as Mat;
+    m = mul(mul(vs, align), invert(vt));
+  }
+  await app.transformDoc(async (lib) => {
+    const ref = await addLayerFromPage(lib, pb, src, pa, name, m);
+    const set = readLayers(lib) ?? { layers: {}, order: [], configs: [] };
+    const id = refId(ref);
+    set.layers[id] = { id, name, on: true, locked: false, print: true };
+    set.order.push({ id, kids: [] });
+    writeLayers(lib, set);
+  }, `Layer "${name}" added from ${a.name}`, pb);
+  app.setPanels({ left: 'layers' });
+}
+
+export function openCompare(mode: 'compare' | 'overlay' | 'layer') {
   const s = useApp.getState();
   const active = s.docs.find((d) => d.id === s.activeId) ?? s.docs[0];
   const other = s.docs.find((d) => d.id !== active?.id) ?? active;
@@ -185,7 +215,7 @@ export function CompareDialog() {
   return mode && !picking ? <CompareForm mode={mode} /> : null;
 }
 
-function CompareForm({ mode }: { mode: 'compare' | 'overlay' }) {
+function CompareForm({ mode }: { mode: 'compare' | 'overlay' | 'layer' }) {
   const s = useApp();
   const c = useCompareDialog();
   const set = (p: Partial<CompareState>) => useCompareDialog.setState(p);
@@ -193,6 +223,7 @@ function CompareForm({ mode }: { mode: 'compare' | 'overlay' }) {
   const [ca, setCa] = useState('#e00000');
   const [cb, setCb] = useState('#0050ff');
   const [cloudA, setCloudA] = useState(false);
+  const [layerName, setLayerName] = useState('');
   const close = () => set({ mode: null, picking: null });
   const a = docs.find((d) => d.id === c.aId), b = docs.find((d) => d.id === c.bId);
   // Changing a sheet invalidates picked alignment points.
@@ -202,22 +233,27 @@ function CompareForm({ mode }: { mode: 'compare' | 'overlay' }) {
     close();
     try {
       if (mode === 'compare') await compareDocuments(a, c.pa, b, c.pb, { cloudA, color: '#ff0000', method: c.method, align: c.align });
+      else if (mode === 'layer') await addLayerFromPageAction(a, c.pa, b, c.pb, layerName.trim() || `${a.name.replace(/\.pdf$/i, '')} ${a.loaded.pages[c.pa]?.label ?? ''}`.trim(), c.align);
       else await overlayPages(a, c.pa, b, c.pb, ca, cb, c.align);
-    } catch (e) { s.setStatus(`${mode === 'compare' ? 'Compare' : 'Overlay'} failed: ${(e as Error).message}`); }
+    } catch (e) { s.setStatus(`${TITLES[mode]} failed: ${(e as Error).message}`); }
   };
   return (
     <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>
-      <div className="modal" role="dialog" aria-label={mode === 'compare' ? 'Compare Documents' : 'Overlay Pages'} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') close(); }}>
-        <div className="modal-title">{mode === 'compare' ? 'Compare Documents' : 'Overlay Pages'}</div>
+      <div className="modal" role="dialog" aria-label={TITLES[mode]} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') close(); }}>
+        <div className="modal-title">{TITLES[mode]}</div>
         <div className="scale-dialog">
-          <DocPage label={mode === 'compare' ? 'Original' : 'Base'} docId={c.aId} page={c.pa} onDoc={(id) => sheet({ aId: id })} onPage={(p) => sheet({ pa: p })} />
-          <DocPage label={mode === 'compare' ? 'Revised' : 'Overlay'} docId={c.bId} page={c.pb} onDoc={(id) => sheet({ bId: id })} onPage={(p) => sheet({ pb: p })} />
+          <DocPage label={mode === 'compare' ? 'Original' : mode === 'layer' ? 'Source' : 'Base'} docId={c.aId} page={c.pa} onDoc={(id) => sheet({ aId: id })} onPage={(p) => sheet({ pa: p })} />
+          <DocPage label={mode === 'compare' ? 'Revised' : mode === 'layer' ? 'Add to' : 'Overlay'} docId={c.bId} page={c.pb} onDoc={(id) => sheet({ bId: id })} onPage={(p) => sheet({ pb: p })} />
           <div className="form-row"><span>Alignment</span>
             <span className="muted">{c.align ? 'By 2 point pairs' : 'As positioned'}</span>
             <button disabled={!a || !b} onClick={startPicking}>Align Points…</button>
             {c.align && <button onClick={() => set({ align: null })}>Clear</button>}
           </div>
-          {mode === 'overlay' ? (
+          {mode === 'layer' ? (
+            <div className="form-row"><span>Layer name</span>
+              <input aria-label="New layer name" value={layerName} placeholder={a ? `${a.name.replace(/\.pdf$/i, '')} ${a.loaded.pages[c.pa]?.label ?? ''}` : ''} onChange={(e) => setLayerName(e.target.value)} />
+            </div>
+          ) : mode === 'overlay' ? (
             <div className="form-row"><span>Colours</span>
               <input type="color" aria-label="Base colour" value={ca} onChange={(e) => setCa(e.target.value)} /> base
               <input type="color" aria-label="Overlay colour" value={cb} onChange={(e) => setCb(e.target.value)} /> overlay
@@ -233,7 +269,9 @@ function CompareForm({ mode }: { mode: 'compare' | 'overlay' }) {
               <div className="form-row"><label><input type="checkbox" checked={cloudA} onChange={(e) => setCloudA(e.target.checked)} /> Also cloud removed items on the original</label></div>
             </>
           )}
-          <p className="muted small">{mode === 'compare'
+          <p className="muted small">{mode === 'layer'
+            ? 'The source sheet is drawn onto the page as a new layer you can show, hide or isolate in the Layers panel. Use Align Points when the sheets differ in position or scale.'
+            : mode === 'compare'
             ? 'Differences are clouded on the revised sheet (subject "Compare"). Vector compares the drawing\'s lines, curves and text exactly; Visual compares how the pages look (use it for scans).'
             : 'Creates a new PDF: ink only on the base sheet in the base colour, only on the overlay in its colour, unchanged in grey.'}</p>
           <div className="modal-actions">

@@ -79,6 +79,7 @@ export const SUMMARY_COLUMNS: SummaryColumn[] = [
   { key: 'lock', label: 'Lock', value: (m) => (m.locked ? 'Locked' : '') },
   { key: 'pageIndex', label: 'Page Index', value: (m) => m.page + 1, numeric: true, noTotal: true },
   { key: 'status', label: 'Status', value: (m) => m.status },
+  { key: 'layer', label: 'Layer', value: (m, d) => (m.layer ? d.layers?.layers[m.layer]?.name ?? '' : '') },
   { key: 'color', label: 'Color', value: (m) => m.style.color },
   { key: 'measurement', label: 'Measurement', value: (m) => meas(m)?.text ?? '' },
   { key: 'length', label: 'Length', value: (m) => round(meas(m)?.length), numeric: true },

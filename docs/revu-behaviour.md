@@ -192,6 +192,28 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - Markups List has a Space column (the Space each markup is in).
 - Dynamic Fill can create Spaces.
 
+## Layers (Alt+Y)
+- The list shows the PDF's layers (optional content groups) as a tree;
+  the box left of a name shows/hides it. Right-click: Show Layer (with its
+  children), Isolate (only it and its children), Show All, Markup Layer
+  (new markups go on it), Add New Layer, Add Layer from Page, New Layer
+  Group (a label without a box), Rename (F2), Delete, Layer Properties.
+- Toolbar: Layers menu (Reset Layers to the configuration, Show Print
+  Layers, Show All Layers, Show Layers on Page Only, Show Layers
+  Alphabetically), Add New Layer (Before / After / Child), Add Layer from
+  Page, configuration list (Default + named ones), Save Configuration /
+  New Configuration / Delete Configuration.
+- Delete Layer asks: Delete Layer Content on Page, Delete Layer
+  Annotations; unchecked items move to the base PDF.
+- Layer Properties: Title, Default State, Locked (title and state fixed,
+  visibility cannot be toggled), View, Print. (Revu also has Export usage and
+  a zoom range; not built.)
+- Drag a layer to reorder; drop it to the right to make it a child.
+- Markups: right-click > Layer to assign or create a layer; a markup on a
+  hidden layer is hidden. Stored as the annotation's /OC.
+- Add Layer from Page draws another sheet on the page as a new layer, with
+  Align Points when the sheets differ in position or scale.
+
 ## Curved segments
 - Polygon, Polyline, Area, Perimeter, Polylength and Volume can have
   Bézier segments. While drawing, Ctrl+drag at a point pulls out its

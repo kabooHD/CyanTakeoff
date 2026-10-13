@@ -42,6 +42,7 @@ const P: Record<string, ReactNode> = {
   legend: <><rect x="2.5" y="3.5" width="15" height="13" /><path d="M2.5 7h15M6.5 7v9.5M4 10h1M4 13h1M8.5 10h6M8.5 13h6" /></>,
   search: <><circle cx="8.5" cy="8.5" r="5" /><path d="M12.5 12.5L17 17" /></>,
   signatures: <><path d="M3 15c2-1 3-5 5-5s0 4 2 4 2-3 4-3 1 2 3 2" /><path d="M3 18h14" /></>,
+  layers: <><path d="M10 3l7 4-7 4-7-4z" /><path d="M3 10.5l7 4 7-4M3 14l7 4 7-4" /></>,
   sets: <><rect x="3" y="5" width="11" height="12" /><path d="M6 5V3h11v12h-3" /></>,
   redaction: <><rect x="3" y="7" width="14" height="6" fill="currentColor" /><path d="M2.5 4.5h15v11h-15z" strokeDasharray="2 1.5" /></>,
   'redact-text': <><path d="M4 5h12M10 5v3" /><rect x="3" y="10" width="14" height="5" fill="currentColor" /></>,

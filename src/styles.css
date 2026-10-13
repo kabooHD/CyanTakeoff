@@ -355,3 +355,13 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
 .sig-invalid .sig-badge { color: #c62828; }
 .ocr-langs { flex-wrap: wrap; } .ocr-langs label { margin-right: 8px; }
 .busy-overlay { position: fixed; inset: 0; z-index: 900; cursor: progress; background: transparent; }
+.layers-panel { display: flex; flex-direction: column; height: 100%; }
+.layers-toolbar { display: flex; gap: 4px; padding: 4px 6px; flex-wrap: wrap; border-bottom: 1px solid var(--border, #ddd); }
+.layers-toolbar select { flex: 1; min-width: 0; }
+.layers-list { flex: 1; overflow: auto; outline: none; }
+.layer-row { display: flex; align-items: center; gap: 6px; padding: 3px 6px; cursor: default; user-select: none; }
+.layer-row.selected { background: #dbe8fb; }
+.layer-row.dragging { opacity: 0.5; }
+.layer-eye-space { width: 13px; display: inline-block; }
+.layer-group { font-style: italic; }
+.layer-badge { margin-left: auto; color: #1a73e8; }

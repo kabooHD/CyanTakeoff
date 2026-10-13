@@ -157,6 +157,8 @@ export interface Markup {
   rise?: number;
   /** Holes cut out of an Area or Volume measurement. */
   cutouts?: Cutout[];
+  /** Layer (optional content group) the markup is on: its id from src/pdf/layers.ts. */
+  layer?: string;
   /** Bézier handlebars per vertex (curved segments), offsets from the vertex; see model/curves.ts. */
   handles?: ({ in: Pt; out: Pt } | null)[];
   /** Image markups (image, snapshot): a data: URL. */

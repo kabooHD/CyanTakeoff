@@ -168,9 +168,11 @@ filling, image signatures, redaction and OCR.
 - Post to Revu user communities; collect real Revu files and bug reports
 - Publish a compatibility report: which Revu markups round-trip, with tests
 - Before inviting testers (from the user research in 8c):
-  - Layers panel (Revu Alt+Y): list, show/hide, lock, add markups to a
-    layer, PDF layers (optional content) of the drawing itself. Layers are
-    a top complaint and a top reason people stay on Revu.
+  - [x] Layers panel (Revu Alt+Y): PDF layers of the drawing and markup
+    layers; show/hide/isolate, Markup Layer, add/rename/delete (content and
+    markups removed or moved to the base PDF), properties, configurations,
+    drag to reorder, Add Layer from Page with Align Points. Unlike Revu,
+    a new empty layer shows in the list at once (a Reddit complaint).
   - Low-end machines: measure load time, memory and pan/zoom speed on a
     4 GB laptop with a 100-sheet set; cap undo by memory (not 10 copies of
     the file); lower render limits when `navigator.deviceMemory` is small;

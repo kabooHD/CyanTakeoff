@@ -6,6 +6,7 @@ import type { PDFDocumentProxy, PageViewport } from 'pdfjs-dist';
 import type { CustomColumn, Markup, Pt, Scale, Space, Viewport } from '../model/types';
 import { importAnnotations, readColumns, removeAnnots } from './importAnnots';
 import { readFields, type FormField } from './forms';
+import { layersOnPages, readLayers, type LayerSet } from './layers';
 
 export { refKey, removeAnnots, type CTData } from './importAnnots';
 
@@ -37,6 +38,10 @@ export interface LoadedDoc {
   importedRefs: Set<string>;
   /** True when pdf-lib could not parse the file; markups cannot be saved into it. */
   readOnly: boolean;
+  /** PDF layers (optional content), or null when the file has none. */
+  layers: LayerSet | null;
+  /** Layer ids used by each page's content. */
+  pageLayers: string[][];
 }
 
 export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
@@ -115,5 +120,7 @@ export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
     viewports,
     importedRefs: new Set(result.imported.flatMap((s) => [...s])),
     readOnly: !lib,
+    layers: lib ? readLayers(lib) : null,
+    pageLayers: lib ? layersOnPages(lib) : [],
   };
 }

@@ -13,6 +13,7 @@
 // - Page /VP: the page scale is a /Viewport covering the whole page with no
 //   /Name; viewports (regions with their own scale) carry a /Name and BBox.
 import { CURVABLE, closedType, fromPdfPath } from '../model/curves';
+import { refId } from './layers';
 import { PDFArray, PDFDict, PDFName, PDFNumber, PDFRawStream, PDFRef, decodePDFRawStream, type PDFDocument } from 'pdf-lib';
 import type { CustomColumn, Markup, MarkupStatus, MarkupStyle, MarkupType, Pt, Reply, Scale } from '../model/types';
 import { DEFAULT_STYLES, toolById } from '../tools/tools';
@@ -169,6 +170,7 @@ function baseMarkup(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number, 
     legend: ct?.legend,
     checked: ct?.checked,
     locked: ((getNumber(doc, dict, 'F') ?? 0) & 128) !== 0 || undefined,
+    layer: dict.get(PDFName.of('OC')) instanceof PDFRef ? refId(dict.get(PDFName.of('OC')) as PDFRef) : undefined,
   } satisfies Omit<Markup, 'points'>;
 }
 

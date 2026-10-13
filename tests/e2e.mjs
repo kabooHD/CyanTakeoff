@@ -2,7 +2,7 @@
 // Usage: npm run build && npx vite preview --port 4173 & node tests/e2e.mjs
 import { chromium } from 'playwright-core';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { PDFDocument, PDFName, PDFArray, PDFDict } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFArray, PDFDict, PDFString, StandardFonts } from 'pdf-lib';
 
 const URL = process.env.APP_URL ?? 'http://localhost:4173/';
 const OUT = process.env.OUT ?? 'test-results';
@@ -1026,6 +1026,93 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Delete');
   await page.keyboard.press('Control+Shift+F8');
   await page.keyboard.press('Control+Shift+F7');
+}
+
+// Layers panel (Alt+Y): a PDF with layers "Plan" and "Notes".
+{
+  const ld = await PDFDocument.create();
+  const font = await ld.embedFont(StandardFonts.HelveticaBold);
+  const lp = ld.addPage([600, 400]);
+  const ctx = ld.context;
+  const plan = ctx.register(ctx.obj({ Type: 'OCG', Name: PDFString.of('Plan') }));
+  const notes = ctx.register(ctx.obj({ Type: 'OCG', Name: PDFString.of('Notes') }));
+  ld.catalog.set(PDFName.of('OCProperties'), ctx.obj({ OCGs: [plan, notes], D: { Name: PDFString.of('Default'), Order: [plan, notes] } }));
+  lp.node.set(PDFName.of('Resources'), ctx.obj({ Font: { F1: font.ref }, Properties: { MC0: plan, MC1: notes } }));
+  lp.node.set(PDFName.of('Contents'), ctx.register(ctx.flateStream(
+    '/OC /MC0 BDC 4 w 50 50 m 550 50 l 550 350 l 50 350 l h S EMC /OC /MC1 BDC BT /F1 40 Tf 100 250 Td (SECRET NOTE) Tj ET EMC')));
+  writeFileSync(`${OUT}/layered.pdf`, await ld.save());
+  const fc = await ctrlO();
+  await fc.setFiles(`${OUT}/layered.pdf`);
+  await page.waitForFunction(() => document.querySelector('.doc-tab.active')?.textContent?.startsWith('layered'));
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(1000);
+  await page.keyboard.press('Alt+Y');
+  const lpanel = page.getByRole('tree', { name: 'Layers' });
+  await lpanel.getByRole('treeitem', { name: 'Layer Notes' }).waitFor();
+  assert(await lpanel.getByRole('treeitem').count() === 2, 'Layers panel lists the PDF layers');
+  // Ink in the note's area of the rendered page (PDF 100..450 x 250..290).
+  const ink = async () => page.evaluate(() => {
+    const c = document.querySelector('.page canvas');
+    const x = c.getContext('2d');
+    const k = c.width / 600;
+    const d = x.getImageData(110 * k, (400 - 285) * k, 300 * k, 30 * k).data;
+    let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 128) n++;
+    return n;
+  });
+  const shown = await ink();
+  await page.getByLabel('Show Notes').uncheck();
+  await page.waitForTimeout(1200);
+  const hidden = await ink();
+  assert(shown > 200 && hidden < shown / 20, `hiding a layer hides its content (${shown} -> ${hidden} dark pixels)`);
+  await page.getByLabel('Show Notes').check();
+  await page.waitForTimeout(800);
+  // Add a layer, make it the Markup Layer, draw on it.
+  page.once('dialog', (d) => d.accept('Markups'));
+  await page.getByRole('button', { name: '+ Layer' }).click();
+  await lpanel.getByRole('treeitem', { name: 'Layer Markups' }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Markup Layer' }).click();
+  const shapes = async () => page.locator('.page .markup-layer > *').count();
+  const n0 = await shapes();
+  await page.keyboard.press('r');
+  { const b = await svg.boundingBox(); await page.mouse.move(b.x + b.width * 0.3, b.y + b.height * 0.6); await page.mouse.down(); await page.mouse.move(b.x + b.width * 0.5, b.y + b.height * 0.8, { steps: 4 }); await page.mouse.up(); }
+  await page.keyboard.press('Escape');
+  await page.mouse.move(5, 500);
+  const n1 = await shapes();
+  await page.getByLabel('Show Markups').uncheck();
+  assert(n1 === n0 + 1 && await shapes() === n0, `markups on a hidden layer are hidden (${n0} -> ${n1} -> ${await shapes()})`);
+  await page.getByLabel('Show Markups').check();
+  await page.evaluate(() => (document.activeElement)?.blur?.());
+  // Save: layers and the markup's layer are in the PDF.
+  const [ldl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
+  await ldl.saveAs(`${OUT}/layered-saved.pdf`);
+  await page.waitForFunction(() => /Saved layered\.pdf/.test(document.querySelector('.statusbar')?.textContent ?? ''));
+  const saved = await PDFDocument.load(readFileSync(`${OUT}/layered-saved.pdf`));
+  const ocp = saved.catalog.lookup(PDFName.of('OCProperties'));
+  const names = ocp.lookup(PDFName.of('OCGs')).asArray().map((r) => saved.context.lookup(r).lookup(PDFName.of('Name')).decodeText());
+  const sq = saved.getPage(0).node.lookup(PDFName.of('Annots')).asArray().map((r) => saved.context.lookup(r)).find((a) => String(a.get(PDFName.of('Subtype'))) === '/Square');
+  assert(await lpanel.getByRole('treeitem', { name: 'Layer Markups' }).locator('.layer-badge').count() === 1, 'the Markup Layer is still set after saving');
+  assert(names.join(',') === 'Plan,Notes,Markups' && saved.context.lookup(sq.get(PDFName.of('OC'))).lookup(PDFName.of('Name')).decodeText() === 'Markups',
+    `saved layers ${names.join(', ')}; the rectangle is on "Markups"`);
+  // Delete "Notes" and its content.
+  await lpanel.getByRole('treeitem', { name: 'Layer Notes' }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await page.getByRole('dialog', { name: 'Delete Layer' }).getByRole('button', { name: 'Delete' }).click();
+  await page.waitForFunction(() => /Deleted 1 layer/.test(document.querySelector('.statusbar')?.textContent ?? ''));
+  await page.waitForTimeout(1000);
+  assert(await lpanel.getByRole('treeitem', { name: 'Layer Notes' }).count() === 0 && await ink() < 20, 'deleting a layer removes it and its content');
+  // Add Layer from Page: the sheet drawn onto itself as a new layer.
+  await page.getByRole('button', { name: 'From Page…' }).click();
+  const al = page.getByRole('dialog', { name: 'Add Layer from Page' });
+  await al.getByLabel('Source document').selectOption({ label: 'layered.pdf' });
+  await al.getByLabel('New layer name').fill('Revision B');
+  await al.getByRole('button', { name: 'OK' }).click();
+  await lpanel.getByRole('treeitem', { name: 'Layer Revision B' }).waitFor({ timeout: 15000 });
+  assert(true, 'Add Layer from Page adds the sheet as a new layer');
+  await page.screenshot({ path: `${OUT}/18-layers.png` });
+  page.on('dialog', (d) => d.accept().catch(() => {}));
+  await page.keyboard.press('Control+F4');
+  await page.waitForTimeout(500);
+  page.removeAllListeners('dialog');
 }
 
 // View modes (Ctrl+4 to Ctrl+7) and Rotate View (Ctrl+Shift+Plus/Minus).

@@ -8,13 +8,14 @@ import { MEASURE_TYPES, scaleAt } from './measure';
 import { translated } from './markup';
 import { expandGroups } from './arrange';
 import { columnDefaults } from './columns';
+import type { LayerSet } from '../pdf/layers';
 import { hasSignatures, incrementalUpdate, loadForUpdate } from '../pdf/incremental';
 import type { ViewMode, ViewRotation } from './layout';
 import type {
   CustomColumn, Markup, MarkupStyle, MarkupType, Pt, Scale, Space, ToolId, ToolPreset, ToolSet, Toggles, Viewport,
 } from './types';
 
-export type LeftPanel = 'thumbnails' | 'bookmarks' | 'spaces' | 'search' | 'sets' | 'signatures' | null;
+export type LeftPanel = 'thumbnails' | 'bookmarks' | 'spaces' | 'search' | 'sets' | 'signatures' | 'layers' | null;
 export type RightPanel = 'properties' | 'toolchest' | 'measurements' | null;
 
 /** Page scales and viewports, for undoing scale changes. */
@@ -22,7 +23,7 @@ export interface ScaleSnapshot { markups: Markup[]; calibrations: (Scale | null)
 /** The whole document before a page operation (insert, delete, rotate...), for undoing it. */
 export interface DocSnapshot { doc: Pick<DocState, typeof DOC_KEYS[number]> }
 const DOC_KEYS = ['bytes', 'loaded', 'markups', 'importedRefs', 'calibrations', 'viewports', 'dirtyCalibrations',
-  'spaces', 'dirtySpaces', 'columns', 'dirtyColumns', 'formValues', 'page'] as const;
+  'spaces', 'dirtySpaces', 'columns', 'dirtyColumns', 'formValues', 'page', 'layers', 'dirtyLayers'] as const;
 /** Page operations kept in the undo history per document (each holds a copy of the file). */
 const MAX_DOC_UNDO = 10;
 /** An undo step: markups only, markups with page scales and viewports, or the whole document. */
@@ -62,6 +63,15 @@ export interface DocState {
   undo: UndoEntry[];
   redo: UndoEntry[];
   dirty: boolean;
+  /** PDF layers (Layers panel), and whether they changed since opening. */
+  layers: LayerSet | null;
+  dirtyLayers: boolean;
+  /** View state, not saved: which layers are shown. */
+  layerVisible: Record<string, boolean>;
+  /** Revu's Markup Layer: new markups go on it. */
+  markupLayer: string | null;
+  /** The layer configuration shown in the Layers panel (null = Default). */
+  layerConfig: string | null;
 }
 
 /**
@@ -195,6 +205,10 @@ interface AppState {
   /** Replace the document's custom columns. */
   setColumns(cols: CustomColumn[]): void;
   setFieldValue(name: string, value: string | boolean): void;
+  /** Change the layer list (saved with the document); `patch` can update view state at the same time. */
+  setLayers(layers: LayerSet | null, patch?: Partial<DocState>): void;
+  /** Change layer view state (visibility, markup layer, configuration): not saved. */
+  setLayerView(patch: Partial<Pick<DocState, 'layerVisible' | 'markupLayer' | 'layerConfig'>>): void;
   /** Add a Space, or replace the one with the same id. */
   setSpace(page: number, sp: Space): void;
   deleteSpaces(page: number, ids: string[]): void;
@@ -245,6 +259,24 @@ const now = () => new Date().toISOString();
 /** Viewport id, in the style of Revu's /NM (16 capital letters). */
 export const newViewportId = () => Array.from({ length: 16 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
 
+/** Layer state for a freshly (re)loaded file; visibility already chosen for a layer is kept. */
+export function layerState(loaded: LoadedDoc, prev?: Partial<DocState>): Pick<DocState, 'layers' | 'dirtyLayers' | 'layerVisible' | 'markupLayer' | 'layerConfig'> {
+  const layers = loaded.layers;
+  // Layers created before a save get their real id on reload: match them by name.
+  const renamed = new Map<string, string>();
+  for (const [id, l] of Object.entries(prev?.layers?.layers ?? {})) {
+    if (!id.startsWith('new:')) continue;
+    const now = Object.values(layers?.layers ?? {}).find((x) => x.name === l.name && !prev?.layers?.layers[x.id]);
+    if (now) renamed.set(id, now.id);
+  }
+  const before = (id: string) => [...renamed].find(([, v]) => v === id)?.[0] ?? id;
+  const vis: Record<string, boolean> = {};
+  for (const l of Object.values(layers?.layers ?? {})) vis[l.id] = prev?.layerVisible?.[before(l.id)] ?? l.on;
+  const m0 = prev?.markupLayer ? renamed.get(prev.markupLayer) ?? prev.markupLayer : null;
+  const ml = m0 && layers?.layers[m0] ? m0 : null;
+  return { layers, dirtyLayers: false, layerVisible: vis, markupLayer: ml, layerConfig: prev?.layerConfig ?? null };
+}
+
 /** The document with all its changes written into the PDF. */
 export function serialize(d: DocState): Promise<Uint8Array> {
   return savePdf({
@@ -253,6 +285,7 @@ export function serialize(d: DocState): Promise<Uint8Array> {
     dirtyCalibrations: d.dirtyCalibrations, spaces: d.spaces, dirtySpaces: d.dirtySpaces,
     columns: d.dirtyColumns ? d.columns : undefined,
     formValues: d.formValues,
+    layers: d.dirtyLayers ? d.layers : undefined,
   });
 }
 
@@ -355,6 +388,7 @@ export const useApp = create<AppState>((set, get) => {
           dirtyColumns: false,
           formValues: {},
           page: 0, zoom: 0, selection: [], undo: [], redo: [], dirty: false,
+          ...layerState(loaded),
         };
         set((s) => ({ docs: [...s.docs, doc], activeId: doc.id, status: loaded.readOnly ? `${name} opened read-only (file could not be parsed for editing)` : `Opened ${name}` }));
       } catch (e) {
@@ -448,6 +482,8 @@ export const useApp = create<AppState>((set, get) => {
       } as Markup;
       if (MEASURE_TYPES.has(m.type) && !m.scale) m.scale = scaleAt(d.calibrations[m.page], d.viewports[m.page], m.points[0]) ?? undefined;
       if (!m.custom) m.custom = columnDefaults(d.columns);
+      // New markups go on the Markup Layer (Revu).
+      if (m.layer === undefined && d.markupLayer) m.layer = d.markupLayer;
       withDoc((doc) => ({
         markups: [...doc.markups, m], undo: [...doc.undo, doc.markups], redo: [], dirty: true,
       }));
@@ -608,6 +644,7 @@ export const useApp = create<AppState>((set, get) => {
             calibrations: loaded.calibrations, viewports: loaded.viewports, dirtyCalibrations: new Set(),
             spaces: loaded.spaces, dirtySpaces: new Set(), columns: loaded.columns, dirtyColumns: false, formValues: {},
             page: Math.max(0, Math.min(loaded.pages.length - 1, page ?? x.page)), selection: [], undo, redo: [], dirty: true,
+            ...layerState(loaded, x),
           } : x),
           status: done,
         }));
@@ -619,6 +656,12 @@ export const useApp = create<AppState>((set, get) => {
       } finally {
         set({ busy: false });
       }
+    },
+    setLayers(layers, patch) {
+      withDoc(() => ({ layers, dirtyLayers: true, dirty: true, ...patch }));
+    },
+    setLayerView(patch) {
+      withDoc(() => patch);
     },
     setFieldValue(name, value) {
       withDoc((d) => ({ formValues: { ...d.formValues, [name]: value }, dirty: true }));
@@ -727,6 +770,7 @@ export const useApp = create<AppState>((set, get) => {
             calibrations: loaded.calibrations, viewports: loaded.viewports, dirtyCalibrations: new Set(),
             spaces: loaded.spaces, dirtySpaces: new Set(), columns: loaded.columns, dirtyColumns: false, formValues: {},
             page, zoom, selection: [], undo: [], redo: [], dirty: false,
+            ...layerState(loaded, x),
           } : x),
           status: `Saved ${name}`,
         }));

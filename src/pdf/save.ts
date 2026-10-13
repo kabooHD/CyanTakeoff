@@ -1,3 +1,4 @@
+import { writeLayers, type LayerSet } from './layers';
 import { flattenPath, hasCurves, pdfPath, segments } from '../model/curves';
 import { hasSignatures, incrementalUpdate, loadForUpdate } from './incremental';
 import {
@@ -661,6 +662,8 @@ export interface SaveInput {
   columns?: CustomColumn[];
   /** Form field values that changed, by field name. */
   formValues?: Record<string, FieldValue>;
+  /** Layers, when the layer list changed. */
+  layers?: LayerSet | null;
 }
 
 /** A Revu-style /NM: 16 random capital letters. */
@@ -669,13 +672,13 @@ const randomNM = () => Array.from({ length: 16 }, () => String.fromCharCode(65 +
 /**
  * Keys of an edited annotation that are derived from its geometry, style or
  * measurement and are written afresh; anything else the original carried
- * (Revu's /BSIColumnData custom column values, /OC layer, /GroupNesting,
+ * (Revu's /BSIColumnData custom column values, /GroupNesting,
  * other apps' private keys...) is kept when the markup is rewritten.
  */
 const REGENERATED = new Set(['Type', 'Subtype', 'AP', 'AS', 'Rect', 'RD', 'Vertices', 'L', 'LL', 'LLE', 'LLO', 'CL', 'QuadPoints', 'InkList',
   'Path', 'Popup', 'Parent', 'IRT', 'RT', 'P', 'Measure', 'BBMeasure', 'Depth', 'DepthUnit', 'SlopeType', 'PitchRun', 'RiseDrop',
   'NumCounts', 'CountScale', 'CountStyle', 'MeasurementTypes', 'Contents', 'C', 'IC', 'CA', 'ca', 'BS', 'BE', 'Border', 'DS', 'RC', 'LE',
-  'IT', 'M', 'Cap', 'CP', 'Q', 'MK', 'F', COLUMNS_KEY, 'CTData']);
+  'IT', 'M', 'Cap', 'CP', 'Q', 'MK', 'F', 'OC', COLUMNS_KEY, 'CTData']);
 
 function carryOver(doc: PDFDocument, from: PDFRef, to: PDFRef) {
   const old = doc.context.lookup(from), fresh = doc.context.lookup(to);
@@ -696,12 +699,15 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
   const remove = new Set([...input.importedRefs].filter((r) => !keep.has(r)));
   const toWrite = input.markups.filter((m) => !unchanged(m));
   // Nothing edited: hand back the file exactly as it was.
-  if (!remove.size && !toWrite.length && !(input.formValues && Object.keys(input.formValues).length) && !input.columns
+  if (!remove.size && !toWrite.length && !(input.formValues && Object.keys(input.formValues).length) && !input.columns && input.layers === undefined
     && !input.dirtySpaces?.size && !input.dirtyCalibrations.size) return input.original;
   // Signed files are saved as an incremental update so the signatures stay valid.
   const signed = hasSignatures(doc);
   for (let p = 0; p < doc.getPageCount(); p++) removeAnnots(doc, p, remove);
 
+  // Layers first, so markups can point /OC at layers created in this session.
+  const layerRefs = input.layers !== undefined ? writeLayers(doc, input.layers ?? { layers: {}, order: [], configs: [] }) : new Map<string, PDFRef>();
+  const layerRef = (id: string) => layerRefs.get(id) ?? (/^(\d+)R(\d*)$/.test(id) ? PDFRef.of(Number(id.split('R')[0]), Number(id.split('R')[1] || 0)) : undefined);
   const font = await doc.embedFont(StandardFonts.Helvetica);
   if (input.formValues && Object.keys(input.formValues).length) writeFields(doc, input.formValues, font);
   const pageRefs = doc.getPages().map((pg) => pg.ref);
@@ -731,6 +737,8 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
     const rows = m.type === 'legend' && m.legend ? legendRows(m.legend, input.markups, m.page) : [];
     const built = buildAnnot(doc, font, m, input.pages[m.page], image, pageRefs, rows);
     if (m.source) carryOver(doc, PDFRef.of(m.source.objectNumber, m.source.generation), built[0]);
+    const oc = m.layer ? layerRef(m.layer) : undefined;
+    if (oc) for (const r of built) (doc.context.lookup(r) as PDFDict).set(N('OC'), oc);
     if (m.groupId) {
       if (!groupHead.has(m.groupId)) groupHead.set(m.groupId, built[0]);
       else pendingMembers.push({ ref: built[0], group: m.groupId });

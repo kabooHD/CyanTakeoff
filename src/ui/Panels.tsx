@@ -1,3 +1,5 @@
+import { LayersPanel } from './LayersPanel';
+import { layerIds } from '../pdf/layers';
 import { SignaturesPanel } from './DigitalSignature';
 import { useEffect, useRef, useState } from 'react';
 import { useApp, useActiveDoc, type DocState } from '../model/store';
@@ -19,7 +21,7 @@ import { legendKey } from '../model/legend';
 export function SideTabs({ side }: { side: 'left' | 'right' }) {
   const s = useApp();
   const tabs = side === 'left'
-    ? [{ id: 'thumbnails', label: 'Thumbnails' }, { id: 'bookmarks', label: 'Bookmarks' }, { id: 'spaces', label: 'Spaces' }, { id: 'search', label: 'Search' }, { id: 'sets', label: 'Sets' }, { id: 'signatures', label: 'Signatures' }] as const
+    ? [{ id: 'thumbnails', label: 'Thumbnails' }, { id: 'bookmarks', label: 'Bookmarks' }, { id: 'spaces', label: 'Spaces' }, { id: 'search', label: 'Search' }, { id: 'sets', label: 'Sets' }, { id: 'signatures', label: 'Signatures' }, { id: 'layers', label: 'Layers' }] as const
     : [{ id: 'properties', label: 'Properties' }, { id: 'toolchest', label: 'Tool Chest' }, { id: 'measurements', label: 'Measurements' }] as const;
   const cur = side === 'left' ? s.left : s.right;
   return (
@@ -53,6 +55,7 @@ export function LeftPanel() {
   if (s.left === 'signatures') return <PanelFrame title="Signatures" onClose={close}>{doc ? <SignaturesPanel doc={doc} /> : null}</PanelFrame>;
   if (s.left === 'sets') return <PanelFrame title="Sets" onClose={close}><SetsPanel /></PanelFrame>;
   if (s.left === 'search') return <PanelFrame title="Search" onClose={close}>{doc ? <SearchPanel doc={doc} /> : null}</PanelFrame>;
+  if (s.left === 'layers') return <PanelFrame title="Layers" onClose={close}>{doc ? <LayersPanel doc={doc} /> : null}</PanelFrame>;
   if (s.left === 'spaces') return <PanelFrame title="Spaces" onClose={close}>{doc ? <SpacesPanel doc={doc} /> : null}</PanelFrame>;
   return s.left === 'thumbnails'
     ? <PanelFrame title="Thumbnails" onClose={close}>{doc ? <Thumbnails doc={doc} /> : null}</PanelFrame>
@@ -236,6 +239,12 @@ function Properties() {
       <Row label="Status">
         <select value={m.status} onChange={(e) => upd(() => ({ status: e.target.value as Markup['status'] }))}>
           {['None', 'Accepted', 'Rejected', 'Cancelled', 'Completed'].map((x) => <option key={x}>{x}</option>)}
+        </select>
+      </Row>
+      <Row label="Layer">
+        <select aria-label="Markup layer" value={m.layer ?? ''} onChange={(e) => upd(() => ({ layer: e.target.value || undefined }))}>
+          <option value="">(none)</option>
+          {doc && layerIds(doc.layers?.order ?? []).map((id) => <option key={id} value={id}>{doc.layers!.layers[id].name}</option>)}
         </select>
       </Row>
       <Row label="Author"><input value={m.author} readOnly /></Row>

@@ -98,6 +98,10 @@ length, polylength, area, perimeter, volume, count, angle, radius, diameter;
 cutouts (polygon/ellipse, Revu fuse/trim rules); curved segments
 (src/model/curves.ts: Ctrl+drag, Ctrl/Shift+click, Convert to Arc; PDF 2.0
 /Path); Dynamic Fill;
+Layers panel (Alt+Y, src/ui/LayersPanel.tsx, src/pdf/layers.ts: PDF
+optional content, show/hide/isolate, Markup Layer, add before/after/child,
+groups, rename, delete with content/markups, properties, configurations,
+drag to reorder, Add Layer from Page with Align Points; markups' /OC);
 separate X/Y scales; 3-point radius; viewports (regions with their own scale, Revu
 `/VP` layout); Apply Scale to Pages dialog (preset/custom/
 calibrate, page range, precision, saved presets) and scale prompt; snap to
@@ -106,13 +110,14 @@ filters, reorder, CSV summary); Tool Chest; save/reopen; Revu round-trip.
 
 Next (from `docs/PLAN.md`):
 1. Public test build in local mode (deploy only when the owner says so);
-   before it: Layers panel, low-end machine performance pass; tester
+   before it: low-end machine performance pass; tester
    outreach by email to Bluebeam-using companies (list compiled later)
 2. Cloud documents: sign-in, versions, share links (guests join by link
    with a display name), live collaboration, self-hostable
 3. Compare versions, Sets, slip sheets, Spaces, Legends, Dynamic Fill, XLSX
 
-Known gaps: no Layers panel yet (/OC kept, not shown); not yet measured on
+Known gaps: Layers: no zoom-range visibility, no Flatten-to-layer, no
+nudge/rotate of a layer added from a page after placing it; not yet measured on
 low-end machines (undo keeps up to 10 file copies); need Revu-made samples (none public; wanted list in
 tests/fixtures/revu/README.md): cutout storage (ours in CTData), custom
 column values (/BSIColumnData kept on edit but not read), .btx tool sets;
