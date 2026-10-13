@@ -20,7 +20,7 @@ export type Interaction =
 export interface ToolDef {
   id: ToolId;
   name: string;
-  group: 'navigate' | 'markup' | 'measure';
+  group: 'navigate' | 'markup' | 'measure' | 'form';
   /**
    * Default shortcut, matching Revu 20/21's published defaults
    * ("Keyboard shortcuts and mouse navigation", support.bluebeam.com).
@@ -86,6 +86,14 @@ export const TOOLS: ToolDef[] = [
   { id: 'ellipse-cutout', name: 'Ellipse Cutout', group: 'measure', interaction: 'cutout-ellipse', subject: '' },
   { id: 'dynamic-fill', name: 'Dynamic Fill', group: 'measure', shortcut: 'J', interaction: 'fill', subject: '' },
   { id: 'count', name: 'Count', group: 'measure', shortcut: 'Shift+Alt+C', interaction: 'count', subject: 'Count Measurement' },
+
+  // Forms: drag the field's box, then name it (Revu Forms menu).
+  { id: 'form-text', name: 'Text Field', group: 'form', interaction: 'box', subject: '' },
+  { id: 'form-checkbox', name: 'Check Box', group: 'form', interaction: 'box', subject: '' },
+  { id: 'form-radio', name: 'Radio Button', group: 'form', interaction: 'box', subject: '' },
+  { id: 'form-dropdown', name: 'Dropdown', group: 'form', interaction: 'box', subject: '' },
+  { id: 'form-list', name: 'List Box', group: 'form', interaction: 'box', subject: '' },
+  { id: 'form-signature', name: 'Signature Field', group: 'form', shortcut: 'X', interaction: 'box', subject: '' },
 ];
 
 export const toolById = (id: ToolId) => TOOLS.find((t) => t.id === id)!;

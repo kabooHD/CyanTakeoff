@@ -84,7 +84,9 @@ title-block sheet numbers, Batch Link (incl. across open files), Sets panel
 (open files as one set), Slip Sheet (by sheet number, markups carried);
 Tool Chest tool sets (new/rename/export/import, Properties vs Drawing mode),
 Keyboard Shortcuts editor (src/ui/commands.ts), Profiles; CyanTakeoff (=Revu)
-and Batch menus; form filling (AcroForm inputs saved into the form), image
+and Batch menus; form filling (AcroForm inputs saved into the form) and
+field creation (Tools > field tools, X = signature field, Forms Editor
+Ctrl+Shift+F), image
 signatures (draw/type, reusable), redaction (mark area/text, apply =
 page rasterised), OCR (tesseract.js, assets served from /ocr/, invisible text);
 length, polylength, area, perimeter, volume, count, angle, radius, diameter;
@@ -103,6 +105,5 @@ Next (from `docs/PLAN.md`):
 
 Known gaps: Revu cutout storage unknown (ours in CTData); curved segments
 on polygons/cutouts (Ctrl+drag) not supported; vector Compare ignores
-colour/lineweight-only changes; no
-certificate-based digital signatures; form field creation (Forms editor)
-not built; applying redactions rasterises the page; OCR is English only.
+colour/lineweight-only changes; no certificate-based digital signatures;
+applying redactions rasterises the page; OCR is English only.

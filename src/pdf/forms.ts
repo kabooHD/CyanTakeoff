@@ -1,6 +1,6 @@
 // PDF forms (AcroForm): read fields with their widgets, write values back.
 import {
-  PDFCheckBox, PDFDropdown, PDFOptionList, PDFRadioGroup, PDFSignature, PDFTextField, type PDFDocument, type PDFFont,
+  PDFCheckBox, PDFDropdown, PDFHexString, PDFName, PDFOptionList, PDFRadioGroup, PDFSignature, PDFTextField, type PDFDocument, type PDFFont,
 } from 'pdf-lib';
 
 export type FieldValue = string | boolean;
@@ -65,4 +65,105 @@ export function writeFields(doc: PDFDocument, values: Record<string, FieldValue>
     else if (f instanceof PDFOptionList) { if (v) f.select(String(v)); else f.clear(); }
   }
   form.updateFieldAppearances(font);
+}
+
+// ---------------- Forms editor: create, rename, delete fields ----------------
+
+export type NewFieldType = 'text' | 'checkbox' | 'radio' | 'dropdown' | 'list' | 'signature';
+
+export interface FieldSpec {
+  type: NewFieldType;
+  name: string;
+  page: number;
+  /** Widget rectangle in PDF space: x0, y0, x1, y1. */
+  rect: [number, number, number, number];
+  /** Dropdown / list choices. */
+  options?: string[];
+  multiline?: boolean;
+  /** Radio: the value this button sets (buttons sharing a name form one group). */
+  option?: string;
+}
+
+const box = (r: FieldSpec['rect']) => ({ x: Math.min(r[0], r[2]), y: Math.min(r[1], r[3]), width: Math.abs(r[2] - r[0]), height: Math.abs(r[3] - r[1]) });
+
+/** A field name not used yet: `Text1`, `Text2`... */
+export function uniqueFieldName(existing: string[], base: string): string {
+  const used = new Set(existing);
+  for (let i = 1; ; i++) if (!used.has(`${base}${i}`)) return `${base}${i}`;
+}
+
+/** Add a form field with one widget (or a button to an existing radio group). */
+export function createField(doc: PDFDocument, spec: FieldSpec) {
+  const form = doc.getForm();
+  const page = doc.getPage(spec.page);
+  const at = box(spec.rect);
+  const existing = form.getFieldMaybe(spec.name);
+  if (existing && !(spec.type === 'radio' && existing instanceof PDFRadioGroup)) throw new Error(`A field named "${spec.name}" already exists.`);
+  switch (spec.type) {
+    case 'text': {
+      const f = form.createTextField(spec.name);
+      if (spec.multiline) f.enableMultiline();
+      f.addToPage(page, at);
+      break;
+    }
+    case 'checkbox': form.createCheckBox(spec.name).addToPage(page, at); break;
+    case 'radio': {
+      const g = existing instanceof PDFRadioGroup ? existing : form.createRadioGroup(spec.name);
+      g.addOptionToPage(spec.option || `Choice${g.getOptions().length + 1}`, page, at);
+      break;
+    }
+    case 'dropdown': {
+      const f = form.createDropdown(spec.name);
+      f.addOptions(spec.options ?? []);
+      f.addToPage(page, at);
+      break;
+    }
+    case 'list': {
+      const f = form.createOptionList(spec.name);
+      f.addOptions(spec.options ?? []);
+      f.addToPage(page, at);
+      break;
+    }
+    case 'signature': {
+      // pdf-lib has no signature-field builder: a terminal field merged with its widget (ISO 32000 12.7.4.5).
+      const ctx = doc.context;
+      const ref = ctx.register(ctx.obj({
+        Type: 'Annot', Subtype: 'Widget', FT: 'Sig', T: PDFHexString.fromText(spec.name), F: 4, P: page.ref,
+        Rect: [at.x, at.y, at.x + at.width, at.y + at.height],
+        MK: { BC: [0, 0, 0] }, BS: { W: 1 },
+      }));
+      page.node.addAnnot(ref);
+      form.acroForm.addField(ref);
+      break;
+    }
+  }
+}
+
+/** Rename a field (its partial name, /T). */
+export function renameField(doc: PDFDocument, from: string, to: string) {
+  const form = doc.getForm();
+  if (form.getFieldMaybe(to)) throw new Error(`A field named "${to}" already exists.`);
+  const f = form.getField(from);
+  const parts = to.split('.');
+  f.acroField.dict.set(PDFName.of('T'), PDFHexString.fromText(parts[parts.length - 1]));
+}
+
+/** Delete a field and its widgets. */
+export function deleteField(doc: PDFDocument, name: string) {
+  const form = doc.getForm();
+  const f = form.getField(name);
+  // Take the widgets off their pages ourselves: pdf-lib only finds pages through /P.
+  const refs = new Set(f.acroField.getWidgets().map((w) => String(doc.context.getObjectRef(w.dict) ?? f.ref)));
+  for (const p of doc.getPages()) {
+    const annots = p.node.Annots();
+    if (!annots) continue;
+    for (let i = annots.size() - 1; i >= 0; i--) if (refs.has(String(annots.get(i)))) annots.remove(i);
+  }
+  form.removeField(f);
+}
+
+/** Replace a dropdown's or list's choices. */
+export function setFieldOptions(doc: PDFDocument, name: string, options: string[]) {
+  const f = doc.getForm().getField(name);
+  if (f instanceof PDFDropdown || f instanceof PDFOptionList) f.setOptions(options);
 }

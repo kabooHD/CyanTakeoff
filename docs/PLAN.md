@@ -154,7 +154,7 @@ filling, image signatures, redaction and OCR.
   Side (Ctrl+4 to Ctrl+7), Rotate View (Ctrl+Shift+Plus/Minus)
 - [x] Undo across page operations (the last 10 per document)
 - [x] Compare: alignment points and vector comparison
-- [ ] Forms editor: create, rename and delete fields
+- [x] Forms editor: create, rename and delete fields
 - [ ] Certificate digital signatures (sign with a .pfx/.p12, verify)
 - [ ] OCR in more languages; redaction that removes content without
   rasterising the page

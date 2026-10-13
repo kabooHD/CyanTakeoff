@@ -29,13 +29,13 @@ export const APP_COMMANDS: Command[] = [
   c('Document', 'Apply Redactions', 'Shift+A'), c('Document', 'OCR', 'Ctrl+Shift+O'), c('Document', 'Rotate Clockwise', 'Shift+Alt++'), c('Document', 'Rotate Counterclockwise', 'Shift+Alt+-'), c('Document', 'Flatten', 'Ctrl+Shift+M'),
   c('Window', 'Markups', 'Alt+L'), c('Window', 'Thumbnails', 'Alt+T'), c('Window', 'Bookmarks', 'Alt+B'), c('Window', 'Spaces', 'Alt+S'),
   c('Window', 'Search', 'Alt+1'), c('Window', 'Sets', 'Alt+2'), c('Window', 'Properties', 'Alt+P'), c('Window', 'Tool Chest', 'Alt+X'),
-  c('Window', 'Measurements', 'Alt+U'), c('Window', 'Hide Panel', 'Shift+F4'), c('Help', 'Help', 'F1'),
+  c('Window', 'Measurements', 'Alt+U'), c('Window', 'Hide Panel', 'Shift+F4'), c('Forms', 'Forms Editor', 'Ctrl+Shift+F'), c('Help', 'Help', 'F1'),
 ];
 
 export function allCommands(): Command[] {
   return [
     ...TOOLS.filter((t) => !['viewport', 'space', 'legend'].includes(t.id))
-      .map((t) => ({ id: `tool:${t.id}`, label: t.name, group: t.group === 'measure' ? 'Measure' : t.group === 'markup' ? 'Markup tools' : 'Selection', combo: t.shortcut })),
+      .map((t) => ({ id: `tool:${t.id}`, label: t.name, group: t.group === 'measure' ? 'Measure' : t.group === 'markup' ? 'Markup tools' : t.group === 'form' ? 'Forms' : 'Selection', combo: t.shortcut })),
     ...APP_COMMANDS,
   ];
 }

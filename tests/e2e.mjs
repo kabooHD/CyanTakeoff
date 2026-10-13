@@ -859,6 +859,53 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const form = filled.getForm();
   assert(form.getTextField('inspector').getText() === 'Sam Rivera' && form.getCheckBox('passed').isChecked()
     && form.getDropdown('trade').getSelected()[0] === 'Plumbing' && form.getRadioGroup('priority').getSelected() === 'high', 'form values saved into the PDF form');
+
+  // Forms editor: create fields by dragging their box, rename/delete them, fill and save.
+  const drag = async (fx0, fy0, fx1, fy1) => {
+    const b = await svg.boundingBox();
+    await page.mouse.move(b.x + b.width * fx0, b.y + b.height * fy0);
+    await page.mouse.down();
+    await page.mouse.move(b.x + b.width * fx1, b.y + b.height * fy1, { steps: 4 });
+    await page.mouse.up();
+  };
+  const tool = async (name) => {
+    await page.getByRole('button', { name: 'Tools', exact: true }).click();
+    await page.getByRole('menuitem', { name, exact: true }).click();
+    await page.waitForTimeout(400);
+  };
+  await tool('Text Field');
+  await drag(0.1, 0.8, 0.5, 0.84);
+  let nf = page.getByRole('dialog', { name: 'New Text Field' });
+  await nf.getByLabel('Field name').fill('Remarks');
+  await nf.getByRole('button', { name: 'OK' }).click();
+  await page.getByLabel('Remarks', { exact: true }).waitFor();
+  await tool('Dropdown');
+  await drag(0.1, 0.86, 0.4, 0.9);
+  nf = page.getByRole('dialog', { name: 'New Dropdown' });
+  await nf.getByLabel('Field name').fill('Grade');
+  await nf.getByLabel('Field items').fill('A\nB');
+  await nf.getByRole('button', { name: 'OK' }).click();
+  await page.getByLabel('Grade', { exact: true }).waitFor();
+  await page.keyboard.press('x');
+  await drag(0.55, 0.86, 0.9, 0.93);
+  nf = page.getByRole('dialog', { name: 'New Signature Field' });
+  assert(await nf.getByLabel('Field name').inputValue() === 'Signature1', 'X adds a signature field (default name Signature1)');
+  await nf.getByRole('button', { name: 'OK' }).click();
+  await page.waitForTimeout(800);
+  await page.keyboard.press('Control+Shift+F');
+  const fe = page.getByRole('dialog', { name: 'Forms Editor' });
+  await fe.getByLabel('Name of Remarks').fill('Notes');
+  await fe.getByLabel('Delete Grade').check();
+  await fe.getByRole('button', { name: 'Apply' }).click();
+  await page.getByLabel('Notes', { exact: true }).waitFor();
+  assert(await page.getByLabel('Grade', { exact: true }).count() === 0, 'Forms Editor renames and deletes fields');
+  await page.getByLabel('Notes', { exact: true }).fill('Checked twice');
+  await page.evaluate(() => (document.activeElement)?.blur?.());
+  const [fd2] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
+  await fd2.saveAs(`${OUT}/saved-form-fields.pdf`);
+  const f2 = (await PDFDocument.load(readFileSync(`${OUT}/saved-form-fields.pdf`))).getForm();
+  assert(f2.getTextField('Notes').getText() === 'Checked twice' && !f2.getFieldMaybe('Grade') && f2.getFieldMaybe('Signature1')
+    && f2.getTextField('inspector').getText() === 'Sam Rivera', 'created fields saved into the PDF form, old values kept');
 }
 
 // Keyboard Shortcuts editor: reassign Length to Ctrl+Shift+K; Tool Chest Drawing mode.

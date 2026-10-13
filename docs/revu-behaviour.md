@@ -122,6 +122,11 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
   content underneath for good.
 - OCR (Ctrl+Shift+O): makes scanned pages searchable (invisible text).
 
+- Forms: field tools (Text Field, Check Box, Radio Button, Dropdown, List
+  Box, Signature Field; Revu default shortcut X adds a signature field):
+  drag the box, then name the field. Radio buttons sharing a name form one
+  group. Forms Editor (Ctrl+Shift+F) renames, re-options and deletes fields.
+
 ## Compare
 - Compare Documents: pick the original and revised document/page; the
   differences are clouded (subject "Compare", label Added/Removed/Changed)

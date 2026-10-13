@@ -1,3 +1,4 @@
+import { FormsDialogs, useFormsDialog } from './ui/FormsEditor';
 import { useEffect, useState } from 'react';
 import { activeDoc, useApp, useActiveDoc } from './model/store';
 import { TOOLS, comboFromEvent } from './tools/tools';
@@ -120,6 +121,7 @@ export function App() {
         case 'Ctrl+F': return run(() => { s.setPanels({ left: 'search' }); useSearch.setState((x) => ({ focusTick: x.focusTick + 1 })); });
         case 'F3': return run(() => nextHit(1));
         case 'Shift+A': return run(runApplyRedactions);
+        case 'Ctrl+Shift+F': return run(() => d && useFormsDialog.setState({ editor: true }));
         case 'Ctrl+Shift+O': return run(() => d && openPagesDialog('ocr'));
         case 'Ctrl+Shift+I': return run(() => d && openPagesDialog('insert'));
         case 'Ctrl+Shift+N': return run(() => d && openPagesDialog('insert-blank'));
@@ -202,6 +204,7 @@ export function App() {
       <SheetsDialog />
       <PrefsDialogs />
       <SignatureDialog />
+      <FormsDialogs />
       {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
       {dialog === 'about' && <AboutDialog onClose={() => setDialog(null)} />}
     </div>
