@@ -105,8 +105,18 @@ interface AppState {
   openBytes(bytes: Uint8Array, name: string, handle?: FileSystemFileHandle): Promise<void>;
   closeDoc(id: string): void;
   setActive(id: string): void;
+  /** Page / zoom of the active view (split pane aware). */
   setPage(page: number): void;
   setZoom(zoom: number): void;
+  /** Page / zoom of a given view pane. */
+  setViewPage(pane: 0 | 1, page: number): void;
+  setViewZoom(pane: 0 | 1, zoom: number): void;
+  /** Split view (Revu: Split Horizontal Ctrl+H, Split Vertical Ctrl+2, Unsplit, Switch Ctrl+1). */
+  split: { dir: 'h' | 'v'; mainDocId: string; docId: string; page: number; zoom: number } | null;
+  activePane: 0 | 1;
+  splitView(dir: 'h' | 'v'): void;
+  unsplit(): void;
+  focusPane(pane: 0 | 1): void;
   setTool(tool: ToolId, opts?: { locked?: boolean; preset?: ToolPreset | null }): void;
   addMarkup(m: Omit<Markup, 'id' | 'author' | 'created' | 'modified' | 'status' | 'label' | 'comment'> & Partial<Markup>): Markup;
   updateMarkups(ids: string[], fn: (m: Markup) => Partial<Markup>, opts?: { history?: boolean }): void;
@@ -300,15 +310,58 @@ export const useApp = create<AppState>((set, get) => {
     closeDoc(id) {
       const d = get().docs.find((x) => x.id === id);
       if (d?.dirty && !confirm(`Close ${d.name} without saving changes?`)) return;
+      const sp = get().split;
+      if (sp && (sp.docId === id || sp.mainDocId === id)) set({ split: null, activePane: 0 });
       d?.loaded.pdf.loadingTask.destroy();
       set((s) => {
         const docs = s.docs.filter((x) => x.id !== id);
         return { docs, activeId: s.activeId === id ? docs[docs.length - 1]?.id ?? null : s.activeId };
       });
     },
-    setActive: (id) => set({ activeId: id }),
-    setPage: (page) => withDoc((d) => ({ page: Math.max(0, Math.min(d.loaded.pages.length - 1, page)), selection: [] })),
-    setZoom: (zoom) => withDoc(() => ({ zoom: Math.max(0.02, Math.min(64, zoom)) })),
+    setActive(id) {
+      const { split, activePane } = get();
+      if (split) set({ split: activePane ? { ...split, docId: id, page: split.docId === id ? split.page : 0, zoom: split.docId === id ? split.zoom : 0 } : { ...split, mainDocId: id } });
+      set({ activeId: id });
+    },
+    setPage: (page) => get().setViewPage(get().split ? get().activePane : 0, page),
+    setZoom: (zoom) => get().setViewZoom(get().split ? get().activePane : 0, zoom),
+    setViewPage(pane, page) {
+      const { split, docs } = get();
+      if (pane === 1 && split) {
+        const d = docs.find((x) => x.id === split.docId);
+        if (d) set({ split: { ...split, page: Math.max(0, Math.min(d.loaded.pages.length - 1, page)) } });
+        withDoc(() => ({ selection: [] }));
+        return;
+      }
+      const id = split ? split.mainDocId : get().activeId;
+      set({ docs: docs.map((d) => (d.id === id ? { ...d, page: Math.max(0, Math.min(d.loaded.pages.length - 1, page)), selection: [] } : d)) });
+    },
+    setViewZoom(pane, zoom) {
+      const z = Math.max(0.02, Math.min(64, zoom));
+      const { split, docs } = get();
+      if (pane === 1 && split) { set({ split: { ...split, zoom: z } }); return; }
+      const id = split ? split.mainDocId : get().activeId;
+      set({ docs: docs.map((d) => (d.id === id ? { ...d, zoom: z } : d)) });
+    },
+    split: null,
+    activePane: 0,
+    splitView(dir) {
+      const { activeId, split, docs } = get();
+      if (!activeId) return;
+      if (split) { set({ split: { ...split, dir } }); return; }
+      const d = docs.find((x) => x.id === activeId)!;
+      set({ split: { dir, mainDocId: activeId, docId: activeId, page: d.page, zoom: 0 }, activePane: 1 });
+    },
+    unsplit() {
+      const { split } = get();
+      if (!split) return;
+      set({ split: null, activePane: 0, activeId: split.mainDocId });
+    },
+    focusPane(pane) {
+      const { split } = get();
+      if (!split) return;
+      set({ activePane: pane, activeId: pane ? split.docId : split.mainDocId });
+    },
 
     setTool(tool, opts = {}) {
       set({ tool, toolLocked: opts.locked ?? false, preset: opts.preset ?? null, calibrateFor: null });
@@ -555,7 +608,7 @@ export const useApp = create<AppState>((set, get) => {
           setTimeout(() => URL.revokeObjectURL(url), 10_000);
         }
         // Reload from the saved bytes so imported refs match the new file.
-        const { page, zoom } = d;
+        const { page, zoom } = get().docs.find((x) => x.id === d.id) ?? d;
         const loaded = await openPdf(bytes);
         d.loaded.pdf.loadingTask.destroy();
         const markups = loaded.markups;
@@ -579,9 +632,25 @@ export const useApp = create<AppState>((set, get) => {
   };
 });
 
-export function activeDoc(): DocState | undefined {
-  const s = useApp.getState();
-  return s.docs.find((d) => d.id === s.activeId);
+/** The document in the active view; in split pane 2 its page and zoom are that pane's. */
+function viewDoc(s: AppState): DocState | undefined {
+  const d = s.docs.find((x) => x.id === s.activeId);
+  if (!d || !s.split || s.activePane !== 1 || s.split.docId !== d.id) return d;
+  return { ...d, page: s.split.page, zoom: s.split.zoom };
 }
 
-export const useActiveDoc = () => useApp((s) => s.docs.find((d) => d.id === s.activeId));
+export function activeDoc(): DocState | undefined {
+  return viewDoc(useApp.getState());
+}
+
+const cache = new WeakMap<DocState, { page: number; zoom: number; view: DocState }>();
+/** Stable per (document, page, zoom) so components only re-render on real changes. */
+export const useActiveDoc = () => useApp((s) => {
+  const v = viewDoc(s);
+  const d = s.docs.find((x) => x.id === s.activeId);
+  if (!v || !d || v === d) return v;
+  const c = cache.get(d);
+  if (c && c.page === v.page && c.zoom === v.zoom) return c.view;
+  cache.set(d, { page: v.page, zoom: v.zoom, view: v });
+  return v;
+});

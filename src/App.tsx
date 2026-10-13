@@ -19,6 +19,8 @@ const isEditable = (t: EventTarget | null) =>
 
 export function App() {
   const doc = useActiveDoc();
+  const split = useApp((st) => st.split);
+  const docs = useApp((st) => st.docs);
   const [dialog, setDialog] = useState<'shortcuts' | 'about' | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
@@ -95,6 +97,11 @@ export function App() {
         case 'Alt+1': return left('search');
         case 'Ctrl+F': return run(() => { s.setPanels({ left: 'search' }); useSearch.setState((x) => ({ focusTick: x.focusTick + 1 })); });
         case 'F3': return run(() => nextHit(1));
+        case 'Ctrl+H': return run(() => s.splitView('h'));
+        case 'Ctrl+2': return run(() => s.splitView('v'));
+        case 'Ctrl+Shift+2': case 'Ctrl+Shift+@': return run(s.unsplit);
+        case 'Ctrl+1': return run(() => s.split && s.focusPane(s.activePane ? 0 : 1));
+        case 'Ctrl+I': return run(() => (s.split ? s.unsplit() : s.splitView('v')));
         case 'Shift+F3': return run(() => nextHit(-1));
         case 'Alt+P': return right('properties');
         case 'Alt+X': return right('toolchest');
@@ -140,7 +147,14 @@ export function App() {
         <LeftPanel />
         <div className="center">
           <DocTabs />
-          {doc ? <Viewer key={doc.id} doc={doc} /> : <StartPage />}
+          {!doc ? <StartPage /> : split ? (
+            <div className={`split-view ${split.dir}`}>
+              {[0, 1].map((pane) => {
+                const d = docs.find((x) => x.id === (pane ? split.docId : split.mainDocId));
+                return d ? <Viewer key={`${pane}:${d.id}`} doc={d} pane={pane as 0 | 1} /> : null;
+              })}
+            </div>
+          ) : <Viewer key={doc.id} doc={doc} />}
           <MarkupsList />
         </div>
         <RightPanel />

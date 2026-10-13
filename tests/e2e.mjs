@@ -583,6 +583,24 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Alt+1');
 }
 
+// Split view (Ctrl+2): two panes with their own page; Ctrl+1 switches; Ctrl+Shift+2 unsplits.
+{
+  await page.locator('.ml-table-wrap').focus();
+  await page.keyboard.press('Control+2');
+  await page.waitForTimeout(800);
+  assert(await page.locator('.split-view.v .viewer-wrap').count() === 2, 'Ctrl+2 splits the view vertically');
+  await page.keyboard.press('End'); // second pane is active: go to the last page there
+  await page.waitForTimeout(800);
+  const labels = await page.locator('.split-view .viewer-wrap').evaluateAll((els) => els.map((e) => e.querySelector('.page canvas')?.getBoundingClientRect().width ?? 0));
+  assert(labels.length === 2, 'both panes render a page');
+  assert((await page.locator('.statusbar input').first().inputValue()) === '2', 'the active pane shows page 2');
+  await page.keyboard.press('Control+1');
+  assert((await page.locator('.statusbar input').first().inputValue()) === '1', 'Ctrl+1 switches to the other pane (page 1)');
+  await page.screenshot({ path: `${OUT}/12-split.png` });
+  await page.keyboard.press('Control+Shift+2');
+  assert(await page.locator('.split-view').count() === 0, 'Ctrl+Shift+2 unsplits');
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],

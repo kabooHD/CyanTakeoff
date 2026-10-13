@@ -43,10 +43,15 @@ type Drag =
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 
-export function Viewer({ doc }: { doc: DocState }) {
+export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const s = useApp();
-  const page = doc.loaded.pages[doc.page];
-  const zoom = doc.zoom || 1;
+  // Split view: pane 1 has its own page and zoom.
+  const split = s.split;
+  const pageIdx = pane === 1 && split ? split.page : doc.page;
+  const zoomRaw = pane === 1 && split ? split.zoom : doc.zoom;
+  const isActivePane = !split || s.activePane === pane;
+  const page = doc.loaded.pages[Math.min(pageIdx, doc.loaded.pages.length - 1)];
+  const zoom = zoomRaw || 1;
   const scrollRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<HTMLCanvasElement>(null);
   const detailRef = useRef<HTMLCanvasElement>(null);
@@ -73,10 +78,10 @@ export function Viewer({ doc }: { doc: DocState }) {
   const pw = page.width * zoom, ph = page.height * zoom;
   const innerW = Math.max(size.w, pw + PAD * 2), innerH = Math.max(size.h, ph + PAD * 2);
   const left = (innerW - pw) / 2, top = (innerH - ph) / 2;
-  const markups = doc.markups.filter((m) => m.page === doc.page);
-  const viewports = doc.viewports[doc.page] ?? [];
+  const markups = doc.markups.filter((m) => m.page === pageIdx);
+  const viewports = doc.viewports[pageIdx] ?? [];
   /** Scale a measurement starting at `p` would use (viewport, else page). */
-  const scaleFor = (p: Pt | undefined) => scaleAt(doc.calibrations[doc.page], viewports, p);
+  const scaleFor = (p: Pt | undefined) => scaleAt(doc.calibrations[pageIdx], viewports, p);
   const selected = new Set(doc.selection);
 
   // ----- container size -----
@@ -90,11 +95,11 @@ export function Viewer({ doc }: { doc: DocState }) {
   // ----- page proxy -----
   useEffect(() => {
     let alive = true;
-    doc.loaded.pdf.getPage(doc.page + 1).then((p) => alive && setPdfPage(p));
+    doc.loaded.pdf.getPage(pageIdx + 1).then((p) => alive && setPdfPage(p));
     countId.current = null;
     setDraft(null);
     return () => { alive = false; };
-  }, [doc.loaded.pdf, doc.page]);
+  }, [doc.loaded.pdf, pageIdx]);
 
   // ----- content geometry for snapping -----
   const wantGeom = s.toggles.content;
@@ -109,11 +114,11 @@ export function Viewer({ doc }: { doc: DocState }) {
   // ----- fit / zoom helpers -----
   const fitPage = useCallback(() => {
     const el = scrollRef.current!;
-    s.setZoom(Math.min((el.clientWidth - PAD * 2) / page.width, (el.clientHeight - PAD * 2) / page.height));
+    s.setViewZoom(pane, Math.min((el.clientWidth - PAD * 2) / page.width, (el.clientHeight - PAD * 2) / page.height));
   }, [page, s]);
   const fitWidth = useCallback(() => {
     const el = scrollRef.current!;
-    s.setZoom((el.clientWidth - PAD * 2) / page.width);
+    s.setViewZoom(pane, (el.clientWidth - PAD * 2) / page.width);
   }, [page, s]);
   const zoomAt = useCallback((factor: number, cx?: number, cy?: number) => {
     const el = scrollRef.current!;
@@ -123,10 +128,11 @@ export function Viewer({ doc }: { doc: DocState }) {
       py: (el.scrollTop + cy - top) / zoom,
       cx, cy,
     };
-    s.setZoom(zoom * factor);
+    s.setViewZoom(pane, zoom * factor);
   }, [left, top, zoom, s]);
 
   useEffect(() => {
+    if (!isActivePane) return;
     viewerApi.fitPage = fitPage;
     viewerApi.fitWidth = fitWidth;
     viewerApi.zoomBy = (f) => zoomAt(f);
@@ -136,9 +142,9 @@ export function Viewer({ doc }: { doc: DocState }) {
       el.scrollLeft = left + p.x * zoom - el.clientWidth / 2;
       el.scrollTop = top + p.y * zoom - el.clientHeight / 2;
     };
-  }, [fitPage, fitWidth, zoomAt, left, top, zoom]);
+  }, [fitPage, fitWidth, zoomAt, left, top, zoom, isActivePane]);
 
-  useEffect(() => { if (!doc.zoom) fitPage(); }, [doc.zoom, fitPage]);
+  useEffect(() => { if (!zoomRaw) fitPage(); }, [zoomRaw, fitPage]);
 
   useLayoutEffect(() => {
     const a = anchor.current;
@@ -220,9 +226,9 @@ export function Viewer({ doc }: { doc: DocState }) {
   const search = useSearch();
   const [fillCursor, setFillCursor] = useState<Pt | null>(null);
   useEffect(() => {
-    if (s.tool === 'dynamic-fill' && pdfPage) buildMask(pdfPage, `${doc.id}:${doc.page}`);
+    if (s.tool === 'dynamic-fill' && pdfPage) buildMask(pdfPage, `${doc.id}:${pageIdx}`);
     if (s.tool !== 'dynamic-fill') resetFill();
-  }, [s.tool, pdfPage, doc.id, doc.page, fillKey]);
+  }, [s.tool, pdfPage, doc.id, pageIdx, fillKey]);
 
   // ----- keyboard: space-pan and draft keys -----
   useEffect(() => {
@@ -312,7 +318,7 @@ export function Viewer({ doc }: { doc: DocState }) {
     const editable = type === 'textbox' || type === 'callout' || type === 'typewriter' || type === 'cloudplus';
     const m = s.addMarkup({
       type,
-      page: doc.page,
+      page: pageIdx,
       points: P,
       style,
       subject: preset?.subject ?? toolById(type).subject,
@@ -334,7 +340,7 @@ export function Viewer({ doc }: { doc: DocState }) {
     const cur = useApp.getState().docs.find((x) => x.id === doc.id)?.markups ?? doc.markups;
     let changed = false;
     const next = cur.flatMap((m) => {
-      if (m.page !== doc.page || m.type !== 'pen' || m.locked) return [m];
+      if (m.page !== pageIdx || m.type !== 'pen' || m.locked) return [m];
       const pieces = eraseStroke(m.points, p, r);
       if (pieces.length === 1 && pieces[0].length === m.points.length) return [m];
       changed = true;
@@ -379,7 +385,7 @@ export function Viewer({ doc }: { doc: DocState }) {
     const r = bounds([a, b]);
     const t = new Date().toISOString();
     const m: Markup = {
-      id: crypto.randomUUID(), type: 'image', page: doc.page, points: [{ x: r.minX, y: r.minY }, { x: r.maxX, y: r.maxY }],
+      id: crypto.randomUUID(), type: 'image', page: pageIdx, points: [{ x: r.minX, y: r.minY }, { x: r.maxX, y: r.maxY }],
       style: s.toolDefaults.image, subject: 'Snapshot', label: '', comment: '', author: s.author, created: t, modified: t, status: 'None', image: url,
     };
     useApp.setState({ clipboard: [m] });
@@ -401,7 +407,7 @@ export function Viewer({ doc }: { doc: DocState }) {
     if (space) {
       // Add Space: name it in the Add Space dialog (Revu).
       s.setTool('select');
-      useApp.setState({ spaceDialog: { page: doc.page, points: pts } });
+      useApp.setState({ spaceDialog: { page: pageIdx, points: pts } });
       return;
     }
     if (!id) return;
@@ -529,7 +535,7 @@ export function Viewer({ doc }: { doc: DocState }) {
         const list = e.shiftKey ? host.cutouts! : [host.cutouts![cutoutAt(host, raw)]];
         for (const c of list) {
           s.addMarkup({
-            type: s.tool, page: doc.page,
+            type: s.tool, page: pageIdx,
             points: c.kind === 'ellipse' ? ellipsePolygon(c.points[0], c.points[1], 256) : c.points,
             style: s.preset?.style ?? s.toolDefaults[s.tool], subject: s.preset?.subject ?? def.subject,
             depth: s.tool === 'volume' ? s.preset?.depth ?? 1 : undefined,
@@ -541,7 +547,7 @@ export function Viewer({ doc }: { doc: DocState }) {
     }
     // Like Revu, ask for a page scale before the first measurement on an unscaled page.
     if (!draft && isMeasureTool(s.tool) && s.tool !== 'count' && !scaleFor(raw)) {
-      s.openScaleDialog({ page: doc.page, then: s.tool });
+      s.openScaleDialog({ page: pageIdx, then: s.tool });
       return;
     }
     const prev = draft?.points[draft.points.length - 1];
@@ -608,7 +614,7 @@ export function Viewer({ doc }: { doc: DocState }) {
         if (cur) s.updateMarkups([cur.id], (m) => ({ points: [...m.points, p] }));
         else {
           const m = s.addMarkup({
-            type: 'count', page: doc.page, points: [p],
+            type: 'count', page: pageIdx, points: [p],
             style: s.preset?.style ?? s.toolDefaults.count,
             subject: s.preset?.subject ?? def.subject,
           });
@@ -630,7 +636,7 @@ export function Viewer({ doc }: { doc: DocState }) {
       const back = s.calibrateFor;
       s.setTool('select');
       useApp.setState({ calibrateFor: null });
-      s.openScaleDialog({ ...back, page: back?.page ?? doc.page, pagePts: dist(a, p) });
+      s.openScaleDialog({ ...back, page: back?.page ?? pageIdx, pagePts: dist(a, p) });
       return;
     }
     if (draft.tool === 'snapshot') { takeSnapshot(a, p); return; }
@@ -643,7 +649,7 @@ export function Viewer({ doc }: { doc: DocState }) {
     if (draft.tool === 'link') {
       setDraft(null);
       s.setTool('select');
-      useApp.setState({ linkDialog: { page: doc.page, rect: [a, p] } });
+      useApp.setState({ linkDialog: { page: pageIdx, rect: [a, p] } });
       return;
     }
     if (draft.tool === 'highlight') {
@@ -655,7 +661,7 @@ export function Viewer({ doc }: { doc: DocState }) {
     if (draft.tool === 'viewport') {
       setDraft(null);
       s.setTool('select');
-      s.openScaleDialog({ page: doc.page, viewport: { rect: [{ x: Math.min(a.x, p.x), y: Math.min(a.y, p.y) }, { x: Math.max(a.x, p.x), y: Math.max(a.y, p.y) }] } });
+      s.openScaleDialog({ page: pageIdx, viewport: { rect: [{ x: Math.min(a.x, p.x), y: Math.min(a.y, p.y) }, { x: Math.max(a.x, p.x), y: Math.max(a.y, p.y) }] } });
       return;
     }
     finish(draft.tool as MarkupType, [a, p]);
@@ -745,7 +751,7 @@ export function Viewer({ doc }: { doc: DocState }) {
       if (drag.kind === 'viewport' && drag.rect !== drag.orig) {
         const v = viewports.find((x) => x.id === drag.id);
         const [a, b] = drag.rect;
-        if (v && b.x - a.x > 2 && b.y - a.y > 2) s.setViewport(doc.page, { ...v, rect: drag.rect });
+        if (v && b.x - a.x > 2 && b.y - a.y > 2) s.setViewport(pageIdx, { ...v, rect: drag.rect });
       }
       setDrag(null);
       return;
@@ -807,7 +813,7 @@ export function Viewer({ doc }: { doc: DocState }) {
 
   const followLink = (m: Markup) => {
     if (m.link?.uri) window.open(m.link.uri, '_blank', 'noopener');
-    else if (m.link?.page !== undefined) s.setPage(m.link.page);
+    else if (m.link?.page !== undefined) s.setViewPage(pane, m.link.page);
   };
 
   // The browser's own menu is suppressed; the right button is handled on pointer-up.
@@ -871,7 +877,7 @@ export function Viewer({ doc }: { doc: DocState }) {
     const target = markups.find((m) => m.id === draft.target);
     const pts = [...draft.points, draft.cursor];
     preview = {
-      id: 'draft', type: isRegion(draft.tool) ? 'polyline' : 'ellipse', page: doc.page,
+      id: 'draft', type: isRegion(draft.tool) ? 'polyline' : 'ellipse', page: pageIdx,
       points: isRegion(draft.tool) && pts.length === 2 && buttonDown.current ? [...rectCorners(pts[0], pts[1]), pts[0]] : pts,
       style: { ...(target?.style ?? s.toolDefaults.area), fill: null, lineStyle: 'dashed' },
       subject: '', label: '', comment: '', author: '', created: '', modified: '', status: 'None',
@@ -890,7 +896,7 @@ export function Viewer({ doc }: { doc: DocState }) {
     if (type === 'cloud' && pts.length === 2) P = rectCorners(pts[0], pts[1]);
     if (type === 'callout') P = [pts[0], pts[1], { x: pts[1].x + 144, y: pts[1].y + 40 }];
     preview = {
-      id: 'draft', type, page: doc.page, points: P,
+      id: 'draft', type, page: pageIdx, points: P,
       style: draft.tool === 'calibrate' ? { ...s.toolDefaults.length, color: '#00a000' }
         : boxed ? { ...s.toolDefaults.rectangle, color: '#1a73e8', fill: null, width: 1, lineStyle: 'dashed' }
           : s.preset?.style ?? s.toolDefaults[type],
@@ -904,7 +910,8 @@ export function Viewer({ doc }: { doc: DocState }) {
     : tool === 'select' ? 'default' : tool === 'zoom' ? 'zoom-in' : 'crosshair';
 
   return (
-    <div className="viewer-wrap">
+    <div className={`viewer-wrap ${split ? (isActivePane ? 'pane-active' : 'pane-inactive') : ''}`}
+      onPointerDownCapture={() => { if (split && !isActivePane) s.focusPane(pane); }}>
     <div className="viewer" ref={scrollRef} onScroll={() => setScrollTick((n) => n + 1)}>
       <div style={{ width: innerW, height: innerH, position: 'relative' }}>
         <div className="page" style={{ left, top, width: pw, height: ph }}>
@@ -928,7 +935,7 @@ export function Viewer({ doc }: { doc: DocState }) {
                 <rect width={page.width} height={page.height} fill="url(#grid)" pointerEvents="none" />
               </>
             )}
-            {((s.spacesHighlight && s.left === 'spaces') || s.tool === 'space' || s.activeSpace) && (doc.spaces[doc.page] ?? [])
+            {((s.spacesHighlight && s.left === 'spaces') || s.tool === 'space' || s.activeSpace) && (doc.spaces[pageIdx] ?? [])
               .filter((sp) => (s.spacesHighlight && s.left === 'spaces') || s.tool === 'space' || sp.id === s.activeSpace).map((sp) => (
                 <g key={sp.id} className="space-shape" pointerEvents="none">
                   <polygon points={sp.points.map((q) => `${q.x},${q.y}`).join(' ')} fill={sp.color} fillOpacity={sp.opacity}
@@ -944,7 +951,7 @@ export function Viewer({ doc }: { doc: DocState }) {
               <ViewportBox key={v.id} v={drag?.kind === 'viewport' && drag.id === v.id ? { ...v, rect: drag.rect } : v}
                 zoom={zoom} active handles={s.tool === 'select'} />
             ))}
-            {search.docId === doc.id && search.hits.map((h, i) => h.page === doc.page && (
+            {search.docId === doc.id && search.hits.map((h, i) => h.page === pageIdx && (
               <rect key={`hit${i}`} className={`search-hl ${i === search.index ? 'active' : ''}`} pointerEvents="none"
                 x={Math.min(h.rect[0].x, h.rect[1].x) - 1} y={Math.min(h.rect[0].y, h.rect[1].y) - 1}
                 width={Math.abs(h.rect[1].x - h.rect[0].x) + 2} height={Math.abs(h.rect[1].y - h.rect[0].y) + 2} />
