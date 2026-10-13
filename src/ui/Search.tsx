@@ -6,6 +6,7 @@ import { useApp, type DocState } from '../model/store';
 import type { Pt } from '../model/types';
 import { pageText } from './toolActions';
 import { viewerApi } from './Viewer';
+import { VisualSearchPanel } from './VisualSearch';
 
 export interface Hit { page: number; rect: [Pt, Pt]; context: string }
 
@@ -14,8 +15,10 @@ interface SearchState {
   hits: Hit[]; index: number; running: boolean; docId: string | null; focusTick: number;
   /** The query (and options) the current hits are for. */
   searched: string;
+  /** Text or VisualSearch. */
+  mode: 'text' | 'visual';
 }
-export const useSearch = create<SearchState>(() => ({ query: '', matchCase: false, wholeWord: false, hits: [], index: -1, running: false, docId: null, focusTick: 0, searched: '' }));
+export const useSearch = create<SearchState>(() => ({ query: '', matchCase: false, wholeWord: false, hits: [], index: -1, running: false, docId: null, focusTick: 0, searched: '', mode: 'text' }));
 
 const signature = (s: Pick<SearchState, 'query' | 'matchCase' | 'wholeWord'>, docId: string) => `${docId}|${s.matchCase}|${s.wholeWord}|${s.query}`;
 
@@ -68,8 +71,16 @@ export function SearchPanel({ doc }: { doc: DocState }) {
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => { input.current?.focus(); input.current?.select(); }, [st.focusTick]);
   const hits = st.docId === doc.id ? st.hits : [];
+  const modes = (
+    <div className="search-row search-modes" role="tablist">
+      <button role="tab" aria-selected={st.mode === 'text'} className={st.mode === 'text' ? 'active' : ''} onClick={() => useSearch.setState({ mode: 'text' })}>Text</button>
+      <button role="tab" aria-selected={st.mode === 'visual'} className={st.mode === 'visual' ? 'active' : ''} onClick={() => useSearch.setState({ mode: 'visual' })}>Visual</button>
+    </div>
+  );
+  if (st.mode === 'visual') return <div className="search-panel">{modes}<VisualSearchPanel /></div>;
   return (
     <div className="search-panel">
+      {modes}
       <div className="search-row">
         <input ref={input} aria-label="Search text" placeholder="Search" value={st.query}
           onChange={(e) => useSearch.setState({ query: e.target.value })}

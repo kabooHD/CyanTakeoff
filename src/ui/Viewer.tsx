@@ -25,6 +25,7 @@ import { MarkupShape, handlePoints } from './renderMarkup';
 import { cutoutAt, hitTest, markupBounds, outline } from './hit';
 import { setCursor } from './cursor';
 import { ViewOverlays, recordView } from './Rulers';
+import { setVisualTemplate } from './VisualSearch';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { snapGeometry, snapToContent, type SnapGeometry } from '../pdf/geometry';
 import { layoutPages, rotateCss, rotateIn, rotateOut, rotatedSize, slotAt, type Slot, type ViewRotation } from '../model/layout';
@@ -846,6 +847,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       return;
     }
     if (draft.tool === 'snapshot') { takeSnapshot(a, p); return; }
+    if (draft.tool === 'visual-pick') { setDraft(null); s.setTool('select'); setVisualTemplate(doc, pageIdx, a, p); return; }
     if (draft.tool === 'cloudplus') { setDraft({ ...draft, points: [a, p], dragFrom: undefined }); return; }
     if (def.interaction === 'text') {
       setDraft(null);
@@ -1156,7 +1158,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     };
   } else if (draft && draft.cursor) {
     const pts = def.interaction === 'freehand' || draft.curving !== undefined ? draft.points : [...draft.points, draft.cursor];
-    const boxed = draft.tool.startsWith('form-') || draft.tool === 'lasso' || draft.tool === 'redact-text' || draft.tool === 'viewport' || draft.tool === 'snapshot' || draft.tool === 'link' || def.interaction === 'text';
+    const boxed = draft.tool.startsWith('form-') || draft.tool === 'lasso' || draft.tool === 'redact-text' || draft.tool === 'viewport' || draft.tool === 'snapshot' || draft.tool === 'visual-pick' || draft.tool === 'link' || def.interaction === 'text';
     let type = (draft.tool === 'calibrate' ? 'length' : boxed ? 'rectangle' : draft.tool) as MarkupType;
     let P = pts;
     if (draft.tool === 'cloudplus' && pts.length >= 3) P = [pts[0], pts[1], pts[2], { x: pts[2].x + 144, y: pts[2].y + 40 }];

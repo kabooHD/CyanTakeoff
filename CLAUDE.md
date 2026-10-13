@@ -90,7 +90,8 @@ src/ui/Print.tsx, layout math in src/model/print.ts); Rulers, crosshair,
 Dimmer, Previous/Next View (src/ui/Rulers.tsx, src/model/rulers.ts);
 Bookmarks editing (src/ui/BookmarksPanel.tsx, src/pdf/bookmarks.ts); line
 styles and hatch patterns (src/model/lineStyles.ts, src/ui/LineStyles.tsx);
-spell check (F7, src/ui/Spell.tsx, nspell + dictionary-en served from /dict/); CyanTakeoff (=Revu)
+spell check (F7, src/ui/Spell.tsx, nspell + dictionary-en served from /dict/);
+VisualSearch (src/model/visualSearch.ts matcher, src/ui/VisualSearch.tsx); CyanTakeoff (=Revu)
 and Batch menus; form filling (AcroForm inputs saved into the form) and
 field creation (Tools > field tools, X = signature field, Forms Editor
 Ctrl+Shift+F), image

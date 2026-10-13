@@ -38,7 +38,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
   }, [open]);
 
   const noDoc = !doc;
-  const toolItems = (group: 'markup' | 'measure' | 'form'): MenuItem[] => TOOLS.filter((t) => t.group === group && !['viewport', 'space', 'legend'].includes(t.id)).map((t) => ({
+  const toolItems = (group: 'markup' | 'measure' | 'form'): MenuItem[] => TOOLS.filter((t) => t.group === group && !['viewport', 'space', 'legend', 'visual-pick'].includes(t.id)).map((t) => ({
     label: t.name, shortcut: effectiveCombo(`tool:${t.id}`, s.customKeys) || undefined, disabled: noDoc, checked: s.tool === t.id, action: () => s.setTool(t.id),
   }));
 

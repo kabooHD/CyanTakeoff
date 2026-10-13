@@ -1423,6 +1423,44 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert(true, `Markup Spelling Mistakes ran (${await page.getByText(/Markup Spelling Mistakes: /).innerText()})`);
 }
 
+// VisualSearch: Get Rectangle around a door swing on A-101, find the others, count them.
+{
+  await page.locator('.doc-tab').first().click();
+  await page.mouse.click(5, 500);
+  await page.keyboard.press('Control+4');
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(600);
+  await page.keyboard.press('Alt+1');
+  await page.getByRole('tab', { name: 'Visual' }).click();
+  await page.getByRole('button', { name: 'Get Rectangle' }).click();
+  const a = await toScreen(27.8, 3.75), b = await toScreen(31.25, 1.1);
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y, { steps: 5 });
+  await page.mouse.up();
+  await page.locator('img[alt="Symbol to find"]').waitFor();
+  await page.locator('[aria-label="Sensitivity"]').fill('70');
+  await page.locator('.visual-search').getByRole('button', { name: 'Search', exact: true }).click();
+  await page.waitForFunction(() => /\d+ results?$/.test(document.querySelector('.visual-search .muted.small:last-of-type')?.textContent ?? '') || document.querySelectorAll('.vs-result').length > 0, null, { timeout: 60000 });
+  await page.waitForFunction(() => !document.querySelector('.visual-search')?.textContent?.includes('Searching'), null, { timeout: 60000 });
+  const n = await page.locator('.vs-result').count();
+  assert(n >= 3 && n <= 6, `VisualSearch finds the door swings drawn the same way (${n})`);
+  await page.screenshot({ path: `${OUT}/visual-search.png` });
+  const before = await page.locator('.ml-table tbody tr').count();
+  await page.locator('[aria-label="Actions"]').selectOption('count');
+  await page.waitForTimeout(300);
+  assert(await page.locator('.ml-table tbody tr').count() > before, 'Apply Count Measurement to Checked adds a count');
+  await page.locator('[aria-label="Search in"]').selectOption('document');
+  await page.getByText('Search multiple rotations').click();
+  await page.locator('.visual-search').getByRole('button', { name: 'Search', exact: true }).click();
+  await page.waitForTimeout(500);
+  await page.waitForFunction(() => !document.querySelector('.visual-search')?.textContent?.includes('Searching'), null, { timeout: 90000 });
+  const n2 = await page.locator('.vs-result').count();
+  assert(n2 > n, `with multiple rotations the turned door swings are found too (${n2})`);
+  await page.getByRole('tab', { name: 'Text' }).click();
+}
+
 // Print (Ctrl+P): sheets are prepared in the page, then the browser's print dialog opens.
 {
   await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });

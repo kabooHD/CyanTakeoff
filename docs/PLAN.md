@@ -182,7 +182,9 @@ filling, image signatures, redaction and OCR.
   through markup text, comments, replies and text fields (Ignore Once/All,
   Add to Dictionary, Change/Change All), Markup Spelling Mistakes on PDF
   text (Squiggly markups, suggestions in the comment); English dictionary
-- [ ] Visual Search
+- [x] VisualSearch (Search panel > Visual): Get Rectangle, sensitivity,
+  multiple rotations, current page/document/all open documents, result
+  thumbnails; Count / Highlight / Mark for Redaction on checked results
 - [ ] Sequences (auto-numbered markups)
 - [ ] Quantity Link (measurement totals into Excel)
 - [ ] AutoMark (bookmarks from title blocks)
