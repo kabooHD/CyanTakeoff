@@ -1246,6 +1246,34 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Control+z');
 }
 
+// Print (Ctrl+P): sheets are prepared in the page, then the browser's print dialog opens.
+{
+  await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });
+  await page.keyboard.press('Control+p');
+  const dlg = page.locator('[role=dialog][aria-label="Print"]');
+  await dlg.waitFor();
+  await dlg.locator('[aria-label="Page range"]').selectOption('custom');
+  await dlg.locator('[aria-label="Custom pages"]').fill('1');
+  await dlg.locator('[aria-label="Paper size"]').selectOption('Tabloid (11×17)');
+  await dlg.locator('[aria-label="Copies"]').fill('2');
+  assert((await dlg.innerText()).includes('Sheet 1 of 2'), 'print preview: 2 copies of one page = 2 sheets');
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${OUT}/print-dialog.png` });
+  await dlg.getByRole('button', { name: 'Print', exact: true }).click();
+  await page.waitForFunction(() => window.__printed === 1, null, { timeout: 30000 });
+  const info = await page.evaluate(() => [...document.querySelectorAll('#print-root .print-sheet')].map((s) => {
+    const img = s.querySelector('img');
+    return { w: s.style.width, h: s.style.height, iw: img.naturalWidth, ih: img.naturalHeight };
+  }));
+  assert(info.length === 2 && info[0].w === '792pt' && info[0].h === '1224pt', `two Tabloid portrait sheets (${JSON.stringify(info[0])})`);
+  assert(info[0].ih > info[0].iw && info[0].iw > 1000, 'the landscape sheet is auto-rotated onto the portrait paper');
+  await page.emulateMedia({ media: 'print' });
+  await page.screenshot({ path: `${OUT}/print-sheets.png` });
+  await page.emulateMedia({ media: 'screen' });
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  assert(await page.locator('#print-root').count() === 0, 'print sheets are removed after printing');
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],

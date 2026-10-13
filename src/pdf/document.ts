@@ -124,3 +124,8 @@ export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
     pageLayers: lib ? layersOnPages(lib) : [],
   };
 }
+
+/** Open bytes in pdf.js as is (for printing or other one-off renders); destroy() it when done. */
+export function loadForRender(bytes: Uint8Array): Promise<PDFDocumentProxy> {
+  return pdfjs.getDocument({ data: bytes.slice() }).promise;
+}

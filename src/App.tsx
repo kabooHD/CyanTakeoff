@@ -21,6 +21,7 @@ import { nextHit, useSearch } from './ui/Search';
 import { PagesDialog, openPagesDialog } from './ui/PagesDialog';
 import { rotatePages } from './pdf/pages';
 import { CompareDialog } from './ui/Compare';
+import { PrintDialog, openPrint } from './ui/Print';
 import { SheetsDialog } from './ui/Sheets';
 import { PrefsDialogs } from './ui/Prefs';
 import { SignatureDialog } from './ui/Signature';
@@ -63,6 +64,7 @@ export function App() {
         case 'Ctrl+S': case 'Ctrl+F2': return run(() => s.save());
         case 'Ctrl+Shift+S': return run(() => s.save(true));
         case 'Ctrl+F4': case 'Ctrl+W': return run(() => d && s.closeDoc(d.id));
+        case 'Ctrl+P': return run(() => d && openPrint());
         case 'Ctrl+Shift+W': return run(() => s.docs.forEach((x) => s.closeDoc(x.id)));
         // Edit
         case 'Ctrl+Z': return run(s.undo);
@@ -209,6 +211,7 @@ export function App() {
       <SpaceDialog />
       <PagesDialog />
       <CompareDialog />
+      <PrintDialog />
       <SheetsDialog />
       <PrefsDialogs />
       <SignatureDialog />

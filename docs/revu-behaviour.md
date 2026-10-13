@@ -258,6 +258,20 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - With the Area or Volume tool, clicking a cutout converts it into its own
   measurement (Shift: all cutouts of that markup); the cutout stays.
 
+## Print (File > Print, Ctrl+P)
+Revu's Print dialog has a preview (red borders), printer, page range (All,
+Current (n), Selected, Custom "1-3, 5, 9"), paper size (Auto follows the
+PDF page) and orientation, what prints (Document & Markups, Document Only,
+Markups Only), copies with Collate (1,2,3,1,2,3) and Reverse, rotation
+(auto), page scaling (None, Fit to Paper, Reduce to Paper, Custom Scale,
+Fit/Reduce to Margins), multiple pages per sheet, Center, Dim Page Content,
+Dim Filtered Markups, Print Spaces, Print Visible Hyperlinks, Defaults.
+Ours: the browser picks the printer, so the dialog prepares the sheets
+(rendered at 150 or 300 dpi, capped per page for low-memory machines) and
+opens the browser's print dialog. Layers print when shown and their Print
+usage is on; markups on hidden layers do not print. Not yet: Selected
+pages, margins options, Dim Filtered Markups, Print Spaces.
+
 ## Status bar
 - Left: help for the current tool and the toggles Show Grid, Snap to
   Grid, Snap to Content, Snap to Markup (points and guidelines from nearby

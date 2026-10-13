@@ -85,7 +85,8 @@ differences, visual or vector, alignment points) and Overlay Pages (two-colour o
 title-block sheet numbers, Batch Link (incl. across open files), Sets panel
 (open files as one set), Slip Sheet (by sheet number, markups carried);
 Tool Chest tool sets (new/rename/export/import, Properties vs Drawing mode),
-Keyboard Shortcuts editor (src/ui/commands.ts), Profiles; CyanTakeoff (=Revu)
+Keyboard Shortcuts editor (src/ui/commands.ts), Profiles; Print (Ctrl+P,
+src/ui/Print.tsx, layout math in src/model/print.ts); CyanTakeoff (=Revu)
 and Batch menus; form filling (AcroForm inputs saved into the form) and
 field creation (Tools > field tools, X = signature field, Forms Editor
 Ctrl+Shift+F), image

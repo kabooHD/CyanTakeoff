@@ -163,6 +163,24 @@ filling, image signatures, redaction and OCR.
   (e.g. /BSIColumnData). The formats wait for testers' files (wanted list in
   tests/fixtures/revu/README.md)
 
+### Now: Revu parity, third pass (owner: "do all")
+- [x] Print (Ctrl+P): page range, Document & Markups / Document Only /
+  Markups Only, paper size (Auto or fixed), scaling, pages per sheet,
+  auto-rotate, copies/collate/reverse, Dim Page Content, preview; layers
+  print when shown and their Print usage is on
+- [ ] Rulers (Ctrl+R), Dimmer (Ctrl+F5), Previous/Next View (Alt+Left/Right)
+- [ ] Bookmarks editing (create, rename, nest, reorder, delete; /Outlines)
+- [ ] Line styles and hatch patterns
+- [ ] Spell check in text markups and comments
+- [ ] Visual Search
+- [ ] Sequences (auto-numbered markups)
+- [ ] Quantity Link (measurement totals into Excel)
+- [ ] AutoMark (bookmarks from title blocks)
+- [ ] Header/Footer, Watermark, Bates numbering
+- [ ] Password protection, Reduce file size, XFDF import/export
+- [ ] Edit Text / Edit Content
+- [ ] Touch and pen support
+
 ### Next 2: public test build in local mode (days)
 - Host on a VPS (static site + HTTPS), with a feedback link
 - Post to Revu user communities; collect real Revu files and bug reports

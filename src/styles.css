@@ -366,3 +366,19 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
 .layer-group { font-style: italic; }
 .layer-badge { margin-left: auto; color: #1a73e8; }
 .layer-name.out-of-range { color: #999; }
+
+/* Print (File > Print): sheets live in #print-root, shown only when printing. */
+.print-dialog { width: min(760px, calc(100vw - 32px)); }
+.print-body { display: flex; gap: 16px; flex-wrap: wrap; }
+.print-preview { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.print-canvas { box-shadow: 0 1px 4px rgba(0,0,0,0.35); background: #fff; }
+.print-nav { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+#print-root { display: none; }
+@media print {
+  body > *:not(#print-root) { display: none !important; }
+  html, body { background: #fff !important; overflow: visible !important; height: auto !important; }
+  #print-root { display: block; }
+  .print-sheet { position: relative; overflow: hidden; break-after: page; }
+  .print-sheet:last-child { break-after: auto; }
+  .print-sheet img { position: absolute; }
+}

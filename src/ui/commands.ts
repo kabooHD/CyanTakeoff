@@ -9,7 +9,7 @@ const c = (group: string, label: string, combo: string): Command => ({ id: combo
 
 /** Commands handled by the global key handler (App.tsx), with their Revu default shortcuts. */
 export const APP_COMMANDS: Command[] = [
-  c('File', 'Open', 'Ctrl+O'), c('File', 'Save', 'Ctrl+S'), c('File', 'Save As', 'Ctrl+Shift+S'), c('File', 'Close', 'Ctrl+F4'), c('File', 'Close All', 'Ctrl+Shift+W'),
+  c('File', 'Open', 'Ctrl+O'), c('File', 'Save', 'Ctrl+S'), c('File', 'Save As', 'Ctrl+Shift+S'), c('File', 'Close', 'Ctrl+F4'), c('File', 'Print', 'Ctrl+P'), c('File', 'Close All', 'Ctrl+Shift+W'),
   c('Edit', 'Undo', 'Ctrl+Z'), c('Edit', 'Redo', 'Ctrl+Y'), c('Edit', 'Copy', 'Ctrl+C'), c('Edit', 'Cut', 'Ctrl+X'), c('Edit', 'Paste', 'Ctrl+V'),
   c('Edit', 'Paste in Place', 'Ctrl+Shift+V'), c('Edit', 'Select All', 'Ctrl+A'), c('Edit', 'Delete', 'Delete'), c('Edit', 'Format Painter', 'Ctrl+Shift+C'),
   c('Markup', 'Group', 'Ctrl+G'), c('Markup', 'Ungroup', 'Ctrl+Shift+G'), c('Markup', 'Bring Forward', 'Ctrl+J'), c('Markup', 'Bring to Front', 'Ctrl+Shift+J'),

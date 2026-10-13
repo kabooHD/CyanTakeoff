@@ -9,6 +9,7 @@ import { allColumns, exportSummaryCsv, exportSummaryPdf, exportSummaryXlsx, open
 import { viewerApi } from './Viewer';
 import { combineFiles, openPagesDialog } from './PagesDialog';
 import { openCompare } from './Compare';
+import { openPrint } from './Print';
 import { openSignDialog } from './DigitalSignature';
 import { useFormsDialog } from './FormsEditor';
 import { useSheetsDialog } from './Sheets';
@@ -56,6 +57,8 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Save As…', shortcut: 'Ctrl+Shift+S', disabled: noDoc, action: () => s.save(true) },
       { sep: true },
       { label: 'Export Markups Summary (CSV)', disabled: noDoc, action: () => exportSummaryCsv() },
+      { sep: true },
+      { label: 'Print…', shortcut: 'Ctrl+P', disabled: noDoc, action: openPrint },
     ],
     Edit: [
       { label: 'Undo', shortcut: 'Ctrl+Z', disabled: !doc?.undo.length, action: s.undo },
