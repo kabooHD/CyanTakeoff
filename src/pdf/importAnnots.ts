@@ -12,7 +12,7 @@
 // - /FillOpacity holds fill opacity; /Label holds the markup label.
 // - Page /VP: the page scale is a /Viewport covering the whole page with no
 //   /Name; viewports (regions with their own scale) carry a /Name and BBox.
-import { PDFArray, PDFDict, PDFRef, type PDFDocument } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFRawStream, PDFRef, decodePDFRawStream, type PDFDocument } from 'pdf-lib';
 import type { Markup, MarkupStatus, MarkupStyle, MarkupType, Pt, Scale } from '../model/types';
 import { DEFAULT_STYLES, toolById } from '../tools/tools';
 import { MEASURE_TYPES } from '../model/measure';
@@ -33,6 +33,8 @@ export interface CTData {
   points?: number[]; // PDF-space points for types whose geometry is not standard (count)
   comment?: string; // measurement comments (/Contents holds the value, as in Revu)
   cutouts?: { kind: 'polygon' | 'ellipse'; points: number[] }[]; // PDF-space holes in an area/volume
+  text?: string; // stamp label, Cloud+ text
+  groupId?: string; // Revu-style markup group
 }
 
 export const CT_KEY = 'CTData';
@@ -145,7 +147,7 @@ function baseMarkup(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number, 
     subject: getText(doc, dict, 'Subj') || toolById(type).subject,
     label: ct?.label ?? getText(doc, dict, 'Label') ?? '',
     // For measurements, Revu's /Contents is the displayed value, not a comment.
-    comment: ct?.comment ?? (type === 'textbox' || type === 'callout' || isMeasure ? '' : contents),
+    comment: ct?.comment ?? (['textbox', 'callout', 'typewriter', 'cloudplus'].includes(type) || isMeasure ? '' : contents),
     author: getText(doc, dict, 'T') ?? '',
     created,
     modified: parsePdfDate(getText(doc, dict, 'M')) ?? created,
@@ -153,6 +155,8 @@ function baseMarkup(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number, 
     scale: measureDict ? readMeasure(doc, measureDict) : undefined,
     depth: ct?.depth ?? getNumber(doc, dict, 'Depth'),
     source: { ...toRef(ref), dirty: false },
+    groupId: ct?.groupId,
+    locked: ((getNumber(doc, dict, 'F') ?? 0) & 128) !== 0 || undefined,
   } satisfies Omit<Markup, 'points'>;
 }
 
@@ -178,12 +182,60 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
   let type: MarkupType | null = null;
   let pts: Pt[] = [];
   let text: string | undefined;
+  let extra: Partial<Markup> = {};
+  /** QuadPoints as rectangle corner pairs (text markups, highlights). */
+  const quadRects = () => {
+    const q = numbers(doc, getArray(doc, dict, 'QuadPoints'));
+    const out: Pt[] = [];
+    for (let i = 0; i + 7 < q.length; i += 8) {
+      const xs = [q[i], q[i + 2], q[i + 4], q[i + 6]], ys = [q[i + 1], q[i + 3], q[i + 5], q[i + 7]];
+      out.push({ x: Math.min(...xs), y: Math.max(...ys) }, { x: Math.max(...xs), y: Math.min(...ys) });
+    }
+    return out;
+  };
   switch (subtype) {
     case 'Line': {
       pts = pairs(numbers(doc, getArray(doc, dict, 'L')));
       const le = getArray(doc, dict, 'LE');
       const ends = le ? [0, 1].map((i) => String(lookup(doc, le.get(i)) ?? '')) : [];
-      type = intent === 'LineDimension' ? 'length' : ends.some((e) => /Arrow/.test(e)) ? 'arrow' : 'line';
+      type = intent === 'LineDimension' ? (/^dimension/i.test(subj) ? 'dimension' : 'length') : ends.some((e) => /Arrow/.test(e)) ? 'arrow' : 'line';
+      break;
+    }
+    case 'StrikeOut': case 'Underline': case 'Squiggly':
+      pts = quadRects();
+      type = subtype === 'StrikeOut' ? 'strikeout' : subtype === 'Underline' ? 'underline' : 'squiggly';
+      break;
+    case 'Stamp': {
+      // Only CyanTakeoff's own stamps and images are editable; other stamps keep their artwork untouched.
+      if (!inner || (ct?.type !== 'stamp' && ct?.type !== 'image')) return null;
+      pts = rectPts(inner);
+      if (ct.type === 'image') {
+        const image = readImage(doc, dict);
+        if (!image) return null;
+        extra = { image };
+      } else text = ct.text ?? '';
+      break;
+    }
+    case 'Link': {
+      if (rect.length !== 4) return null;
+      const a = getDict(doc, dict, 'A');
+      const uri = a && getName(doc, a, 'S') === 'URI' ? getText(doc, a, 'URI') : undefined;
+      const dest = lookup(doc, dict.get(N('Dest')) ?? (a && getName(doc, a, 'S') === 'GoTo' ? a.get(N('D')) : undefined));
+      const pageRef = dest instanceof PDFArray ? dest.get(0) : undefined;
+      const target = pageRef instanceof PDFRef ? doc.getPages().findIndex((pg) => pg.ref === pageRef) : -1;
+      if (!uri && target < 0) return null; // named destinations, JavaScript, etc. stay as-is
+      pts = rectPts(rect);
+      type = 'link';
+      extra = { link: uri ? { uri } : { page: target } };
+      break;
+    }
+    case 'FileAttachment': {
+      if (rect.length !== 4) return null;
+      const file = readAttachment(doc, dict);
+      if (!file) return null;
+      pts = [{ x: rect[0], y: rect[3] }];
+      type = 'attachment';
+      extra = { file };
       break;
     }
     case 'PolyLine':
@@ -236,7 +288,10 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
     case 'FreeText': {
       if (!inner) return null;
       text = getText(doc, dict, 'Contents') ?? '';
-      if (intent === 'FreeTextCallout') {
+      if (intent === 'FreeTextTypeWriter' || intent === 'FreeTextTypewriter') {
+        pts = rectPts(inner);
+        type = 'typewriter';
+      } else if (intent === 'FreeTextCallout') {
         const cl = pairs(numbers(doc, getArray(doc, dict, 'CL')));
         if (!cl.length) return null;
         pts = [cl[0], ...rectPts(inner)];
@@ -250,13 +305,11 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
     case 'Text':
       if (!rect.length) return null;
       pts = [{ x: rect[0], y: rect[3] }];
-      type = 'note';
+      type = getName(doc, dict, 'Name') === 'Flag' ? 'flag' : 'note';
       break;
     case 'Highlight': {
-      const q = numbers(doc, getArray(doc, dict, 'QuadPoints'));
-      if (q.length !== 8) return null;
-      const xs = [q[0], q[2], q[4], q[6]], ys = [q[1], q[3], q[5], q[7]];
-      pts = [{ x: Math.min(...xs), y: Math.max(...ys) }, { x: Math.max(...xs), y: Math.min(...ys) }];
+      pts = quadRects();
+      if (!pts.length) return null;
       type = 'highlight';
       break;
     }
@@ -265,9 +318,10 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
   }
   if (ct?.type) type = ct.type;
   if (ct?.points) pts = pairs(ct.points);
+  if (type === 'cloudplus') text = getText(doc, dict, 'Contents') ?? ct?.text ?? '';
   if (!type || pts.length === 0) return null;
   const markup = {
-    ...baseMarkup(doc, dict, ref, page, type, ct), text,
+    ...baseMarkup(doc, dict, ref, page, type, ct), text, ...extra,
     cutouts: ct?.cutouts?.map((c) => ({ kind: c.kind, points: pairs(c.points) })),
   };
   if (type === 'volume' && markup.depth === undefined) markup.depth = 0;
@@ -374,4 +428,58 @@ function readViewports(doc: PDFDocument, p: number): { scale: Scale | null; view
     viewports.push({ id: getText(doc, v, 'NM') || crypto.randomUUID(), name: name ?? '', bbox, scale: s });
   }
   return { scale, viewports };
+}
+
+/** Bytes of a (possibly compressed) stream. */
+function streamBytes(s: unknown): Uint8Array | undefined {
+  if (s instanceof PDFRawStream) {
+    try { return decodePDFRawStream(s).decode(); } catch { return undefined; }
+  }
+  return undefined;
+}
+
+const toBase64 = (b: Uint8Array) => {
+  let s = '';
+  for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+
+/** The picture of a CyanTakeoff image stamp, from its appearance (/Im0), as a data: URL. */
+function readImage(doc: PDFDocument, dict: PDFDict): string | undefined {
+  const ap = getDict(doc, dict, 'AP');
+  const n = ap && lookup(doc, ap.get(N('N')));
+  if (!(n instanceof PDFRawStream)) return undefined;
+  const res = getDict(doc, n.dict, 'Resources');
+  const xo = res && getDict(doc, res, 'XObject');
+  const im = xo && lookup(doc, xo.get(N('Im0')));
+  if (!(im instanceof PDFRawStream)) return undefined;
+  const filter = getName(doc, im.dict, 'Filter');
+  if (filter === 'DCTDecode') return `data:image/jpeg;base64,${toBase64(im.contents)}`;
+  // pdf-lib writes PNGs as 8-bit RGB with an /SMask for alpha.
+  const w = getNumber(doc, im.dict, 'Width') ?? 0, h = getNumber(doc, im.dict, 'Height') ?? 0;
+  const rgb = streamBytes(im);
+  const smask = lookup(doc, im.dict.get(N('SMask')));
+  const alpha = smask ? streamBytes(smask) : undefined;
+  if (!rgb || !w || !h || typeof document === 'undefined') return undefined;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d')!;
+  const img = ctx.createImageData(w, h);
+  const comps = rgb.length / (w * h) >= 3 ? 3 : 1;
+  for (let i = 0; i < w * h; i++) {
+    img.data[i * 4] = rgb[i * comps]; img.data[i * 4 + 1] = rgb[i * comps + (comps === 3 ? 1 : 0)]; img.data[i * 4 + 2] = rgb[i * comps + (comps === 3 ? 2 : 0)];
+    img.data[i * 4 + 3] = alpha ? alpha[i] : 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvas.toDataURL('image/png');
+}
+
+/** The embedded file of a /FileAttachment annotation. */
+function readAttachment(doc: PDFDocument, dict: PDFDict): Markup['file'] | undefined {
+  const fs = getDict(doc, dict, 'FS');
+  const ef = fs && getDict(doc, fs, 'EF');
+  const stream = ef && lookup(doc, ef.get(N('F')));
+  const bytes = streamBytes(stream);
+  if (!fs || !bytes) return undefined;
+  return { name: getText(doc, fs, 'UF') ?? getText(doc, fs, 'F') ?? 'attachment', mime: 'application/octet-stream', data: toBase64(bytes) };
 }

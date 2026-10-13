@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PDFPageProxy, RenderTask } from 'pdfjs-dist';
 import { useApp, type DocState } from '../model/store';
-import { MEASURE_TYPES, dist, distToSegment, pointInPolygon, formatLength, formatNumber, measure, ortho, rectCorners, resolveFormat, scaleAt, stretchY, circleFrom3 } from '../model/measure';
+import { MEASURE_TYPES, bounds, dist, distToSegment, pointInPolygon, formatLength, formatNumber, measure, ortho, rectCorners, resolveFormat, scaleAt, stretchY, circleFrom3 } from '../model/measure';
 import { Icon } from './icons';
-import { translated } from '../model/markup';
+import { eraseStroke, translated, typewriterBox } from '../model/markup';
+import { STAMPS, downloadBase64, loadImage, pageText, pickFile, readAsDataUrl, snapshot, textRectsIn } from './toolActions';
 import { applyCutout, ellipsePolygon } from '../model/cutouts';
 import { DynamicFillBar, FillOverlay, buildMask, fillDown, fillMove, fillUp, finishBoundary, resetFill, useFill } from './DynamicFill';
 import type { Markup, MarkupType, Pt, ToolId, Viewport } from '../model/types';
@@ -55,6 +56,7 @@ export function Viewer({ doc }: { doc: DocState }) {
   const anchor = useRef<{ px: number; py: number; cx: number; cy: number } | null>(null);
   const spaceDown = useRef(false);
   const countId = useRef<string | null>(null);
+  const eraseSnapshot = useRef<Markup[] | null>(null);
   const lastMiddle = useRef(0);
   const buttonDown = useRef(false);
   const rightDown = useRef<{ x: number; y: number } | null>(null);
@@ -285,27 +287,87 @@ export function Viewer({ doc }: { doc: DocState }) {
   const tool = spaceDown.current ? 'pan' : s.tool;
   const def = toolById(s.tool);
 
-  const finish = (type: MarkupType, points: Pt[]) => {
+  const finish = (type: MarkupType, points: Pt[], extra: Partial<Markup> = {}) => {
     const preset = s.preset;
+    const style = preset?.style ?? s.toolDefaults[type];
     let P = points;
     if (type === 'cloud' && points.length === 2) P = rectCorners(points[0], points[1]);
     if (type === 'callout') P = [points[0], points[1], { x: points[1].x + 144, y: points[1].y + 40 }];
     if (type === 'perimeter') P = [...points, points[0]];
+    if (type === 'typewriter') P = typewriterBox(points[0], '', style.fontSize);
+    if (type === 'stamp' && points.length === 1) P = [{ x: points[0].x - 80, y: points[0].y - 25 }, { x: points[0].x + 80, y: points[0].y + 25 }];
+    const editable = type === 'textbox' || type === 'callout' || type === 'typewriter' || type === 'cloudplus';
     const m = s.addMarkup({
       type,
       page: doc.page,
       points: P,
-      style: preset?.style ?? s.toolDefaults[type],
+      style,
       subject: preset?.subject ?? toolById(type).subject,
       depth: type === 'volume' ? preset?.depth ?? 1 : undefined,
-      text: type === 'textbox' || type === 'callout' ? '' : undefined,
+      text: editable ? '' : type === 'stamp' ? s.stampName : undefined,
+      ...extra,
     });
     setDraft(null);
     const keep = s.toolLocked || s.toggles.reuse;
     if (!keep) s.setTool('select');
     s.select([m.id]);
-    if (type === 'textbox' || type === 'callout') setEditing(m.id);
+    if (editable) setEditing(m.id);
     return m;
+  };
+
+  /** Eraser: remove the parts of pen strokes under the cursor. */
+  const eraseAt = (p: Pt) => {
+    const r = 8 / zoom;
+    const cur = useApp.getState().docs.find((x) => x.id === doc.id)?.markups ?? doc.markups;
+    let changed = false;
+    const next = cur.flatMap((m) => {
+      if (m.page !== doc.page || m.type !== 'pen' || m.locked) return [m];
+      const pieces = eraseStroke(m.points, p, r);
+      if (pieces.length === 1 && pieces[0].length === m.points.length) return [m];
+      changed = true;
+      return pieces.map((pts, i) => ({ ...m, id: i ? crypto.randomUUID() : m.id, points: pts, source: i ? undefined : m.source && { ...m.source, dirty: true } }));
+    });
+    if (changed) s.setMarkups(next, { history: false });
+  };
+
+  // ----- tools that need text, files or a rendered snapshot -----
+  const placeImage = async (p: Pt) => {
+    const f = await pickFile('image/*');
+    if (!f) return;
+    const img = await loadImage(f);
+    const k = Math.min(1, 300 / Math.max(img.w, img.h));
+    finish('image', [p, { x: p.x + img.w * k, y: p.y + img.h * k }], { image: img.url });
+  };
+  const placeAttachment = async (p: Pt) => {
+    const f = await pickFile();
+    if (!f) return;
+    const url = await readAsDataUrl(f);
+    finish('attachment', [p], { file: { name: f.name, mime: f.type || 'application/octet-stream', data: url.slice(url.indexOf(',') + 1) }, comment: f.name });
+  };
+  const textMarkup = async (type: MarkupType, a: Pt, b: Pt) => {
+    if (!pdfPage) return false;
+    const rects = textRectsIn(await pageText(pdfPage, page.viewport), a, b);
+    if (!rects.length) return false;
+    finish(type, rects);
+    return true;
+  };
+  const takeSnapshot = async (a: Pt, b: Pt) => {
+    setDraft(null);
+    if (!pdfPage) return;
+    const url = await snapshot(pdfPage, a, b);
+    const r = bounds([a, b]);
+    const t = new Date().toISOString();
+    const m: Markup = {
+      id: crypto.randomUUID(), type: 'image', page: doc.page, points: [{ x: r.minX, y: r.minY }, { x: r.maxX, y: r.maxY }],
+      style: s.toolDefaults.image, subject: 'Snapshot', label: '', comment: '', author: s.author, created: t, modified: t, status: 'None', image: url,
+    };
+    useApp.setState({ clipboard: [m] });
+    try {
+      const blob = await (await fetch(url)).blob();
+      await navigator.clipboard?.write?.([new ClipboardItem({ 'image/png': blob })]);
+    } catch { /* system clipboard is optional */ }
+    if (!s.toolLocked && !s.toggles.reuse) s.setTool('select');
+    s.setStatus('Snapshot copied. Paste with Ctrl+V (Ctrl+Shift+V pastes in place).');
   };
 
   /** Area or Volume measurement under `p` that a cutout would subtract from. */
@@ -484,8 +546,25 @@ export function Viewer({ doc }: { doc: DocState }) {
         (e.target as Element).setPointerCapture?.(e.pointerId);
         break;
       case 'point':
-        finish(s.tool as MarkupType, [p]);
+        if (s.tool === 'image') placeImage(p);
+        else if (s.tool === 'attachment') placeAttachment(p);
+        else finish(s.tool as MarkupType, [p]);
         break;
+      case 'cloudplus':
+        // First the cloud (click-click or drag), then a click for the text box.
+        if (!draft) setDraft({ tool: s.tool, points: [p], cursor: p, dragFrom: { x: e.clientX, y: e.clientY } });
+        else if (draft.points.length === 1) setDraft({ ...draft, points: [draft.points[0], p], dragFrom: undefined });
+        else finish('cloudplus', [draft.points[0], draft.points[1], p, { x: p.x + 144, y: p.y + 40 }]);
+        break;
+      case 'text':
+        setDraft({ tool: s.tool, points: [p], cursor: p, dragFrom: { x: e.clientX, y: e.clientY } });
+        break;
+      case 'erase': {
+        eraseSnapshot.current = doc.markups;
+        eraseAt(raw);
+        (e.target as Element).setPointerCapture?.(e.pointerId);
+        break;
+      }
       case 'count': {
         const cur = countId.current && doc.markups.find((m) => m.id === countId.current);
         if (cur) s.updateMarkups([cur.id], (m) => ({ points: [...m.points, p] }));
@@ -516,6 +595,25 @@ export function Viewer({ doc }: { doc: DocState }) {
       s.openScaleDialog({ ...back, page: back?.page ?? doc.page, pagePts: dist(a, p) });
       return;
     }
+    if (draft.tool === 'snapshot') { takeSnapshot(a, p); return; }
+    if (draft.tool === 'cloudplus') { setDraft({ ...draft, points: [a, p], dragFrom: undefined }); return; }
+    if (def.interaction === 'text') {
+      setDraft(null);
+      textMarkup(draft.tool as MarkupType, a, p).then((ok) => { if (!ok) s.setStatus('No text found there. Drag across text on the drawing.'); });
+      return;
+    }
+    if (draft.tool === 'link') {
+      setDraft(null);
+      s.setTool('select');
+      useApp.setState({ linkDialog: { page: doc.page, rect: [a, p] } });
+      return;
+    }
+    if (draft.tool === 'highlight') {
+      // Over text, Highlight marks the text lines; elsewhere it draws a box (Revu).
+      setDraft(null);
+      textMarkup('highlight', a, p).then((done) => { if (!done) finish('highlight', [a, p]); });
+      return;
+    }
     if (draft.tool === 'viewport') {
       setDraft(null);
       s.setTool('select');
@@ -529,6 +627,7 @@ export function Viewer({ doc }: { doc: DocState }) {
     const raw = toPage(e);
     setCursor(raw, scaleFor(raw));
     if (s.tool === 'dynamic-fill') { fillMove(raw); setFillCursor(raw); }
+    if (s.tool === 'eraser') { setFillCursor(raw); if (eraseSnapshot.current) { eraseAt(raw); return; } }
     if (drag) {
       if (drag.kind === 'pan') {
         const el = scrollRef.current!;
@@ -581,6 +680,13 @@ export function Viewer({ doc }: { doc: DocState }) {
 
   const onPointerUp = (e: React.PointerEvent) => {
     buttonDown.current = false;
+    if (eraseSnapshot.current) {
+      const before = eraseSnapshot.current;
+      eraseSnapshot.current = null;
+      const now = useApp.getState().docs.find((x) => x.id === doc.id)?.markups;
+      if (now && now !== before) s.pushUndo(before);
+      return;
+    }
     if (e.button === 2) {
       const start = rightDown.current;
       rightDown.current = null;
@@ -613,7 +719,7 @@ export function Viewer({ doc }: { doc: DocState }) {
       return;
     }
     // Drag-to-draw for two-point and box tools; click-click otherwise.
-    if (['two-point', 'box', 'cutout', 'cutout-ellipse'].includes(def.interaction) && draft.dragFrom && draft.points.length === 1) {
+    if (['two-point', 'box', 'cutout', 'cutout-ellipse', 'text', 'cloudplus'].includes(def.interaction) && draft.dragFrom && draft.points.length === 1) {
       const moved = Math.hypot(e.clientX - draft.dragFrom.x, e.clientY - draft.dragFrom.y) > 4;
       if (moved) completeTwoPoint(constrain(toPage(e), e, draft.points[0]));
     }
@@ -646,8 +752,16 @@ export function Viewer({ doc }: { doc: DocState }) {
     if (s.tool === 'select') {
       const raw = toPage(e);
       const hit = [...markups].reverse().find((m) => hitTest(m, raw, 5 / zoom));
-      if (hit && (hit.type === 'textbox' || hit.type === 'callout')) setEditing(hit.id);
+      if (!hit) return;
+      if (['textbox', 'callout', 'typewriter', 'cloudplus'].includes(hit.type)) setEditing(hit.id);
+      else if (hit.type === 'link') followLink(hit);
+      else if (hit.type === 'attachment' && hit.file) downloadBase64(hit.file.name, hit.file.mime, hit.file.data);
     }
+  };
+
+  const followLink = (m: Markup) => {
+    if (m.link?.uri) window.open(m.link.uri, '_blank', 'noopener');
+    else if (m.link?.page !== undefined) s.setPage(m.link.page);
   };
 
   // The browser's own menu is suppressed; the right button is handled on pointer-up.
@@ -707,8 +821,10 @@ export function Viewer({ doc }: { doc: DocState }) {
     };
   } else if (draft && draft.cursor) {
     const pts = def.interaction === 'freehand' ? draft.points : [...draft.points, draft.cursor];
-    let type = (draft.tool === 'calibrate' ? 'length' : draft.tool === 'viewport' ? 'rectangle' : draft.tool) as MarkupType;
+    const boxed = draft.tool === 'viewport' || draft.tool === 'snapshot' || draft.tool === 'link' || def.interaction === 'text';
+    let type = (draft.tool === 'calibrate' ? 'length' : boxed ? 'rectangle' : draft.tool) as MarkupType;
     let P = pts;
+    if (draft.tool === 'cloudplus' && pts.length >= 3) P = [pts[0], pts[1], pts[2], { x: pts[2].x + 144, y: pts[2].y + 40 }];
     if (draft.tool === 'radius-3pt') {
       const c = pts.length === 3 ? circleFrom3(pts[0], pts[1], pts[2]) : null;
       type = c ? 'radius' : 'polyline';
@@ -719,7 +835,7 @@ export function Viewer({ doc }: { doc: DocState }) {
     preview = {
       id: 'draft', type, page: doc.page, points: P,
       style: draft.tool === 'calibrate' ? { ...s.toolDefaults.length, color: '#00a000' }
-        : draft.tool === 'viewport' ? { ...s.toolDefaults.rectangle, color: '#1a73e8', fill: null, width: 1, lineStyle: 'dashed' }
+        : boxed ? { ...s.toolDefaults.rectangle, color: '#1a73e8', fill: null, width: 1, lineStyle: 'dashed' }
           : s.preset?.style ?? s.toolDefaults[type],
       subject: '', label: '', comment: '', author: '', created: '', modified: '', status: 'None',
       scale: scaleFor(draft.points[0]) ?? undefined, depth: s.preset?.depth ?? 1,
@@ -788,6 +904,9 @@ export function Viewer({ doc }: { doc: DocState }) {
                 width={Math.abs(drag.cur.x - drag.start.x)} height={Math.abs(drag.cur.y - drag.start.y)}
                 fill="#1a73e8" fillOpacity={0.08} stroke="#1a73e8" strokeWidth={1 / zoom} pointerEvents="none" />
             )}
+            {s.tool === 'eraser' && fillCursor && (
+              <circle cx={fillCursor.x} cy={fillCursor.y} r={8 / zoom} fill="none" stroke="#555" strokeWidth={1 / zoom} pointerEvents="none" />
+            )}
             {snapPt && (
               <rect x={snapPt.x - 5 / zoom} y={snapPt.y - 5 / zoom} width={10 / zoom} height={10 / zoom}
                 fill="none" stroke="#00b050" strokeWidth={1.5 / zoom} pointerEvents="none" />
@@ -795,7 +914,10 @@ export function Viewer({ doc }: { doc: DocState }) {
           </svg>
           {editingMarkup && (
             <TextEditor m={editingMarkup} zoom={zoom} onDone={(text) => {
-              if (text !== (editingMarkup.text ?? '')) s.updateMarkups([editingMarkup.id], () => ({ text }));
+              if (text !== (editingMarkup.text ?? '')) {
+                s.updateMarkups([editingMarkup.id], (m) => m.type === 'typewriter'
+                  ? { text, points: typewriterBox(m.points[0], text, m.style.fontSize) } : { text });
+              }
               setEditing(null);
             }} />
           )}
@@ -804,6 +926,15 @@ export function Viewer({ doc }: { doc: DocState }) {
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
     </div>
       {s.tool === 'dynamic-fill' && <DynamicFillBar />}
+      {s.tool === 'stamp' && (
+        <div className="fill-bar" role="toolbar" aria-label="Stamp">
+          <strong>Stamp</strong>
+          <select aria-label="Stamp" value={s.stampName} onChange={(e) => useApp.setState({ stampName: e.target.value })}>
+            {STAMPS.map((x) => <option key={x}>{x}</option>)}
+          </select>
+          <span className="muted">Click on the drawing to place it.</span>
+        </div>
+      )}
       <MeasurePreview markup={preview && MEASURE_TYPES.has(preview.type) && preview.scale ? preview : null} />
     </div>
   );
@@ -867,10 +998,11 @@ function MeasurePreview({ markup }: { markup: Markup | null }) {
 }
 
 function TextEditor({ m, zoom, onDone }: { m: Markup; zoom: number; onDone: (t: string) => void }) {
-  const box = m.type === 'callout' ? [m.points[1], m.points[2]] : [m.points[0], m.points[1]];
+  const [text, setText] = useState(m.text ?? '');
+  const box = m.type === 'callout' ? [m.points[1], m.points[2]] : m.type === 'cloudplus' ? [m.points[2], m.points[3]]
+    : m.type === 'typewriter' ? typewriterBox(m.points[0], text, m.style.fontSize) : [m.points[0], m.points[1]];
   const x = Math.min(box[0].x, box[1].x), y = Math.min(box[0].y, box[1].y);
   const w = Math.abs(box[1].x - box[0].x), h = Math.abs(box[1].y - box[0].y);
-  const [text, setText] = useState(m.text ?? '');
   return (
     <textarea className="text-editor" autoFocus value={text}
       style={{ left: x * zoom, top: y * zoom, width: w * zoom, height: h * zoom, fontSize: m.style.fontSize * zoom, color: m.style.color }}

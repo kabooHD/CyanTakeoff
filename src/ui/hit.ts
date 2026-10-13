@@ -1,11 +1,28 @@
-import { arcPoints, bounds, distToSegment, pointInPolygon, rectCorners } from '../model/measure';
+import { arcPoints, arcThrough, bounds, distToSegment, pointInPolygon, rectCorners, rectPairs } from '../model/measure';
 import type { Markup, Pt } from '../model/types';
 
 /** Outline used for hit-testing and rubber-band selection. */
 export function outline(m: Markup): { pts: Pt[]; closed: boolean } {
   const P = m.points;
   switch (m.type) {
-    case 'rectangle': case 'ellipse': case 'highlight': case 'textbox':
+    case 'highlight': case 'strikeout': case 'underline': case 'squiggly':
+      if (P.length > 2 || m.type !== 'highlight') {
+        const b = bounds(P);
+        return { pts: rectCorners({ x: b.minX, y: b.minY }, { x: b.maxX, y: b.maxY }), closed: true };
+      }
+      return { pts: P.length > 1 ? rectCorners(P[0], P[1]) : P, closed: true };
+    case 'stamp': case 'image': case 'link': case 'typewriter':
+      return { pts: P.length > 1 ? rectCorners(P[0], P[1]) : P, closed: true };
+    case 'cloudplus': {
+      const all = P.length >= 4 ? [...rectCorners(P[0], P[1]), ...rectCorners(P[2], P[3])] : P;
+      const b = bounds(all);
+      return { pts: rectCorners({ x: b.minX, y: b.minY }, { x: b.maxX, y: b.maxY }), closed: true };
+    }
+    case 'arc':
+      return { pts: P.length > 2 ? arcThrough(P[0], P[1], P[2]) : P, closed: false };
+    case 'flag': case 'attachment':
+      return { pts: rectCorners(P[0], { x: P[0].x + 18, y: P[0].y + 20 }), closed: true };
+    case 'rectangle': case 'ellipse': case 'textbox':
       return { pts: P.length > 1 ? rectCorners(P[0], P[1]) : P, closed: true };
     case 'callout':
       return { pts: P.length > 2 ? rectCorners(P[1], P[2]) : P, closed: true };
@@ -43,6 +60,9 @@ const inCutout = (m: Markup, p: Pt) => cutoutAt(m, p) >= 0;
 export function hitTest(m: Markup, p: Pt, tol: number): boolean {
   const { pts, closed } = outline(m);
   const t = tol + m.style.width / 2;
+  if ((m.type === 'strikeout' || m.type === 'underline' || m.type === 'squiggly' || (m.type === 'highlight' && m.points.length > 2))) {
+    return rectPairs(m.points).some(([a, b]) => { const r = bounds([a, b]); return p.x >= r.minX - tol && p.x <= r.maxX + tol && p.y >= r.minY - tol && p.y <= r.maxY + tol; });
+  }
   if (m.type === 'count') return pts.some((q) => Math.hypot(q.x - p.x, q.y - p.y) <= 5 + t);
   if (m.type === 'callout' && distToSegment(p, m.points[0], m.points[1]) <= t) return true;
   if (closed && pointInPolygon(p, pts) && !inCutout(m, p)) return true;

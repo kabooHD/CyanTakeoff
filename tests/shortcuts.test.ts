@@ -10,6 +10,9 @@ const REVU: Record<string, string> = {
   length: 'Shift+Alt+L', polylength: 'Shift+Alt+Q', area: 'Shift+Alt+A', perimeter: 'Shift+Alt+P',
   volume: 'Shift+Alt+V', diameter: 'Shift+Alt+D', radius: 'Shift+Alt+U', angle: 'Shift+Alt+G',
   count: 'Shift+Alt+C', 'dynamic-fill': 'J',
+  cloudplus: 'K', typewriter: 'W', arc: 'Shift+C', dimension: 'Shift+L', stamp: 'S', flag: 'Shift+F',
+  strikeout: 'D', underline: 'U', squiggly: 'Shift+U', image: 'I', snapshot: 'G', link: 'Shift+H',
+  attachment: 'F', eraser: 'Shift+E',
 };
 
 describe('default shortcuts', () => {

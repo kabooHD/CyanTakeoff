@@ -25,9 +25,21 @@ export type MarkupType =
   | 'count'
   | 'angle'
   | 'radius'
-  | 'diameter';
+  | 'diameter'
+  | 'dimension'
+  | 'typewriter'
+  | 'cloudplus'
+  | 'arc'
+  | 'flag'
+  | 'stamp'
+  | 'strikeout'
+  | 'underline'
+  | 'squiggly'
+  | 'image'
+  | 'link'
+  | 'attachment';
 
-export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cutout' | 'ellipse-cutout' | 'viewport' | 'radius-3pt' | 'dynamic-fill';
+export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cutout' | 'ellipse-cutout' | 'viewport' | 'radius-3pt' | 'dynamic-fill' | 'snapshot' | 'eraser' | 'lasso';
 
 /** A hole subtracted from an Area or Volume measurement. Ellipse: two opposite corners. */
 export interface Cutout { kind: 'polygon' | 'ellipse'; points: Pt[] }
@@ -107,6 +119,16 @@ export interface Markup {
   depth?: number;
   /** Holes cut out of an Area or Volume measurement. */
   cutouts?: Cutout[];
+  /** Image markups (image, snapshot): a data: URL. */
+  image?: string;
+  /** File attachment: name, MIME type and base64 contents. */
+  file?: { name: string; mime: string; data: string };
+  /** Hyperlink target: a web address or a page (0-based). */
+  link?: { uri?: string; page?: number };
+  /** Markups sharing a group id move and select together (Revu Group). */
+  groupId?: string;
+  /** Locked markups cannot be moved, resized or deleted (Revu Lock). */
+  locked?: boolean;
   /** Original PDF annotation reference when imported from the file. */
   source?: {
     objectNumber: number;

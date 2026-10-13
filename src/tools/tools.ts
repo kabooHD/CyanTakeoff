@@ -12,6 +12,9 @@ export type Interaction =
   | 'cutout' // polygon cutout inside an Area/Volume: drag = rectangle, or click points
   | 'cutout-ellipse' // ellipse cutout: drag
   | 'fill' // Dynamic Fill: press and hold to flood a shape
+  | 'cloudplus' // drag the cloud, then click where the text box goes
+  | 'text' // drag across text on the drawing: strikethrough, underline, squiggly
+  | 'erase' // drag over pen strokes to erase them
   | 'none';
 
 export interface ToolDef {
@@ -48,6 +51,20 @@ export const TOOLS: ToolDef[] = [
   { id: 'ellipse', name: 'Ellipse', group: 'markup', shortcut: 'E', interaction: 'box', subject: 'Ellipse' },
   { id: 'polygon', name: 'Polygon', group: 'markup', shortcut: 'Shift+P', interaction: 'poly', subject: 'Polygon', closed: true },
   { id: 'cloud', name: 'Cloud', group: 'markup', shortcut: 'C', interaction: 'box', subject: 'Cloud', closed: true },
+  { id: 'cloudplus', name: 'Cloud+', group: 'markup', shortcut: 'K', interaction: 'cloudplus', subject: 'Cloud+' },
+  { id: 'typewriter', name: 'Typewriter', group: 'markup', shortcut: 'W', interaction: 'point', subject: 'Typewriter' },
+  { id: 'arc', name: 'Arc', group: 'markup', shortcut: 'Shift+C', interaction: 'poly', subject: 'Arc', maxPoints: 3 },
+  { id: 'dimension', name: 'Dimension', group: 'markup', shortcut: 'Shift+L', interaction: 'two-point', subject: 'Dimension' },
+  { id: 'stamp', name: 'Stamp', group: 'markup', shortcut: 'S', interaction: 'point', subject: 'Stamp' },
+  { id: 'flag', name: 'Flag', group: 'markup', shortcut: 'Shift+F', interaction: 'point', subject: 'Flag' },
+  { id: 'strikeout', name: 'Strikethrough', group: 'markup', shortcut: 'D', interaction: 'text', subject: 'Strikethrough' },
+  { id: 'underline', name: 'Underline', group: 'markup', shortcut: 'U', interaction: 'text', subject: 'Underline' },
+  { id: 'squiggly', name: 'Squiggly', group: 'markup', shortcut: 'Shift+U', interaction: 'text', subject: 'Squiggly' },
+  { id: 'image', name: 'Image', group: 'markup', shortcut: 'I', interaction: 'point', subject: 'Image' },
+  { id: 'snapshot', name: 'Snapshot', group: 'markup', shortcut: 'G', interaction: 'box', subject: 'Snapshot' },
+  { id: 'link', name: 'Hyperlink', group: 'markup', shortcut: 'Shift+H', interaction: 'box', subject: 'Hyperlink' },
+  { id: 'attachment', name: 'File Attachment', group: 'markup', shortcut: 'F', interaction: 'point', subject: 'File Attachment' },
+  { id: 'eraser', name: 'Eraser', group: 'markup', shortcut: 'Shift+E', interaction: 'erase', subject: '' },
 
   { id: 'calibrate', name: 'Calibrate', group: 'measure', interaction: 'two-point', subject: '' },
   { id: 'viewport', name: 'Add Viewport', group: 'measure', interaction: 'box', subject: '' },
@@ -102,6 +119,18 @@ export const DEFAULT_STYLES: Record<MarkupType, MarkupStyle> = {
   angle: { ...base, color: '#0066ff' },
   radius: { ...base, color: '#0066ff' },
   diameter: { ...base, color: '#0066ff' },
+  dimension: { ...base, color: '#0066ff' },
+  typewriter: { ...base, color: '#000000', fill: null, width: 0, fontSize: 12 },
+  cloudplus: { ...base, fill: '#ffffff', fillOpacity: 1, fontSize: 12 },
+  arc: base,
+  flag: { ...base, color: '#e00000', fill: '#e00000', fillOpacity: 1 },
+  stamp: { ...base, color: '#c00000', width: 2, fontSize: 18 },
+  strikeout: { ...base, color: '#ff0000' },
+  underline: { ...base, color: '#0066ff' },
+  squiggly: { ...base, color: '#00a000' },
+  image: { ...base, width: 0 },
+  link: { ...base, color: '#0066ff', lineStyle: 'dashed' },
+  attachment: { ...base, color: '#0066ff' },
 };
 
 /** Normalised combo string for a keyboard event, e.g. "Ctrl+Shift+S". */

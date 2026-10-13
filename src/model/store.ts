@@ -75,6 +75,10 @@ interface AppState {
   scaleDialog: ScaleDialogState | null;
   /** The dialog to reopen once the Calibrate tool has picked two points. */
   calibrateFor: ScaleDialogState | null;
+  /** Stamp placed by the Stamp tool. */
+  stampName: string;
+  /** Hyperlink dialog for a new (or existing, by id) link rectangle. */
+  linkDialog: { page: number; rect: [Pt, Pt]; id?: string } | null;
   /** Shift+Alt+U picks the radius tool used last (Revu). */
   radiusTool: 'radius' | 'radius-3pt';
   /** Viewport highlighted from the Measurements panel. */
@@ -95,6 +99,8 @@ interface AppState {
   updateMarkups(ids: string[], fn: (m: Markup) => Partial<Markup>, opts?: { history?: boolean }): void;
   pushUndo(snapshot: Markup[]): void;
   deleteMarkups(ids: string[]): void;
+  /** Replace the document's markups (tools that rewrite several at once). */
+  setMarkups(markups: Markup[], opts?: { history?: boolean }): void;
   select(ids: string[], add?: boolean): void;
   undo(): void;
   redo(): void;
@@ -219,6 +225,8 @@ export const useApp = create<AppState>((set, get) => {
     scaleDialog: null,
     calibrateFor: null,
     radiusTool: 'radius',
+    stampName: 'APPROVED',
+    linkDialog: null,
     activeViewport: null,
     savedScales: prefs.savedScales ?? [],
     status: 'Ready',
@@ -313,7 +321,13 @@ export const useApp = create<AppState>((set, get) => {
       }));
     },
     pushUndo: (snapshot) => withDoc((d) => ({ undo: [...d.undo, snapshot], redo: [] })),
+    setMarkups(markups, opts = {}) {
+      withDoc((d) => ({ markups, dirty: true, ...(opts.history === false ? {} : { undo: [...d.undo, d.markups], redo: [] }) }));
+    },
     deleteMarkups(ids) {
+      const d0 = activeDoc();
+      // Locked markups cannot be deleted (Revu).
+      ids = ids.filter((id) => !d0?.markups.find((m) => m.id === id)?.locked);
       if (!ids.length) return;
       const set_ = new Set(ids);
       withDoc((d) => ({

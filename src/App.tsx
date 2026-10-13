@@ -6,7 +6,7 @@ import { DocTabs, MenuBar, StatusBar, Toolbar } from './ui/Chrome';
 import { LeftPanel, RightPanel, SideTabs } from './ui/Panels';
 import { MarkupsList } from './ui/MarkupsList';
 import { Viewer, viewerApi } from './ui/Viewer';
-import { AboutDialog, ScaleDialog, ShortcutsDialog } from './ui/Dialogs';
+import { AboutDialog, LinkDialog, ScaleDialog, ShortcutsDialog } from './ui/Dialogs';
 import { openFile, openFileObject, openSample } from './ui/actions';
 import { Icon } from './ui/icons';
 
@@ -119,6 +119,7 @@ export function App() {
       </div>
       <StatusBar />
       <ScaleDialog />
+      <LinkDialog />
       {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
       {dialog === 'about' && <AboutDialog onClose={() => setDialog(null)} />}
     </div>

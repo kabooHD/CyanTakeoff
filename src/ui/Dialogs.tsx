@@ -256,3 +256,46 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
     </Modal>
   );
 }
+
+/** Revu's Hyperlink dialog: a web address or a page in this document. */
+export function LinkDialog() {
+  const s = useApp();
+  const doc = useActiveDoc();
+  const dlg = s.linkDialog;
+  const [kind, setKind] = useState<'uri' | 'page'>('uri');
+  const [uri, setUri] = useState('https://');
+  const [pageNo, setPageNo] = useState('1');
+  if (!dlg || !doc) return null;
+  const close = () => useApp.setState({ linkDialog: null });
+  const n = doc.loaded.pages.length;
+  const target = kind === 'uri' ? (/^[a-z]+:\/\/./i.test(uri) || /^mailto:/i.test(uri) ? { uri } : null)
+    : Number(pageNo) >= 1 && Number(pageNo) <= n ? { page: Number(pageNo) - 1 } : null;
+  const apply = () => {
+    if (!target) return;
+    const m = s.addMarkup({
+      type: 'link', page: dlg.page, points: dlg.rect, style: s.toolDefaults.link, subject: 'Hyperlink', link: target,
+      comment: target.uri ?? `Page ${(target.page ?? 0) + 1}`,
+    });
+    s.select([m.id]);
+    close();
+  };
+  return (
+    <Modal title="Hyperlink" onClose={close}>
+      <div className="scale-dialog" onKeyDown={(e) => e.key === 'Enter' && apply()}>
+        <div className="form-row">
+          <label><input type="radio" checked={kind === 'uri'} onChange={() => setKind('uri')} /> Open web address</label>
+          <input aria-label="Web address" value={uri} onChange={(e) => setUri(e.target.value)} onFocus={() => setKind('uri')} style={{ width: 240 }} />
+        </div>
+        <div className="form-row">
+          <label><input type="radio" checked={kind === 'page'} onChange={() => setKind('page')} /> Jump to page</label>
+          <input aria-label="Page number" type="number" min={1} max={n} value={pageNo} onChange={(e) => setPageNo(e.target.value)} onFocus={() => setKind('page')} style={{ width: 70 }} /> of {n}
+        </div>
+        <div className="modal-actions">
+          <span className="spacer" />
+          <button className="primary" disabled={!target} onClick={apply}>OK</button>
+          <button onClick={close}>Cancel</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}

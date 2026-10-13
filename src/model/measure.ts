@@ -63,6 +63,29 @@ export function arcPoints(center: Pt, start: Pt, end: Pt | undefined, dir: 1 | -
   });
 }
 
+/** Points along the circular arc from `a` to `b` passing through `via`; a straight line if collinear. */
+export function arcThrough(a: Pt, b: Pt, via: Pt, n = 48): Pt[] {
+  const c = circleFrom3(a, via, b);
+  if (!c) return [a, b];
+  const ang = (p: Pt) => Math.atan2(p.y - c.center.y, p.x - c.center.x);
+  const a0 = ang(a), a1 = ang(b), av = ang(via);
+  const norm = (t: number) => ((t % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  // Sweep the way that passes through `via`.
+  let sweep = norm(a1 - a0);
+  if (norm(av - a0) > sweep) sweep -= 2 * Math.PI;
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const t = a0 + (sweep * i) / n;
+    return { x: c.center.x + c.r * Math.cos(t), y: c.center.y + c.r * Math.sin(t) };
+  });
+}
+
+/** Rectangles of a text markup or text highlight: consecutive point pairs (opposite corners). */
+export function rectPairs(P: Pt[]): [Pt, Pt][] {
+  const out: [Pt, Pt][] = [];
+  for (let i = 0; i + 1 < P.length; i += 2) out.push([P[i], P[i + 1]]);
+  return out;
+}
+
 export const polygonArea = (pts: Pt[]) => Math.abs(signedArea(pts));
 
 export function centroid(pts: Pt[]): Pt {
@@ -327,7 +350,7 @@ export function volumeLabel(unit: LengthUnit): string {
 
 // ---------- markup measurements ----------
 
-export const MEASURE_TYPES = new Set(['length', 'polylength', 'area', 'perimeter', 'volume', 'count', 'angle', 'radius', 'diameter']);
+export const MEASURE_TYPES = new Set(['dimension', 'length', 'polylength', 'area', 'perimeter', 'volume', 'count', 'angle', 'radius', 'diameter']);
 
 export interface Measurement {
   length?: number;
@@ -377,6 +400,7 @@ export function measure(m: Pick<Markup, 'type' | 'points' | 'scale' | 'depth' | 
   const fmt = resolveFormat(s);
   const len = (v: number) => formatLength(v, s.unit, fmt.decimals, fmt.den, fmt.trim);
   switch (m.type) {
+    case 'dimension':
     case 'length':
     case 'polylength':
     case 'perimeter': {

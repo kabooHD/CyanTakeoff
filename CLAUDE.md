@@ -11,6 +11,7 @@ cloud-native, no desktop version ever.
 - `docs/revu-behaviour.md`: Revu behaviour spec (our own summary of
   Bluebeam's help pages). Follow it when building features.
 - `docs/formats/revu.md`: how Revu stores markups and measurements in PDF.
+- `docs/revu-shortcuts.md`: Revu's full default shortcut table (reference).
 
 ## Stack and layout
 TypeScript, React, zustand, pdf.js (legacy build), pdf-lib, Vite, vitest,
@@ -67,7 +68,10 @@ preview server can die between turns: restart it if e2e cannot connect.
 - Latest Revu is 21.11 (Sept 2026). No Revu 21 sample files yet.
 
 ## Status (2026-10-13)
-Done: Revu-style workspace and official default shortcuts; markup tools;
+Done: Revu-style workspace and official default shortcuts; markup tools
+(incl. Cloud+, Typewriter, Arc, Dimension, Stamp, Flag, Strikethrough/
+Underline/Squiggly and text Highlight, Image, Snapshot, Hyperlink, File
+Attachment, Eraser);
 length, polylength, area, perimeter, volume, count, angle, radius, diameter;
 cutouts (polygon/ellipse, Revu fuse/trim rules); Dynamic Fill;
 separate X/Y scales; 3-point radius; viewports (regions with their own scale, Revu

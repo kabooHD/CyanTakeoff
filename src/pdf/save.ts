@@ -3,7 +3,7 @@ import {
   type PDFFont, type PDFObject, type PDFRef,
 } from 'pdf-lib';
 import type { Cutout, Markup, Pt, Scale, Viewport } from '../model/types';
-import { arcPoints, centroid, cloudSegments, measure } from '../model/measure';
+import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import { refKey, removeAnnots, type CTData, type PageInfo } from './document';
 import { isRulerViewport } from './importAnnots';
 import { N, hexToRgb, pdfDate, writeMeasure } from './pdfutil';
@@ -111,6 +111,20 @@ function textAt(o: Ops, font: PDFFont, s: string, size: number, u: number, v: nu
   return w;
 }
 
+/** Wrapped lines of text laid out from the top of box (a, c), in the page's reading direction. */
+function textInBox(o: Ops, font: PDFFont, text: string, size: number, a: Pt, c: Pt, rgb: string, fr: Frame, align: 'left' | 'center' = 'left') {
+  const cs = [a, c].map((q) => proj(fr, q));
+  const u0 = Math.min(cs[0].u, cs[1].u), u1 = Math.max(cs[0].u, cs[1].u);
+  const v0 = Math.min(cs[0].v, cs[1].v), v1 = Math.max(cs[0].v, cs[1].v);
+  let v = v1 - size - 2;
+  for (const line of wrap(font, text, size, u1 - u0 - 6)) {
+    if (v < v0 - size * 0.3) break;
+    const w = font.widthOfTextAtSize(safeText(font, line), size);
+    textAt(o, font, line, size, align === 'center' ? (u0 + u1 - w) / 2 : u0 + 3, v, rgb, fr);
+    v -= size * 1.2;
+  }
+}
+
 function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], rot = 0) {
   const fr = textFrame(rot);
   const o = new Ops();
@@ -128,6 +142,95 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
   const meas = measure(m);
 
   switch (m.type) {
+    case 'dimension': {
+      const size = Math.max(7, st.width * 5);
+      o.moveTo(P[0]); o.lineTo(P[1]); o.add('S');
+      arrowHead(o, P[1], P[0], size); arrowHead(o, P[0], P[1], size);
+      const ang = Math.atan2(P[1].y - P[0].y, P[1].x - P[0].x) + Math.PI / 2;
+      for (const p of [P[0], P[1]]) {
+        o.moveTo({ x: p.x + Math.cos(ang) * 8, y: p.y + Math.sin(ang) * 8 });
+        o.lineTo({ x: p.x - Math.cos(ang) * 8, y: p.y - Math.sin(ang) * 8 }); o.add('S');
+      }
+      break;
+    }
+    case 'arc':
+      o.poly(P.length > 2 ? arcThrough(P[0], P[1], P[2]) : P, false); o.add('S');
+      break;
+    case 'typewriter':
+      o.grow(P[0]); o.grow(P[1]);
+      textInBox(o, font, m.text ?? '', st.fontSize, P[0], P[1], rgb, fr);
+      break;
+    case 'cloudplus': {
+      const cloud = rectCorners(P[0], P[1]);
+      const segs = cloudSegments(cloud, Math.max(14, st.width * 8));
+      segs.forEach(([p0, c1, c2, p1], i) => { if (!i) o.moveTo(p0); o.curveTo(c1, c2, p1); });
+      o.add('h S');
+      if (P.length >= 4) {
+        const b = bounds([P[2], P[3]]), cb = bounds(cloud);
+        const target = { x: b.minX + b.w / 2, y: b.minY + b.h / 2 };
+        const from = { x: Math.max(cb.minX, Math.min(cb.maxX, target.x)), y: Math.max(cb.minY, Math.min(cb.maxY, target.y)) };
+        o.moveTo(from); o.lineTo(calloutAttach(from, P[2], P[3])); o.add('S');
+        o.poly(rectCorners(P[2], P[3]), true); o.add(paint);
+        textInBox(o, font, m.text ?? '', st.fontSize, P[2], P[3], rgb, fr);
+      }
+      break;
+    }
+    case 'flag': {
+      const p = P[0];
+      o.add('0 0 0 RG 1.2 w'); o.moveTo(p); o.lineTo({ x: p.x, y: p.y - 20 }); o.add('S');
+      o.add(`${rgb} RG ${fillRgb ?? rgb} rg 0.75 w`);
+      o.poly([p, { x: p.x + 14, y: p.y - 4 }, { x: p.x, y: p.y - 9 }], true); o.add('B');
+      break;
+    }
+    case 'attachment': {
+      const p = P[0];
+      o.add('1 1 1 rg 0.75 w');
+      o.poly([p, { x: p.x + 18, y: p.y }, { x: p.x + 18, y: p.y - 18 }, { x: p.x, y: p.y - 18 }], true); o.add('B');
+      o.moveTo({ x: p.x + 11, y: p.y - 5 }); o.lineTo({ x: p.x + 11, y: p.y - 13 });
+      o.curveTo({ x: p.x + 11, y: p.y - 16 }, { x: p.x + 6, y: p.y - 16 }, { x: p.x + 6, y: p.y - 13 });
+      o.lineTo({ x: p.x + 6, y: p.y - 4 });
+      o.curveTo({ x: p.x + 6, y: p.y - 2 }, { x: p.x + 9.2, y: p.y - 2 }, { x: p.x + 9.2, y: p.y - 4 });
+      o.lineTo({ x: p.x + 9.2, y: p.y - 12 }); o.add('S');
+      break;
+    }
+    case 'stamp': {
+      const b = bounds(P);
+      o.poly(rectCorners({ x: b.minX, y: b.minY }, { x: b.maxX, y: b.maxY }), true); o.add('S');
+      const text = m.text ?? '';
+      const size = Math.min(b.h * 0.42, (b.w * 1.6) / Math.max(4, text.length));
+      const c = { x: b.minX + b.w / 2, y: b.minY + b.h / 2 };
+      const q = proj(fr, c);
+      const t = safeText(font, text);
+      const w = font.widthOfTextAtSize(t, size);
+      textAt(o, font, t, size, q.u - w / 2, q.v - size * 0.3 + b.h * 0.08, rgb, fr);
+      const sub = safeText(font, `${m.author} ${new Date(m.created).toLocaleDateString()}`);
+      const s2 = Math.max(5, size * 0.38);
+      textAt(o, font, sub, s2, q.u - font.widthOfTextAtSize(sub, s2) / 2, q.v - b.h * 0.36, rgb, fr);
+      break;
+    }
+    case 'image': {
+      const b = bounds(P);
+      o.grow({ x: b.minX, y: b.minY }); o.grow({ x: b.maxX, y: b.maxY });
+      o.add(`q ${f(b.w)} 0 0 ${f(b.h)} ${f(b.minX)} ${f(b.minY)} cm /Im0 Do Q`);
+      break;
+    }
+    case 'link':
+      o.grow(P[0]); o.grow(P[1]);
+      break;
+    case 'strikeout': case 'underline': case 'squiggly':
+      for (const [a, c] of rectPairs(P)) {
+        const r = bounds([a, c]);
+        o.grow({ x: r.minX, y: r.minY }); o.grow({ x: r.maxX, y: r.maxY });
+        if (m.type === 'strikeout') { o.moveTo({ x: r.minX, y: r.minY + r.h / 2 }); o.lineTo({ x: r.maxX, y: r.minY + r.h / 2 }); }
+        else if (m.type === 'underline') { o.moveTo({ x: r.minX, y: r.minY + r.h * 0.08 }); o.lineTo({ x: r.maxX, y: r.minY + r.h * 0.08 }); }
+        else {
+          const amp = Math.max(1, r.h * 0.08), step = Math.max(2, r.h * 0.2);
+          o.moveTo({ x: r.minX, y: r.minY + amp });
+          for (let x = r.minX, k = 0; x < r.maxX; x += step, k++) o.lineTo({ x: Math.min(x + step, r.maxX), y: r.minY + amp + (k % 2 ? amp : -amp) });
+        }
+        o.add('S');
+      }
+      break;
     case 'line': case 'arrow': case 'length':
       o.moveTo(P[0]); o.lineTo(P[1]); o.add('S');
       if (m.type === 'arrow') arrowHead(o, P[0], P[1], Math.max(8, st.width * 5));
@@ -175,6 +278,10 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
       break;
     }
     case 'rectangle': case 'highlight': {
+      if (m.type === 'highlight' && P.length > 2) {
+        for (const [a, c] of rectPairs(P)) { o.poly([a, { x: c.x, y: a.y }, c, { x: a.x, y: c.y }], true); o.add('f'); }
+        break;
+      }
       const [a, c] = P;
       o.poly([a, { x: c.x, y: a.y }, c, { x: a.x, y: c.y }], true);
       o.add(m.type === 'highlight' ? 'f' : paint);
@@ -222,7 +329,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
   }
 
   if (meas && m.type !== 'count') {
-    const pos = m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter'
+    const pos = m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter' || m.type === 'dimension'
       ? { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 }
       : m.type === 'angle' ? P[1]
         : centroid(P);
@@ -230,7 +337,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
     const t = safeText(font, meas.text);
     const w = font.widthOfTextAtSize(t, size);
     const q = proj(fr, pos);
-    const lift = m.type === 'angle' ? 8 : m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter' ? 3 : 0;
+    const lift = m.type === 'angle' ? 8 : m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter' || m.type === 'dimension' ? 3 : 0;
     textAt(o, font, t, size, q.u - w / 2 + (m.type === 'angle' ? 8 + w / 2 : 0), q.v + lift, rgb, fr);
   }
   o.add('Q');
@@ -244,6 +351,8 @@ const SUBTYPE: Record<Markup['type'], string> = {
   rectangle: 'Square', ellipse: 'Circle', highlight: 'Highlight',
   textbox: 'FreeText', callout: 'FreeText', note: 'Text',
   angle: 'PolyLine', radius: 'Polygon', diameter: 'Circle',
+  dimension: 'Line', typewriter: 'FreeText', cloudplus: 'Polygon', arc: 'PolyLine', flag: 'Text', stamp: 'Stamp',
+  strikeout: 'StrikeOut', underline: 'Underline', squiggly: 'Squiggly', image: 'Stamp', link: 'Link', attachment: 'FileAttachment',
 };
 
 /** Measurement intents, as Revu writes them. */
@@ -251,6 +360,7 @@ const INTENT: Partial<Record<Markup['type'], string>> = {
   length: 'LineDimension', polylength: 'PolyLineDimension', perimeter: 'PolyLineDimension',
   area: 'PolygonDimension', volume: 'PolygonVolume', count: 'PolygonCount',
   angle: 'PolyLineAngle', radius: 'PolygonRadius', diameter: 'CircleDimension',
+  dimension: 'LineDimension', typewriter: 'FreeTextTypeWriter', cloudplus: 'PolygonCloud',
 };
 
 const toPdfPt = (p: Pt, page: PageInfo) => {
@@ -263,8 +373,10 @@ function ctData(m: Markup, P: Pt[]): CTData {
   return {
     v: 1, type: m.type, label: m.label || undefined, status: m.status !== 'None' ? m.status : undefined,
     depth: m.depth, fillOpacity: m.style.fillOpacity, lineStyle: m.style.lineStyle,
-    points: m.type === 'count' ? P.flatMap((p) => [p.x, p.y]) : undefined,
-    comment: measure(m) && m.comment ? m.comment : undefined,
+    points: m.type === 'count' || m.type === 'arc' || m.type === 'cloudplus' ? P.flatMap((p) => [p.x, p.y]) : undefined,
+    comment: measure(m) || m.type === 'cloudplus' || m.type === 'stamp' ? m.comment || undefined : undefined,
+    text: m.type === 'stamp' || m.type === 'cloudplus' ? m.text : undefined,
+    groupId: m.groupId,
   };
 }
 
@@ -311,7 +423,17 @@ function buildCount(doc: PDFDocument, m: Markup, page: PageInfo): PDFRef[] {
   return refs;
 }
 
-function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo): PDFRef[] {
+/** /QuadPoints for rectangles given as point pairs (PDF space). */
+function quads(P: Pt[]): number[] {
+  return rectPairs(P).flatMap(([a, c]) => {
+    const r = bounds([a, c]);
+    return [r.minX, r.maxY, r.maxX, r.maxY, r.minX, r.minY, r.maxX, r.minY];
+  });
+}
+
+const base64ToBytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
+
+function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, image?: PDFRef, pageRefs: PDFRef[] = []): PDFRef[] {
   if (m.type === 'count') return buildCount(doc, m, page);
   const ctx = doc.context;
   const P = toPdf(m, page);
@@ -327,7 +449,7 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo):
   });
   const ap = ctx.stream(ops, {
     Type: 'XObject', Subtype: 'Form', BBox: bbox,
-    Resources: { Font: { Helv: font.ref }, ExtGState: { GS0: gs } },
+    Resources: { Font: { Helv: font.ref }, ExtGState: { GS0: gs }, ...(image ? { XObject: { Im0: image } } : {}) },
   });
   const flat = (pts: Pt[]) => pts.flatMap((p) => [p.x, p.y]);
   const meas = measure(m);
@@ -340,12 +462,12 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo):
     T: PDFHexString.fromText(m.author),
     Subj: PDFHexString.fromText(m.subject),
     // Like Revu, a measurement's /Contents is its displayed value.
-    Contents: PDFHexString.fromText(m.type === 'textbox' || m.type === 'callout' ? m.text ?? '' : meas ? meas.text : m.comment),
+    Contents: PDFHexString.fromText(m.type === 'textbox' || m.type === 'callout' || m.type === 'typewriter' || m.type === 'cloudplus' ? m.text ?? '' : meas ? meas.text : m.comment),
     Label: PDFHexString.fromText(m.label),
     FillOpacity: st.fillOpacity,
     M: PDFString.of(now),
     CreationDate: PDFString.of(pdfDate(new Date(m.created))),
-    F: 4, // print
+    F: m.locked ? 4 | 128 : 4, // print (+ locked)
     C: hexToRgb(st.color),
     CA: st.opacity,
     BS: { Type: 'Border', W: st.width, S: st.lineStyle === 'solid' ? 'S' : 'D' },
@@ -357,26 +479,51 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo):
   switch (SUBTYPE[m.type]) {
     case 'Line':
       entries.L = flat(P);
-      entries.LE = [N('None'), N(m.type === 'arrow' ? 'OpenArrow' : 'None')];
+      entries.LE = m.type === 'dimension' ? [N('OpenArrow'), N('OpenArrow')] : [N('None'), N(m.type === 'arrow' ? 'OpenArrow' : 'None')];
       break;
     case 'PolyLine':
-      entries.Vertices = flat(P);
+      // An arc is written as its curve; the three picked points stay in CTData.
+      entries.Vertices = flat(m.type === 'arc' && P.length > 2 ? arcThrough(P[0], P[1], P[2]) : P);
       break;
     case 'Polygon':
       // Revu writes a radius as [arc start, center, arc end]; a full circle ends at its start.
-      entries.Vertices = flat(m.type === 'radius' ? [P[1], P[0], P[2] ?? P[1]] : P);
-      if (m.type === 'cloud') entries.BE = { S: 'C', I: 1 };
+      entries.Vertices = flat(m.type === 'radius' ? [P[1], P[0], P[2] ?? P[1]] : m.type === 'cloudplus' ? rectCorners(P[0], P[1]) : P);
+      if (m.type === 'cloud' || m.type === 'cloudplus') entries.BE = { S: 'C', I: 1 };
       break;
+    case 'StrikeOut': case 'Underline': case 'Squiggly':
+      entries.QuadPoints = quads(P);
+      break;
+    case 'Stamp': {
+      const b = bounds(P);
+      entries.Rect = [b.minX, b.minY, b.maxX, b.maxY];
+      entries.Name = N(m.type === 'image' ? 'Image' : (m.text ?? 'Draft').replace(/[^A-Za-z0-9]+/g, ''));
+      break;
+    }
+    case 'Link': {
+      const b = bounds(P);
+      entries.Rect = [b.minX, b.minY, b.maxX, b.maxY];
+      entries.Border = [0, 0, 0];
+      if (m.link?.uri) entries.A = { S: 'URI', URI: PDFString.of(m.link.uri) };
+      else if (m.link?.page !== undefined && pageRefs[m.link.page]) entries.Dest = [pageRefs[m.link.page], N('Fit')];
+      break;
+    }
+    case 'FileAttachment': {
+      entries.Rect = [P[0].x, P[0].y - 18, P[0].x + 18, P[0].y];
+      entries.Name = N('Paperclip');
+      if (m.file) {
+        const bytes = base64ToBytes(m.file.data);
+        const ef = ctx.register(ctx.flateStream(bytes, { Type: 'EmbeddedFile', Params: { Size: bytes.length } }));
+        entries.FS = ctx.obj({ Type: 'Filespec', F: PDFString.of(m.file.name), UF: PDFHexString.fromText(m.file.name), EF: { F: ef } });
+      }
+      break;
+    }
     case 'Ink':
       entries.InkList = [flat(P)];
       break;
-    case 'Highlight': {
-      const xs = P.map((p) => p.x), ys = P.map((p) => p.y);
-      const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-      entries.QuadPoints = [x0, y1, x1, y1, x0, y0, x1, y0];
+    case 'Highlight':
+      entries.QuadPoints = quads(P.length > 2 ? P : [P[0], P[1]]);
       entries.C = hexToRgb(st.fill ?? st.color);
       break;
-    }
     case 'FreeText': {
       const [r, g, b] = hexToRgb(st.color);
       entries.DA = PDFString.of(`${f(r)} ${f(g)} ${f(b)} rg /Helv ${f(st.fontSize)} Tf`);
@@ -401,8 +548,8 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo):
       break;
     }
     case 'Text':
-      entries.Name = 'Comment';
-      entries.Rect = [P[0].x, P[0].y - 18, P[0].x + 18, P[0].y];
+      entries.Name = m.type === 'flag' ? 'Flag' : 'Comment';
+      entries.Rect = [P[0].x, P[0].y - 20, P[0].x + 18, P[0].y];
       break;
   }
   if (INTENT[m.type]) entries.IT = INTENT[m.type];
@@ -435,15 +582,24 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
   for (let p = 0; p < doc.getPageCount(); p++) removeAnnots(doc, p, remove);
 
   const font = await doc.embedFont(StandardFonts.Helvetica);
+  const pageRefs = doc.getPages().map((pg) => pg.ref);
   for (const m of input.markups) {
     if (m.source && !m.source.dirty) continue;
+    let image: PDFRef | undefined;
+    if (m.type === 'image' && m.image) {
+      const [, mime, b64] = /^data:([^;]+);base64,(.*)$/.exec(m.image) ?? [];
+      if (b64) {
+        const bytes = base64ToBytes(b64);
+        image = (mime === 'image/jpeg' ? await doc.embedJpg(bytes) : await doc.embedPng(bytes)).ref;
+      }
+    }
     const page = doc.getPage(m.page);
     let annots = page.node.lookup(N('Annots'));
     if (!(annots instanceof PDFArray)) {
       annots = doc.context.obj([]);
       page.node.set(N('Annots'), annots);
     }
-    for (const ref of buildAnnot(doc, font, m, input.pages[m.page])) {
+    for (const ref of buildAnnot(doc, font, m, input.pages[m.page], image, pageRefs)) {
       (annots as PDFArray).push(ref);
       // Markup annotations reference their page.
       (doc.context.lookup(ref) as PDFDict).set(N('P'), page.ref);

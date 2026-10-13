@@ -361,6 +361,79 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert((await page.locator('.sb-scale').innerText()).startsWith('1" = 20'), 'undo restores the previous page scale');
 }
 
+// Markup tools added for Revu parity, in the empty Conference room of sheet A-101.
+{
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(800);
+  const rowsBefore = await page.locator('.ml-table tbody tr').count();
+  const click = async (x, y) => { const p = await toScreen(x, y); await page.mouse.click(p.x, p.y); };
+  const drag = async (a, b) => {
+    const p = await toScreen(...a), q = await toScreen(...b);
+    await page.mouse.move(p.x, p.y); await page.mouse.down(); await page.mouse.move(q.x, q.y, { steps: 6 }); await page.mouse.up();
+  };
+  await page.keyboard.press('Control+Shift+F8'); // content snap off for exact clicks
+  await page.keyboard.press('Shift+L'); await click(44, 36); await click(54, 36);
+  await page.keyboard.press('w'); await click(44, 12); await page.keyboard.type('Hello typewriter'); await page.keyboard.press('Escape');
+  await page.keyboard.press('s'); await click(52, 14);
+  await page.keyboard.press('d'); await drag([47.5, 31.2], [56, 29.6]);
+  await page.waitForFunction(() => document.querySelector('.ml-table tbody')?.textContent?.includes('Strikethrough'));
+  await page.keyboard.press('Shift+F'); await click(57, 34);
+  await page.keyboard.press('k'); await drag([44, 26], [50, 21]); await click(52, 27); await page.keyboard.type('Check this'); await page.keyboard.press('Escape');
+  await page.keyboard.press('Shift+C'); await click(44, 4); await click(54, 4); await click(49, 8);
+  await page.keyboard.press('Control+Shift+F8');
+  await page.screenshot({ path: `${OUT}/09-markup-tools.png` });
+  const list = await page.locator('.ml-table tbody').innerText();
+  for (const subj of ['Dimension', 'Typewriter', 'Stamp', 'Strikethrough', 'Flag', 'Cloud+', 'Arc']) assert(list.includes(subj), `${subj} markup created ${list.includes(subj) ? '' : list}`);
+  assert(list.includes(`10'-0"`), 'Dimension shows its length');
+  assert(await page.locator('.ml-table tbody tr').count() === rowsBefore + 7, 'seven markups added');
+
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
+  const f = `${OUT}/saved-tools.pdf`;
+  await dl.saveAs(f);
+  await page.waitForTimeout(800);
+  const pdfDoc = await PDFDocument.load(readFileSync(f));
+  const subs = pdfDoc.getPage(0).node.lookup(PDFName.of('Annots'), PDFArray).asArray().map((r) => pdfDoc.context.lookup(r, PDFDict).get(PDFName.of('Subtype')).toString());
+  for (const t of ['/StrikeOut', '/Stamp', '/FreeText', '/Text', '/PolyLine', '/Polygon', '/Line']) assert(subs.includes(t), `saved as ${t}`);
+  const after = await page.locator('.ml-table tbody').innerText();
+  for (const subj of ['Dimension', 'Typewriter', 'Stamp', 'Strikethrough', 'Flag', 'Cloud+', 'Arc']) assert(after.includes(subj), `${subj} survives save and reload`);
+  assert(after.includes('Hello typewriter') || (await page.locator('.markup-text.typewriter').allInnerTexts()).some((t) => t.includes('Hello typewriter')), 'typewriter text kept');
+
+  // Hyperlink to page 2, followed by double-click.
+  await page.keyboard.press('Control+Shift+F8');
+  await page.keyboard.press('Shift+H'); await drag([44, 38.5], [48, 37]);
+  const ld = page.getByRole('dialog', { name: 'Hyperlink' });
+  await ld.getByLabel('Jump to page').check();
+  await ld.getByLabel('Page number').fill('2');
+  await ld.getByRole('button', { name: 'OK' }).click();
+  await click(46, 37.8); // select it
+  { const p = await toScreen(46, 37.8); await page.mouse.dblclick(p.x, p.y); }
+  await page.waitForTimeout(300);
+  assert((await page.locator('.statusbar input').first().inputValue()) === '2', 'double-clicking a hyperlink jumps to its page');
+  await page.keyboard.press('Home'); await page.waitForTimeout(500);
+
+  // Pen stroke split by the Eraser.
+  const pens = async () => (await page.locator('.ml-table tbody').innerText()).split('\nPen').length - 1;
+  const pen0 = await pens();
+  await page.keyboard.press('p'); await drag([44, 16.5], [56, 16.5]);
+  await page.keyboard.press('Shift+E'); await drag([50, 18], [50, 15]);
+  await page.keyboard.press('Escape');
+  assert(await pens() === pen0 + 2, `the eraser splits a pen stroke in two (${pen0} -> ${await pens()})`);
+
+  // Snapshot of a region, pasted as an image; then an Image from a file.
+  const imgs = async () => (await page.locator('.ml-table tbody').innerText()).split('Snapshot').length - 1;
+  await page.keyboard.press('g'); await drag([42, 40], [60, 30]);
+  await page.waitForTimeout(800);
+  await page.keyboard.press('Control+V');
+  assert(await imgs() === 1, 'a snapshot pastes as an image markup');
+  await page.keyboard.press('i');
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), click(30, 10)]);
+  await chooser.setFiles(`${OUT}/02-opened.png`);
+  await page.waitForFunction(() => document.querySelector('.ml-table tbody')?.textContent?.includes('Image'));
+  assert(await page.locator('.markup-layer image').count() >= 2, 'image markups are drawn');
+  await page.keyboard.press('Control+Shift+F8');
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],
