@@ -12,6 +12,7 @@ import { openCompare } from './Compare';
 import { openPrint } from './Print';
 import { addBookmark } from './BookmarksPanel';
 import { checkSpelling, useSpellContent } from './Spell';
+import { useQuantityLink } from './QuantityLink';
 import { stepView, viewHistory } from './Rulers';
 import { openSignDialog } from './DigitalSignature';
 import { useFormsDialog } from './FormsEditor';
@@ -151,6 +152,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Batch Link…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'batch-link' }) },
       { label: 'Slip Sheet…', disabled: noDoc, action: () => openPagesDialog('slip-sheet') },
       { label: 'Flatten…', disabled: noDoc, action: () => openPagesDialog('flatten') },
+      { label: 'Quantity Link (Excel)…', disabled: noDoc, action: () => useQuantityLink.setState({ open: true }) },
       { label: 'Summary (Excel)', disabled: noDoc, action: () => { const d = activeDoc(); if (d) exportSummaryXlsx(d.markups, allColumns(d)); } },
       { label: 'Summary (PDF)', disabled: noDoc, action: () => { const d = activeDoc(); if (d) exportSummaryPdf(d.markups, allColumns(d)); } },
       { label: 'Combine Files…', action: combineFiles },

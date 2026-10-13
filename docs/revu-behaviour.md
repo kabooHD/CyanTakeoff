@@ -258,6 +258,16 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - With the Area or Volume tool, clicking a cutout converts it into its own
   measurement (Shift: all cutouts of that markup); the cutout stays.
 
+## Quantity Link (Excel)
+Revu's Quantity Link is an Excel add-in: right-click a cell > Quantity Link
+> Create, choose the PDF, a total (length, area, volume, count…) and
+filters, which are Markups List columns (Subject, Layer, Page, Space,
+custom columns). Values follow markup changes; filters are changed by hand
+(Manage). Flattening markups breaks links. Ours: the links live in
+CyanTakeoff (Batch > Quantity Link), totals are live in the dialog, and
+Update Workbook writes them into the workbook's cells, keeping the rest of
+the workbook; Excel recalculates on open.
+
 ## Sequences (Tool Chest)
 A Sequence tool is a Tool Chest tool whose value goes up each time it is
 placed; values can be numbers or letters. Once a sequence is started on the

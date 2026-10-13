@@ -1502,6 +1502,33 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.screenshot({ path: `${OUT}/sequences.png` });
 }
 
+// Quantity Link: totals linked to workbook cells, written into the .xlsx.
+{
+  await page.locator('.menubar-item > button', { hasText: /^Batch$/ }).click();
+  await page.getByRole('menuitem', { name: 'Quantity Link (Excel)…' }).click();
+  const dlg = page.locator('[role=dialog][aria-label="Quantity Link"]');
+  const row = (i) => dlg.locator('.ql-table tbody tr').nth(i);
+  for (const [total, subject] of [['count', 'Count Measurement'], ['area', 'Area Measurement']]) {
+    await dlg.getByRole('button', { name: 'Add Link' }).click();
+    const r = dlg.locator('.ql-table tbody tr').last();
+    await r.locator('[aria-label="Total"]').selectOption(total);
+    await r.getByRole('button', { name: '+ Filter' }).click();
+    await r.locator('[aria-label="Filter value"]').selectOption(subject);
+  }
+  const v0 = (await row(0).locator('.ql-value').innerText()).split(/\s/)[0];
+  const v1 = (await row(1).locator('.ql-value').innerText()).split(/\s/)[0];
+  assert(Number(v0) >= 3 && Number(v1) >= 432, `links total the filtered measurements (${v0} ea, ${v1} sf)`);
+  await page.screenshot({ path: `${OUT}/quantity-link.png` });
+  const [dl] = await Promise.all([page.waitForEvent('download'), dlg.getByRole('button', { name: 'Update Workbook' }).click()]);
+  const file = `${OUT}/Quantities.xlsx`;
+  await dl.saveAs(file);
+  const { unzipSync, strFromU8 } = await import('fflate');
+  const files = unzipSync(readFileSync(file));
+  const xml = strFromU8(files['xl/worksheets/sheet1.xml']);
+  assert(xml.includes(`<c r="B2"><v>${v0}</v></c>`) && xml.includes(`<c r="B3"><v>${v1}</v></c>`), 'Update Workbook writes the totals into their cells');
+  await dlg.getByRole('button', { name: 'Close', exact: true }).last().click();
+}
+
 // Print (Ctrl+P): sheets are prepared in the page, then the browser's print dialog opens.
 {
   await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });

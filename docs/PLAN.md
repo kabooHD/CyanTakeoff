@@ -188,7 +188,10 @@ filling, image signatures, redaction and OCR.
 - [x] Sequences: Tool Chest > Sequence: Define (1/A/a, start, increment,
   digits, prefix, suffix), Reset, Remove; markups placed number themselves;
   Select Sequence
-- [ ] Quantity Link (measurement totals into Excel)
+- [x] Quantity Link (Batch menu): links = cell + total (count/length/area/
+  volume) + filters on Markups List columns; live values; Update Workbook
+  writes the cells into an existing .xlsx (in place in Chromium, with
+  optional automatic updates; else download), or creates Quantities.xlsx
 - [ ] AutoMark (bookmarks from title blocks)
 - [ ] Header/Footer, Watermark, Bates numbering
 - [ ] Password protection, Reduce file size, XFDF import/export

@@ -27,6 +27,7 @@ import { addBookmark } from './ui/BookmarksPanel';
 import { StyleManagerDialog } from './ui/LineStyles';
 import { SpellContentDialog, SpellDialog, checkSpelling } from './ui/Spell';
 import { SequenceDialog } from './ui/SequenceDialog';
+import { QuantityLinkDialog } from './ui/QuantityLink';
 import { SheetsDialog } from './ui/Sheets';
 import { PrefsDialogs } from './ui/Prefs';
 import { SignatureDialog } from './ui/Signature';
@@ -226,6 +227,7 @@ export function App() {
       <StyleManagerDialog />
       <SpellDialog />
       <SequenceDialog />
+      <QuantityLinkDialog />
       <SpellContentDialog />
       <SheetsDialog />
       <PrefsDialogs />

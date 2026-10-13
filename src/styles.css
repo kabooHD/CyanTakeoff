@@ -434,3 +434,13 @@ button.active { background: #d6e4fa; }
 .vs-result { display: flex; align-items: center; gap: 4px; }
 .vs-hit { display: flex; align-items: center; gap: 6px; flex: 1; text-align: left; background: none; border: 0; padding: 2px; }
 .vs-hit img { width: 48px; height: 48px; object-fit: contain; background: #fff; border: 1px solid var(--border); }
+
+/* Quantity Link */
+.quantity-link { width: min(980px, calc(100vw - 32px)); }
+.ql-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ql-table th { text-align: left; font-weight: 600; border-bottom: 1px solid var(--border); padding: 2px 4px; }
+.ql-table td { vertical-align: top; padding: 2px 4px; border-bottom: 1px solid var(--border); }
+.ql-table input { width: 120px; }
+.ql-table input.invalid { border-color: #c00; }
+.ql-filter { display: flex; gap: 2px; align-items: center; margin-bottom: 2px; }
+.ql-value { white-space: nowrap; font-variant-numeric: tabular-nums; }
