@@ -7,6 +7,7 @@ import { useLinkUrls } from './ReviewText';
 import { usePageSetup } from './PageSetup';
 import { batchHint } from './filesRow';
 import { useApplyStamp } from './ApplyStamp';
+import { archiveAsPdfA, useColorProcess } from './ColorProcess';
 import { exportFormData, importFormData, mergeFormData, migrateTypewrittenText, resetForm } from './FormData';
 import { Icon } from './icons';
 import { MenuList, type MenuItem } from './ContextMenu';
@@ -167,6 +168,9 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Number Pages…', disabled: noDoc, action: () => usePageSetup.setState({ open: 'number' }) },
       { label: 'Create Page Labels from Bookmarks…', disabled: noDoc, action: () => usePageSetup.setState({ open: 'bookmarks' }) },
       { label: 'Page Setup…', disabled: noDoc, action: () => usePageSetup.setState({ open: 'setup' }) },
+      { label: 'Color Processing…', disabled: noDoc, action: () => useColorProcess.setState({ open: 'color' }) },
+      { label: 'Repair PDF…', disabled: noDoc, action: () => useColorProcess.setState({ open: 'repair' }) },
+      { label: 'Archive as PDF/A', disabled: noDoc, action: archiveAsPdfA },
       { label: 'Batch Link…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'batch-link' }) },
       { sep: true },
       { label: 'Flatten Markups…', shortcut: 'Ctrl+Shift+M', disabled: noDoc, action: () => openPagesDialog('flatten') },
@@ -227,6 +231,8 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Reduce File Size…', disabled: noDoc, action: () => { batchHint.set(); useReduceDialog.setState({ open: true }); } },
       { label: 'OCR…', disabled: noDoc, action: () => { batchHint.set(); openPagesDialog('ocr'); } },
       { label: 'Print…', disabled: noDoc, action: () => { batchHint.set(); openPrint(); } },
+      { label: 'Color Processing…', disabled: noDoc, action: () => { batchHint.set(); useColorProcess.setState({ open: 'color' }); } },
+      { label: 'Repair PDF…', disabled: noDoc, action: () => { batchHint.set(); useColorProcess.setState({ open: 'repair' }); } },
       { label: 'Slip Sheet…', disabled: noDoc, action: () => openPagesDialog('slip-sheet') },
       { label: 'Flatten…', disabled: noDoc, action: () => openPagesDialog('flatten') },
       { label: 'Bates Numbering…', disabled: noDoc, action: () => useStampDialog.setState({ open: 'bates' }) },

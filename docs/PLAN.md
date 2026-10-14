@@ -217,6 +217,9 @@ filling, image signatures, redaction and OCR.
 - [x] XFDF export/import of markups (standard XFDF plus our measurement data
   in a namespaced element; Revu measurements round-trip; stamp artwork in
   <appearance>)
+- [x] Color Processing (grayscale, black and white, colorize, LSH, modify
+  colours; JPEG images), Archive as PDF/A-1b (XMP, output intent, report),
+  Repair PDF (rebuild, broken entries, open graphics states)
 - [x] Batch over the open documents: Apply Stamp, Rotate Pages, Crop Pages,
   Page Setup, Security, Reduce File Size, OCR, Print (one job), Header &
   Footer, Watermark, Bates

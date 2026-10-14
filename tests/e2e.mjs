@@ -1700,6 +1700,33 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.getByText('Watermark removed').waitFor({ timeout: 20000 });
   await page.waitForTimeout(800);
   assert(await find('DRAFT') === 0 && await find('CT0001') === 1, 'Remove Watermark removes only the watermark');
+  // Color Processing, Repair PDF and Archive as PDF/A on the active document.
+  {
+    await menu('Document', 'Color Processing…');
+    const cpd = page.locator('[role=dialog][aria-label="Color Processing"]');
+    await cpd.locator('[aria-label="Process type"]').selectOption('grayscale');
+    await cpd.locator('[aria-label="Pages"]').selectOption('current');
+    await cpd.getByRole('button', { name: 'OK' }).click();
+    await page.getByText(/Color Processing: \d+ colours? changed/).waitFor({ timeout: 20000 });
+    const cp = await page.getByText(/Color Processing: \d+ colours? changed/).innerText();
+    assert(Number(cp.match(/(\d+) colour/)[1]) > 0, `Color Processing recoloured the page content (${cp})`);
+    await page.waitForTimeout(500);
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(800);
+    await menu('Document', 'Repair PDF…');
+    const rpd = page.locator('[role=dialog][aria-label="Repair PDF"]');
+    await rpd.getByRole('button', { name: 'OK' }).click();
+    await page.getByText(/Repair PDF: /).waitFor({ timeout: 20000 });
+    assert(true, `Repair PDF ran (${(await page.getByText(/Repair PDF: /).innerText()).slice(0, 80)})`);
+    await page.waitForTimeout(500);
+    const [ad] = await Promise.all([page.waitForEvent('download'), menu('Document', 'Archive as PDF/A')]);
+    assert(ad.suggestedFilename().endsWith(' (PDF-A).pdf'), `Archive as PDF/A downloads a copy (${ad.suggestedFilename()})`);
+    const pdfa = `${OUT}/archive.pdf`;
+    await ad.saveAs(pdfa);
+    const adoc = await PDFDocument.load(readFileSync(pdfa));
+    assert(String(adoc.catalog.get(PDFName.of('OutputIntents'))).includes('GTS_PDFA1'), 'the PDF/A copy carries an output intent');
+    await page.getByText(/Archived as PDF\/A-1b/).waitFor({ timeout: 20000 });
+  }
   // Batch: Apply Stamp on every page of every open document.
   if (await page.locator('.doc-tab').count() >= 2) {
     const docRows = async () => Number((await page.getByText(/ of \d+ markups/).innerText()).match(/of (\d+)/)[1]);

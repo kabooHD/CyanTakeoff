@@ -46,6 +46,7 @@ import { MultiplyDialog } from './ui/Multiply';
 import { LinkUrlsDialog, ReviewTextDialog } from './ui/ReviewText';
 import { PageSetupDialogs } from './ui/PageSetup';
 import { ApplyStampDialog } from './ui/ApplyStamp';
+import { ColorProcessDialogs } from './ui/ColorProcess';
 import { CameraDialog, useCamera } from './ui/Camera';
 import { ManageStatusDialog } from './ui/StatusModels';
 import { DocToolsDialogs, emailDocument, publishCompressed, useDocTools } from './ui/DocTools';
@@ -290,6 +291,7 @@ export function App() {
       <LinkUrlsDialog />
       <PageSetupDialogs />
       <ApplyStampDialog />
+      <ColorProcessDialogs />
       <StyleManagerDialog />
       <SpellDialog />
       <SequenceDialog />

@@ -340,6 +340,20 @@ job), Header & Footer, Watermark, Bates Numbering, plus Batch Link, Slip
 Sheet, Flatten, Summary and Combine. Each dialog has a Files option (This
 document / All open documents) that the Batch menu presets to all.
 
+## Color Processing, Archive as PDF/A, Repair PDF
+Color Processing (Document menu) recolours the page content: Grayscale,
+Black and White, Colorize (one colour, or a scale from dark to light),
+Luminosity/Saturation/Hue, Modify Colors (source colour to another within
+a tolerance; Revu: vector only); Process Images also recolours raster
+images (ours: JPEG images); page range. Mask Images: not yet. Archive as
+PDF/A exports a PDF/A-1b copy; ours adds the PDF/A identification (XMP),
+an sRGB output intent and the title, and reports what a strict validator
+may still object to (fonts not embedded, transparency, JavaScript), since
+fonts cannot be embedded after the fact. Repair PDF cures display
+problems; ours rebuilds the file structure, drops broken annotation and
+content entries and closes open graphics states (Revu's AutoCAD wipeout,
+striped-image and clipping fixes: not yet).
+
 ## Header & Footer, Bates, Watermark
 Header & Footer (Document menu, Batch for many files): left/centre/right
 text in the header and footer, with fields such as page number, page label,
