@@ -28,6 +28,9 @@ import { arrangeItems } from './arrangeMenu';
 import { useCursor } from './cursor';
 import { balanceSplit, refreshDocument, saveAll, toggleFullScreen } from './quickCommands';
 import { useDocProps } from './DocProperties';
+import { useCamera } from './Camera';
+import { useStampManager } from './Stamps';
+import { useManageStatus } from './StatusModels';
 import { emailDocument, publishCompressed, useDocTools } from './DocTools';
 import { copyPageToSnapshot, copyText, selectAllText } from './textCommands';
 
@@ -171,6 +174,9 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Pan', shortcut: 'Shift+V', checked: s.tool === 'pan', action: () => s.setTool('pan') },
       { sep: true },
       ...toolItems('markup'),
+      { label: 'Camera…', shortcut: 'Ctrl+Alt+I', disabled: noDoc, action: () => useCamera.setState({ open: true }) },
+      { label: 'Manage Stamps…', action: () => useStampManager.setState({ open: true }) },
+      { label: 'Manage Status…', action: () => useManageStatus.setState({ open: true }) },
       { sep: true },
       { label: 'Edit Text', checked: s.tool === 'edit-text', disabled: noDoc, action: () => { s.setTool('edit-text'); s.setStatus('Edit Text: click a line of text on the drawing.'); } },
       { label: 'Erase Content', checked: s.tool === 'erase-content', disabled: noDoc, action: () => { s.setTool('erase-content'); s.setStatus('Erase Content: drag a rectangle; everything under it is removed from the page.'); } },

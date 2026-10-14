@@ -2,12 +2,12 @@ import { Fragment, useMemo, useState } from 'react';
 import { viewerApi } from './Viewer';
 import { anchorOf } from '../model/spaces';
 import { useApp, useActiveDoc } from '../model/store';
-import type { CustomColumn, Markup, MarkupStatus } from '../model/types';
+import type { CustomColumn, Markup } from '../model/types';
+import { StatusSelect } from './StatusModels';
 import { allColumns, exportSummaryCsv, exportSummaryPdf, exportSummaryXlsx, type SummaryColumn } from './actions';
 import { ManageColumns } from './ManageColumns';
 import { Icon } from './icons';
 
-const STATUSES: MarkupStatus[] = ['None', 'Accepted', 'Rejected', 'Cancelled', 'Completed'];
 const NO_TOTAL = new Set(['depth', 'angle', 'slope']);
 /** Columns that sort by creation date when values tie (Revu does this for Subject and page). */
 const TIE_BY_DATE = new Set(['subject', 'page']);
@@ -198,10 +198,7 @@ export function MarkupsList() {
                       : c.key === 'lock' ? <input type="checkbox" aria-label="Lock" checked={!!m.locked} onClick={(e) => e.stopPropagation()}
                         onChange={(e) => s.updateMarkups([m.id], () => ({ locked: e.target.checked || undefined }))} />
                       : c.key === 'status' ? (
-                        <select value={m.status} onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => s.updateMarkups([m.id], () => ({ status: e.target.value as MarkupStatus }))}>
-                          {STATUSES.map((x) => <option key={x}>{x}</option>)}
-                        </select>
+                        <StatusSelect m={m} ids={[m.id]} />
                       ) : c.custom && c.custom.type !== 'formula' ? <CustomCell m={m} col={c.custom} />
                         : v[c.key]}
                   </td>

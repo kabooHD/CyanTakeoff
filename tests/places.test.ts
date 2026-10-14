@@ -58,3 +58,23 @@ describe('hyperlinks to Places', () => {
     expect(readPlaces(again)[0].page).toBe(2);
   });
 });
+
+describe('Edit Action on any markup', () => {
+  it('saves an action on a rectangle and reads it back', async () => {
+    const { savePdf } = await import('../src/pdf/save');
+    const { importAnnotations } = await import('../src/pdf/importAnnots');
+    const doc = await doc3();
+    const identity = { convertToPdfPoint: (x: number, y: number) => [x, 400 - y] };
+    const pages = [0, 1, 2].map((i) => ({ index: i, label: String(i + 1), width: 600, height: 400, viewport: identity })) as never;
+    const t = new Date().toISOString();
+    const base = { type: 'rectangle', page: 0, points: [{ x: 10, y: 10 }, { x: 100, y: 40 }],
+      style: { color: '#ff0000', fill: null, width: 1, opacity: 1, fillOpacity: 1, lineStyle: 'solid', fontSize: 10 },
+      subject: 'Rectangle', label: '', comment: 'note', author: 'A', created: t, modified: t, status: 'None' };
+    const ms = [{ ...base, id: 'a', link: { page: 2 } }, { ...base, id: 'b', link: { uri: 'https://example.com/' } }, { ...base, id: 'c' }];
+    const out = await savePdf({ original: await doc.save(), pages, markups: ms as never, importedRefs: new Set(), calibrations: [null, null, null], dirtyCalibrations: new Set() });
+    const imp = importAnnotations(await PDFDocument.load(out)).raws.map((r) => r.markup);
+    expect(imp.map((m) => [m.type, m.link, m.comment])).toEqual([
+      ['rectangle', { page: 2 }, 'note'], ['rectangle', { uri: 'https://example.com/' }, 'note'], ['rectangle', undefined, 'note'],
+    ]);
+  });
+});

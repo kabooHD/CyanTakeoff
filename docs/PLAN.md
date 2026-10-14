@@ -235,6 +235,12 @@ filling, image signatures, redaction and OCR.
   draft), Publish as Compressed (a reduced copy; the open file unchanged)
 - [x] Flatten with Allow markup recovery (default on) and Unflatten
   (Ctrl+Shift+U); refused for pages whose content was edited since
+- [x] Custom stamps (text with {Author}/{Date}/{Time} subtitle, colour;
+  image stamps; export/import), status models (Manage Status: custom
+  models and states with colour and text, default for new markups,
+  who/when recorded), Edit Action on any markup (Ctrl+Shift+E), Offset (O:
+  distance, Replace Markup, miter limit, Offset as), Camera (Ctrl+Alt+I),
+  Search > Replace Checked (rewrites the page text)
 
 ### Next 2: public test build in local mode (days)
 - Host on a VPS (static site + HTTPS), with a feedback link

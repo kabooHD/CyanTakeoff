@@ -65,4 +65,13 @@ export function toggleFullScreen() {
   else document.documentElement.requestFullscreen?.().catch(() => useApp.getState().setStatus('Full screen is not available here.'));
 }
 
+/** Edit Action (Ctrl+Shift+E): what clicking the selected markups does (Revu). */
+export function editAction(ids?: string[]) {
+  const d = activeDoc();
+  const sel = ids ?? d?.selection ?? [];
+  const m = d?.markups.find((x) => x.id === sel[0]);
+  if (!d || !m) { useApp.getState().setStatus('Edit Action: select a markup first.'); return; }
+  useApp.setState({ linkDialog: { page: m.page, rect: [m.points[0], m.points[1] ?? m.points[0]], ids: sel } });
+}
+
 export const balanceSplit = () => useApp.setState({ splitRatio: 0.5 });

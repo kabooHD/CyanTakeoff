@@ -450,6 +450,26 @@ pages, margins options, Dim Filtered Markups, Print Spaces.
   page. We keep the recovery data in our own page keys (/CTFlattened,
   /CTFlatContent); Revu cannot unflatten our files, nor we Revu's.
 
+## Stamps, statuses, actions, Offset, Camera, Replace
+- Stamp tool: standard stamps plus custom ones (Manage Stamps): text
+  stamps with a title, a subtitle template ({Author}, {Date}, {Time},
+  {DateTime}) and a colour, or image stamps. Export/import a stamp file to
+  share them.
+- Status: the Review model (None, Accepted, Rejected, Cancelled,
+  Completed) cannot be changed. Manage Status adds models (e.g. Valve)
+  with states that can recolour the markup and put text into a text box
+  grouped with it; models can be hidden; a custom default applies to new
+  markups. Set Status from the list, Properties or right-click (Set
+  Status > Model > State); who set it and when is kept.
+- Edit Action (Ctrl+Shift+E, right-click): any markup can open a web
+  address or jump to a page or Place; double-click follows it.
+- Offset (O with one markup selected): Distance (in the page's scale
+  units, else inches), Replace Markup, Angle Miter Limit, Offset as
+  another type; the click picks the side (inside/outside for shapes).
+- Camera (Ctrl+Alt+I): take a photo and click to place it.
+- Search > Replace Checked: replaces the checked results in the drawing's
+  text (as Edit Text does).
+
 ## Status bar
 - Left: help for the current tool and the toggles Show Grid, Snap to
   Grid, Snap to Content, Snap to Markup (points and guidelines from nearby

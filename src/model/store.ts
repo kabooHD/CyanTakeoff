@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useStatusModels } from './statusModels';
 import { rememberFile } from './recent';
 import { PDFDocument } from 'pdf-lib';
 import type { LoadedDoc } from '../pdf/document';
@@ -193,6 +194,8 @@ interface AppState {
   presentation: boolean;
   /** The next hyperlink drawn jumps to this Place (Links panel > hyperlink to a Place). */
   linkPlace: string | null;
+  /** Offset in progress (select a markup, press O). */
+  offsetOp: { id: string } | null;
   /** Text picked with Select Text (Shift+T) or Select All Text (Ctrl+Shift+A). */
   textSel: { docId: string; page: number; rects: [Pt, Pt][]; text: string } | null;
   activePane: 0 | 1;
@@ -534,6 +537,7 @@ export const useApp = create<AppState>((set, get) => {
     splitRatio: 0.5,
     presentation: false,
     linkPlace: null,
+    offsetOp: null,
     textSel: null,
     activePane: 0,
     viewMode: 'single',
@@ -573,7 +577,9 @@ export const useApp = create<AppState>((set, get) => {
         author: s.author,
         created: t,
         modified: t,
-        status: 'None',
+        // A default status set in Manage Status applies to new markups (Revu).
+        status: useStatusModels.getState().defaultState ?? 'None',
+        statusModel: useStatusModels.getState().defaultModel,
         label: '',
         comment: '',
         ...partial,

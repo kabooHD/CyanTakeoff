@@ -245,7 +245,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
       const t = safeText(font, text);
       const w = font.widthOfTextAtSize(t, size);
       textAt(o, font, t, size, q.u - w / 2, q.v - size * 0.3 + b.h * 0.08, rgb, fr);
-      const sub = safeText(font, `${m.author} ${new Date(m.created).toLocaleDateString()}`);
+      const sub = safeText(font, m.subtitle ?? `${m.author} ${new Date(m.created).toLocaleDateString()}`);
       const s2 = Math.max(5, size * 0.38);
       textAt(o, font, sub, s2, q.u - font.widthOfTextAtSize(sub, s2) / 2, q.v - b.h * 0.36, rgb, fr);
       break;
@@ -487,12 +487,14 @@ const toPdf = (m: Markup, page: PageInfo) => m.points.map((p) => toPdfPt(p, page
 function ctData(m: Markup, P: Pt[]): CTData {
   return {
     v: 1, type: m.type, label: m.label || undefined, status: m.status !== 'None' ? m.status : undefined,
+    statusModel: m.statusModel, statusBy: m.statusBy, statusDate: m.statusDate,
     depth: m.depth, fillOpacity: m.style.fillOpacity, lineStyle: m.style.lineStyle,
     seq: m.seq,
     lineDef: m.style.lineDef, hatch: m.style.hatch, hatchScale: m.style.hatch ? m.style.hatchScale : undefined,
     points: m.type === 'count' || m.type === 'arc' || m.type === 'cloudplus' ? P.flatMap((p) => [p.x, p.y]) : undefined,
     comment: measure(m) || m.type === 'cloudplus' || m.type === 'stamp' ? m.comment || undefined : undefined,
     text: m.type === 'stamp' || m.type === 'cloudplus' ? m.text : undefined,
+    subtitle: m.type === 'stamp' ? m.subtitle : undefined,
     groupId: m.groupId,
     slope: m.slope,
     rise: m.rise,
@@ -654,10 +656,6 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
       const b = bounds(P);
       entries.Rect = [b.minX, b.minY, b.maxX, b.maxY];
       entries.Border = [0, 0, 0];
-      if (m.link?.uri) entries.A = { S: 'URI', URI: PDFString.of(m.link.uri) };
-      else if (m.link?.file) entries.A = { S: 'GoToR', F: { Type: 'Filespec', F: PDFString.of(m.link.file), UF: PDFHexString.fromText(m.link.file) }, D: [m.link.page ?? 0, N('Fit')], NewWindow: false };
-      else if (m.link?.dest) entries.A = { S: 'GoTo', D: /^[\x20-\x7e]*$/.test(m.link.dest) && !/[()\\]/.test(m.link.dest) ? PDFString.of(m.link.dest) : PDFHexString.fromText(m.link.dest) };
-      else if (m.link?.page !== undefined && pageRefs[m.link.page]) entries.Dest = [pageRefs[m.link.page], N('Fit')];
       break;
     }
     case 'FileAttachment': {
@@ -704,6 +702,14 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
       entries.Name = m.type === 'flag' ? 'Flag' : 'Comment';
       entries.Rect = [P[0].x, P[0].y - 20, P[0].x + 18, P[0].y];
       break;
+  }
+  // Hyperlinks, and any markup given an action with Edit Action (Revu).
+  if (m.link?.uri) entries.A = { S: 'URI', URI: PDFString.of(m.link.uri) };
+  else if (m.link?.file) entries.A = { S: 'GoToR', F: { Type: 'Filespec', F: PDFString.of(m.link.file), UF: PDFHexString.fromText(m.link.file) }, D: [m.link.page ?? 0, N('Fit')], NewWindow: false };
+  else if (m.link?.dest) entries.A = { S: 'GoTo', D: /^[\x20-\x7e]*$/.test(m.link.dest) && !/[()\\]/.test(m.link.dest) ? PDFString.of(m.link.dest) : PDFHexString.fromText(m.link.dest) };
+  else if (m.link?.page !== undefined && pageRefs[m.link.page]) {
+    if (m.type === 'link') entries.Dest = [pageRefs[m.link.page], N('Fit')];
+    else entries.A = { S: 'GoTo', D: [pageRefs[m.link.page], N('Fit')] };
   }
   if (INTENT[m.type]) entries.IT = INTENT[m.type];
   if (scale && meas) entries.Measure = writeMeasure(doc, scale);

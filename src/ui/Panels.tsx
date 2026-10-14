@@ -3,6 +3,7 @@ import { updateTool, useSequenceDialog } from './SequenceDialog';
 import { HatchSelect, LineStyleSelect } from './LineStyles';
 import { LayersPanel } from './LayersPanel';
 import { LinksPanel } from './LinksPanel';
+import { StatusSelect } from './StatusModels';
 import { FileAccessPanel } from './FileAccess';
 import { layerIds } from '../pdf/layers';
 import { SignaturesPanel } from './DigitalSignature';
@@ -216,9 +217,7 @@ function Properties() {
         <Row label="Text"><textarea rows={3} spellCheck lang="en" value={m.text ?? ''} onChange={(e) => upd(() => ({ text: e.target.value }))} /></Row>
       )}
       <Row label="Status">
-        <select value={m.status} onChange={(e) => upd(() => ({ status: e.target.value as Markup['status'] }))}>
-          {['None', 'Accepted', 'Rejected', 'Cancelled', 'Completed'].map((x) => <option key={x}>{x}</option>)}
-        </select>
+        <StatusSelect m={m} ids={sel.map((x) => x.id)} />
       </Row>
       <Row label="Layer">
         <select aria-label="Markup layer" value={m.layer ?? ''} onChange={(e) => upd(() => ({ layer: e.target.value || undefined }))}>

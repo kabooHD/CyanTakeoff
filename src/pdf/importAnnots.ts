@@ -28,7 +28,12 @@ export interface CTData {
   v: 1;
   type: MarkupType;
   label?: string;
+  /** Stamp subtitle as placed. */
+  subtitle?: string;
   status?: MarkupStatus;
+  statusModel?: string;
+  statusBy?: string;
+  statusDate?: string;
   depth?: number;
   fillOpacity?: number;
   lineStyle?: MarkupStyle['lineStyle'];
@@ -166,6 +171,7 @@ function baseMarkup(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number, 
     created,
     modified: parsePdfDate(getText(doc, dict, 'M')) ?? created,
     status: ct?.status ?? 'None',
+    statusModel: ct?.statusModel, statusBy: ct?.statusBy, statusDate: ct?.statusDate,
     scale: measureDict ? readMeasure(doc, measureDict) : undefined,
     depth: ct?.depth ?? getNumber(doc, dict, 'Depth'),
     source: { ...toRef(ref), dirty: false },
@@ -178,7 +184,30 @@ function baseMarkup(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number, 
     seq: ct?.seq,
     locked: ((getNumber(doc, dict, 'F') ?? 0) & 128) !== 0 || undefined,
     layer: dict.get(PDFName.of('OC')) instanceof PDFRef ? refId(dict.get(PDFName.of('OC')) as PDFRef) : undefined,
+    link: type === 'link' ? undefined : readAction(doc, dict),
   } satisfies Omit<Markup, 'points'>;
+}
+
+/** The action of a markup (Revu Edit Action): web address, page, Place, or page of another file. */
+function readAction(doc: PDFDocument, dict: PDFDict): Markup['link'] {
+  const a = lookup(doc, dict.get(N('A')));
+  if (!(a instanceof PDFDict)) return undefined;
+  const kind = getName(doc, a, 'S');
+  if (kind === 'URI') { const uri = getText(doc, a, 'URI'); return uri ? { uri } : undefined; }
+  const d = lookup(doc, a.get(N('D')));
+  if (kind === 'GoTo') {
+    if (d instanceof PDFName || d instanceof PDFString || d instanceof PDFHexString) return { dest: d.decodeText() };
+    const p = d instanceof PDFArray ? d.get(0) : undefined;
+    const i = p instanceof PDFRef ? doc.getPages().findIndex((pg) => pg.ref === p) : -1;
+    return i >= 0 ? { page: i } : undefined;
+  }
+  if (kind === 'GoToR') {
+    const fs = lookup(doc, a.get(N('F')));
+    const file = fs instanceof PDFDict ? getText(doc, fs, 'UF') ?? getText(doc, fs, 'F') : getText(doc, a, 'F');
+    const pg = d instanceof PDFArray ? lookup(doc, d.get(0)) : undefined;
+    return file ? { file, page: pg instanceof PDFNumber ? pg.asNumber() : 0 } : undefined;
+  }
+  return undefined;
 }
 
 /** Read one supported annotation (not a count) into a markup. */
@@ -239,7 +268,10 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
         const image = readImage(doc, dict);
         if (!image) return null;
         extra = { image };
-      } else text = ct.text ?? '';
+      } else {
+        text = ct.text ?? '';
+        if (ct.subtitle !== undefined) extra = { subtitle: ct.subtitle };
+      }
       break;
     }
     case 'Link': {

@@ -40,9 +40,13 @@ import { DocPropertiesDialog, useDocProps } from './ui/DocProperties';
 import { Presentation } from './ui/Presentation';
 import { PlaceDialog } from './ui/LinksPanel';
 import { RecentList } from './ui/FileAccess';
+import { StampManagerDialog } from './ui/Stamps';
+import { startOffset } from './ui/OffsetBar';
+import { CameraDialog, useCamera } from './ui/Camera';
+import { ManageStatusDialog } from './ui/StatusModels';
 import { DocToolsDialogs, emailDocument, publishCompressed, useDocTools } from './ui/DocTools';
 import { copyPageToSnapshot, copyText, selectAllText } from './ui/textCommands';
-import { autosizeTextBoxes, balanceSplit, refreshDocument, removeSelectedFromGroup, saveAll, toggleFullScreen } from './ui/quickCommands';
+import { autosizeTextBoxes, balanceSplit, editAction, refreshDocument, removeSelectedFromGroup, saveAll, toggleFullScreen } from './ui/quickCommands';
 
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
@@ -89,6 +93,8 @@ export function App() {
         case 'F5': case 'Shift+F5': return run(() => d && refreshDocument());
         case 'Ctrl+D': return run(() => d && useDocProps.setState({ open: true }));
         case 'Alt+Z': return run(autosizeTextBoxes);
+        case 'Ctrl+Shift+E': return run(() => editAction());
+        case 'Ctrl+Alt+I': return run(() => d && useCamera.setState({ open: true }));
         case 'Ctrl+Shift+Alt+G': return run(removeSelectedFromGroup);
         case 'F11': return run(toggleFullScreen);
         case 'Ctrl+Enter': return run(() => d && useApp.setState({ presentation: true }));
@@ -112,7 +118,8 @@ export function App() {
         case 'Ctrl+Shift+V': return run(() => s.paste(true));
         case 'Ctrl+A': return run(() => d && s.select(d.markups.filter((m) => m.page === d.page).map((m) => m.id)));
         case 'Delete': case 'Backspace': return run(() => d && s.deleteMarkups(d.selection));
-        case 'Escape': return run(() => { useApp.setState({ textSel: null }); useDigitalSign.setState({ pending: null }); s.setTool('select'); s.select([]); useApp.setState({ painter: null }); });
+        case 'O': if (d?.selection.length && s.tool === 'select') return run(startOffset); break;
+        case 'Escape': return run(() => { useApp.setState({ textSel: null, offsetOp: null }); useDigitalSign.setState({ pending: null }); s.setTool('select'); s.select([]); useApp.setState({ painter: null }); });
         // Markup arrangement (Revu defaults)
         case 'Ctrl+G': return run(() => s.arrange(group));
         case 'Ctrl+Shift+G': return run(() => s.arrange(ungroup));
@@ -292,6 +299,9 @@ export function App() {
       <Presentation />
       <PlaceDialog />
       <DocToolsDialogs />
+      <StampManagerDialog />
+      <ManageStatusDialog />
+      <CameraDialog />
       {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
       {dialog === 'about' && <AboutDialog onClose={() => setDialog(null)} />}
     </div>

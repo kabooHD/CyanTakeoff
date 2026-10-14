@@ -167,7 +167,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
         <text x={b.minX + b.w / 2} y={b.minY + b.h * 0.48} textAnchor="middle" dominantBaseline="middle" fontSize={fs}
           fontWeight="bold" fill={st.color} fillOpacity={st.opacity} fontFamily="Helvetica, Arial, sans-serif">{m.text}</text>
         <text x={b.minX + b.w / 2} y={b.minY + b.h * 0.82} textAnchor="middle" dominantBaseline="middle" fontSize={Math.max(5, fs * 0.38)}
-          fill={st.color} fillOpacity={st.opacity} fontFamily="Helvetica, Arial, sans-serif">{`${m.author} ${new Date(m.created).toLocaleDateString()}`}</text>
+          fill={st.color} fillOpacity={st.opacity} fontFamily="Helvetica, Arial, sans-serif">{m.subtitle ?? `${m.author} ${new Date(m.created).toLocaleDateString()}`}</text>
       </g>;
       break;
     }

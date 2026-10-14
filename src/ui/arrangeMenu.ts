@@ -3,7 +3,8 @@ import { align, flip, group, reorder, ungroup, type Edge, type Order } from '../
 import { activeDoc, useApp } from '../model/store';
 import type { MenuItem } from './ContextMenu';
 import { markupBounds } from './hit';
-import { autosizeTextBoxes, removeSelectedFromGroup } from './quickCommands';
+import { autosizeTextBoxes, editAction, removeSelectedFromGroup } from './quickCommands';
+import { startOffset } from './OffsetBar';
 
 export function arrangeItems(): MenuItem[] {
   const s = useApp.getState();
@@ -18,6 +19,8 @@ export function arrangeItems(): MenuItem[] {
     { label: 'Group', shortcut: 'Ctrl+G', disabled: few, action: () => s.arrange(group) },
     { label: 'Ungroup', shortcut: 'Ctrl+Shift+G', disabled: !grouped, action: () => s.arrange(ungroup) },
     { label: 'Remove Selected from Group', shortcut: 'Ctrl+Shift+Alt+G', disabled: !grouped, action: removeSelectedFromGroup },
+    { label: 'Offset…', shortcut: 'O', disabled: sel.length !== 1, action: () => startOffset() },
+    { label: 'Edit Action…', shortcut: 'Ctrl+Shift+E', disabled: none, action: () => editAction() },
     { label: 'Autosize Text Box', shortcut: 'Alt+Z', disabled: !sel.some((m) => m.type === 'textbox' || m.type === 'callout'), action: autosizeTextBoxes },
     { label: locked ? 'Unlock' : 'Lock', shortcut: 'Ctrl+Shift+L', disabled: none, action: s.toggleLock },
     { label: 'Format Painter', shortcut: 'Ctrl+Shift+C', disabled: sel.length !== 1, action: () => useApp.setState({ painter: { style: sel[0].style }, status: 'Format Painter: click a markup to apply this format (Esc cancels).' }) },

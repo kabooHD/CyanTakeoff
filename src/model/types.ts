@@ -120,7 +120,8 @@ export interface CustomColumn {
 
 export interface Reply { id: string; author: string; date: string; text: string }
 
-export type MarkupStatus = 'None' | 'Accepted' | 'Rejected' | 'Cancelled' | 'Completed';
+/** A state of the markup's status model (Review: None, Accepted, Rejected, Cancelled, Completed). */
+export type MarkupStatus = string;
 
 /** Line style id: a standard one ('solid', 'dashed', 'center'...) or a custom one (see lineStyles.ts). */
 export type LineStyle = string;
@@ -153,6 +154,10 @@ export interface Markup {
   created: string; // ISO date
   modified: string;
   status: MarkupStatus;
+  /** Status model of `status` (undefined: Review), who set it and when (Revu shows both). */
+  statusModel?: string;
+  statusBy?: string;
+  statusDate?: string;
   /** Text content for textbox/callout. */
   text?: string;
   /** Scale captured from the page when the measurement was made. */
@@ -176,6 +181,8 @@ export interface Markup {
   /** Hyperlink target: a web address, or a page (0-based) here or in another file of the set. */
   /** Hyperlink action: a web address, a page, a page of another file, or a Place (named destination). */
   link?: { uri?: string; page?: number; file?: string; dest?: string };
+  /** Stamp: the small line under the title (default: author and date). */
+  subtitle?: string;
   /** Markups sharing a group id move and select together (Revu Group). */
   groupId?: string;
   /** Locked markups cannot be moved, resized or deleted (Revu Lock). */

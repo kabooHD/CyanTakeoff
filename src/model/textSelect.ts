@@ -38,3 +38,14 @@ export function selectText(runs: TextRun[], a?: Pt, b?: Pt): TextSelection {
   }).join('\n');
   return { rects, text };
 }
+
+/** `str` with each [index, length) range replaced by `by` (ranges may come in any order; overlaps are skipped). */
+export function replaceRanges(str: string, ranges: { index: number; len: number }[], by: string): string {
+  let out = str, lastStart = Infinity;
+  for (const r of [...ranges].sort((a, b) => b.index - a.index)) {
+    if (r.index + r.len > lastStart) continue;
+    out = out.slice(0, r.index) + by + out.slice(r.index + r.len);
+    lastStart = r.index;
+  }
+  return out;
+}

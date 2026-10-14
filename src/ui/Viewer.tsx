@@ -26,6 +26,12 @@ import { cutoutAt, hitTest, markupBounds, outline } from './hit';
 import { selectText } from '../model/textSelect';
 import { copyText, searchFor } from './textCommands';
 import { followPlace } from './LinksPanel';
+import { statusMenuItems } from './StatusModels';
+import { OffsetBar, offsetPt, useOffset } from './OffsetBar';
+import { offsetMarkup } from '../model/offset';
+import { editAction } from './quickCommands';
+import { customStampFields, useStampManager } from './Stamps';
+import { useStamps } from '../model/stamps';
 import { setCursor } from './cursor';
 import { ViewOverlays, recordView } from './Rulers';
 import { setVisualTemplate } from './VisualSearch';
@@ -86,6 +92,7 @@ function capture(e: { target: EventTarget; pointerId: number }) {
 export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const s = useApp();
   const textSel = s.textSel;
+  const customStamps = useStamps((x) => x.stamps);
   // Split view: pane 1 has its own page and zoom.
   const split = s.split;
   const pageIdx = pane === 1 && split ? split.page : doc.page;
@@ -466,6 +473,19 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const fillKey = useFill((f) => f.key);
   const search = useSearch();
   const [fillCursor, setFillCursor] = useState<Pt | null>(null);
+  const [offsetCur, setOffsetCur] = useState<Pt | null>(null);
+  const offsetSet = useOffset();
+  const offsetSrc = s.offsetOp ? markups.find((m) => m.id === s.offsetOp!.id) : undefined;
+  const offsetResult = (at: Pt) => offsetSrc && offsetMarkup(offsetSrc, offsetPt(offsetSet.dist, scaleFor(offsetSrc.points[0])), at, offsetSet.miter, offsetSet.as || undefined);
+  const placeOffset = (at: Pt) => {
+    const r = offsetResult(at);
+    if (!offsetSrc || !r) { s.setStatus('Offset: that distance or type does not work for this markup.'); return; }
+    const { id: _id, source: _src, seq: _seq, groupId: _g, replies: _r, ...rest } = offsetSrc;
+    const m = s.addMarkup({ ...rest, ...r, subject: r.type === offsetSrc.type ? offsetSrc.subject : toolById(r.type).subject, scale: MEASURE_TYPES.has(r.type) ? offsetSrc.scale ?? scaleFor(r.points[0]) ?? undefined : undefined });
+    if (offsetSet.replace) s.deleteMarkups([offsetSrc.id]);
+    s.select([m.id]);
+    useApp.setState({ offsetOp: offsetSet.replace ? null : { id: offsetSrc.id } });
+  };
   useEffect(() => {
     if (s.tool === 'dynamic-fill' && pdfPage) buildMask(pdfPage, `${doc.id}:${pageIdx}`);
     if (s.tool !== 'dynamic-fill') resetFill();
@@ -633,6 +653,16 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     const k = Math.min(1, 300 / Math.max(img.w, img.h));
     finish('image', [p, { x: p.x + img.w * k, y: p.y + img.h * k }], { image: img.url });
   };
+  const placeCustomStamp = (p: Pt) => {
+    const c = customStampFields(s.stampName.slice(7), s.author);
+    if (!c) { s.setStatus('That stamp no longer exists; pick another.'); return; }
+    if (c.kind === 'image') {
+      finish('image', [{ x: p.x - c.w / 2, y: p.y - c.h / 2 }, { x: p.x + c.w / 2, y: p.y + c.h / 2 }], { image: c.image, subject: c.name });
+      return;
+    }
+    const m = finish('stamp', [p], { subtitle: c.subtitle, subject: c.name, text: c.title });
+    if (c.color) s.updateMarkups([m.id], (x) => ({ style: { ...x.style, color: c.color! } }), { history: false });
+  };
   const placeAttachment = async (p: Pt) => {
     const f = await pickFile();
     if (!f) return;
@@ -728,6 +758,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       }
       lastMiddle.current = now;
     }
+    if (s.offsetOp && e.button === 0) { placeOffset(toPage(e)); return; }
     if (e.button === 2) {
       // Right button: click = context menu (or leave the tool), drag = multi-select (Revu).
       rightDown.current = { x: e.clientX, y: e.clientY };
@@ -940,6 +971,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         if (s.tool === 'legend') placeLegend(p);
         else if (s.tool === 'image') placeImage(p);
         else if (s.tool === 'attachment') placeAttachment(p);
+        else if (s.tool === 'stamp' && s.stampName.startsWith('custom:')) placeCustomStamp(p);
         else finish(s.tool as MarkupType, [p]);
         break;
       case 'cloudplus':
@@ -1052,6 +1084,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     const raw = toPage(e);
     if (longPress.current && Math.hypot(e.clientX - longPress.current.x, e.clientY - longPress.current.y) > 8) cancelLongPress();
     setCursor(raw, scaleFor(raw));
+    if (s.offsetOp) setOffsetCur(raw);
     if (s.tool === 'dynamic-fill') { fillMove(raw); setFillCursor(raw); }
     if (s.tool === 'eraser') { setFillCursor(raw); if (eraseSnapshot.current) { eraseAt(raw); return; } }
     if (drag) {
@@ -1216,7 +1249,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       const hit = [...markups].reverse().find((m) => hitTest(m, raw, 5 / zoom));
       if (!hit) return;
       if (['textbox', 'callout', 'typewriter', 'cloudplus'].includes(hit.type)) setEditing(hit.id);
-      else if (hit.type === 'link') followLink(hit);
+      else if (hit.type === 'link' || hit.link) followLink(hit);
       else if (hit.type === 'attachment' && hit.file) downloadBase64(hit.file.name, hit.file.mime, hit.file.data);
     }
   };
@@ -1252,6 +1285,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
 
   const rightClick = (e: { clientX: number; clientY: number }, forceId?: string) => {
     if (draft) { finishPoly(); return; }
+    if (s.offsetOp) { useApp.setState({ offsetOp: null }); return; }
     const ts = useApp.getState().textSel;
     if (ts && ts.docId === doc.id && ts.page === pageIdx) {
       const rectPts = ts.rects.flat();
@@ -1306,12 +1340,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       }
       items.push(
         { label: 'Properties', action: () => s.setPanels({ right: 'properties' }) },
+        { label: 'Edit Action…', shortcut: 'Ctrl+Shift+E', action: () => editAction(ids) },
+        ...(hit.link ? [{ label: 'Follow Action', action: () => followLink(hit) }] : []),
         { label: 'Add to My Tools', action: () => s.addToToolChest(hit) },
         ...(hit.seq ? [{ label: 'Select Sequence', action: () => s.select(sequenceMembers(doc.markups, hit)) }] : []),
         { sep: true },
-        ...(['None', 'Accepted', 'Rejected', 'Cancelled', 'Completed'] as const).map((st) => ({
-          label: `Status: ${st}`, checked: hit.status === st, action: () => s.updateMarkups(ids, () => ({ status: st })),
-        })),
+        ...statusMenuItems(hit, ids),
         { sep: true },
         // Revu: right-click > Layer > (a layer) / Create New Layer.
         ...layerIds(doc.layers?.order ?? []).map((id) => ({
@@ -1403,6 +1437,11 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       scale: scaleFor(draft.points[0]) ?? undefined, depth: s.preset?.depth ?? 1,
       handles: draft.handles && CURVABLE.has(type) && P === pts ? [...draft.handles, null].slice(0, P.length) : undefined,
     };
+  }
+
+  if (!preview && offsetSrc && offsetCur) {
+    const r = offsetResult(offsetCur);
+    if (r) preview = { ...offsetSrc, id: 'draft', ...r, scale: undefined, source: undefined, style: { ...offsetSrc.style, lineStyle: 'dashed' } };
   }
 
   const editingMarkup = editing ? doc.markups.find((m) => m.id === editing) : null;
@@ -1568,12 +1607,15 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
           <button onClick={cancelPicking}>Cancel</button>
         </div>
       )}
+      {offsetSrc && isActivePane && <OffsetBar scale={scaleFor(offsetSrc.points[0])} />}
       {s.tool === 'stamp' && (
         <div className="fill-bar" role="toolbar" aria-label="Stamp">
           <strong>Stamp</strong>
           <select aria-label="Stamp" value={s.stampName} onChange={(e) => useApp.setState({ stampName: e.target.value })}>
-            {STAMPS.map((x) => <option key={x}>{x}</option>)}
+            <optgroup label="Standard">{STAMPS.map((x) => <option key={x}>{x}</option>)}</optgroup>
+            {customStamps.length > 0 && <optgroup label="Custom">{customStamps.map((x) => <option key={x.id} value={`custom:${x.id}`}>{x.name}</option>)}</optgroup>}
           </select>
+          <button onClick={() => useStampManager.setState({ open: true })}>Manage Stamps…</button>
           <span className="muted">Click on the drawing to place it.</span>
         </div>
       )}

@@ -79,3 +79,49 @@ describe('Select Text', () => {
     expect(selectText(runs).rects).toHaveLength(3);
   });
 });
+
+import { parseStamps, stampText } from '../src/model/stamps';
+describe('custom stamps', () => {
+  const date = new Date(2026, 9, 14, 9, 5);
+  it('fills subtitle tokens, any case, and leaves unknown ones', () => {
+    expect(stampText('By {Author} on {date} {Nope}', { author: 'Sam', date })).toBe(`By Sam on ${date.toLocaleDateString()} {Nope}`);
+  });
+  it('imports only well-formed stamps, with new ids', () => {
+    const got = parseStamps(JSON.stringify({ stamps: [
+      { id: 'x', name: 'OK', kind: 'text', title: 'CHECKED' },
+      { id: 'y', name: 'Bad image', kind: 'image', image: 'javascript:alert(1)' },
+      { id: 'z', name: 'Img', kind: 'image', image: 'data:image/png;base64,AAAA' },
+      { name: 3 },
+    ] }));
+    expect(got.map((s) => s.name)).toEqual(['OK', 'Img']);
+    expect(got[0].id).not.toBe('x');
+  });
+});
+
+import { statusChanges, statusLabel, useStatusModels, REVIEW } from '../src/model/statusModels';
+describe('status models', () => {
+  it('applies colour, by/date, and text to a grouped text box', () => {
+    useStatusModels.setState({ models: [REVIEW, { name: 'Valve', states: [{ name: 'Open', color: '#00aa00' }, { name: 'Closed', color: '#ff0000', text: 'CLOSED' }] }] });
+    const v = { ...mk('v', 'ellipse'), groupId: 'g' }, t = { ...mk('t', 'textbox'), groupId: 'g', text: '' }, o = mk('o');
+    const when = new Date('2026-10-14T10:00:00Z');
+    const ch = statusChanges([v, t, o], ['v'], 'Valve', 'Closed', 'Sam', when);
+    expect(ch.get('v')).toMatchObject({ status: 'Closed', statusModel: 'Valve', statusBy: 'Sam', statusDate: when.toISOString(), style: { color: '#ff0000' } });
+    expect(ch.get('t')).toEqual({ text: 'CLOSED' });
+    expect(ch.has('o')).toBe(false);
+    expect(statusLabel({ status: 'Closed', statusModel: 'Valve' })).toBe('Valve: Closed');
+    expect(statusLabel({ status: 'Accepted' })).toBe('Accepted');
+  });
+  it('Review states keep the markup colour and need no model', () => {
+    const ch = statusChanges([mk('a')], ['a'], 'Review', 'Accepted', 'Sam');
+    expect(ch.get('a')!.statusModel).toBeUndefined();
+    expect(ch.get('a')!.style).toBeUndefined();
+  });
+});
+
+import { replaceRanges } from '../src/model/textSelect';
+describe('Replace Checked', () => {
+  it('replaces the checked ranges of a run', () => {
+    expect(replaceRanges('DOOR D1 AND DOOR D2', [{ index: 0, len: 4 }, { index: 12, len: 4 }], 'GATE')).toBe('GATE D1 AND GATE D2');
+    expect(replaceRanges('AAA', [{ index: 0, len: 2 }, { index: 1, len: 2 }], 'b')).toBe('Ab'); // overlap skipped
+  });
+});

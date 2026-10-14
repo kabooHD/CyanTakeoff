@@ -275,13 +275,15 @@ function LinkForm() {
   const dlg = s.linkDialog!;
   const first = dlg.ids?.length ? doc.markups.find((m) => m.id === dlg.ids![0])?.link : dlg.place ? { dest: dlg.place } : undefined;
   const places = doc.loaded.places;
-  const [kind, setKind] = useState<'uri' | 'page' | 'place' | 'file'>(first?.dest ? 'place' : first?.file ? 'file' : first?.page !== undefined ? 'page' : 'uri');
+  // Edit Action on markups other than hyperlinks can also remove the action.
+  const onLinks = !dlg.ids?.length || dlg.ids.every((id) => doc.markups.find((m) => m.id === id)?.type === 'link');
+  const [kind, setKind] = useState<'uri' | 'page' | 'place' | 'file' | 'none'>(first?.dest ? 'place' : first?.file ? 'file' : first?.page !== undefined ? 'page' : first?.uri || onLinks ? 'uri' : 'none');
   const [uri, setUri] = useState(first?.uri ?? 'https://');
   const [pageNo, setPageNo] = useState(String((first?.page ?? 0) + 1));
   const [place, setPlace] = useState(first?.dest ?? places[0]?.name ?? '');
   const close = () => useApp.setState({ linkDialog: null });
   const n = doc.loaded.pages.length;
-  const target = kind === 'uri' ? (/^[a-z]+:\/\/./i.test(uri) || /^mailto:/i.test(uri) ? { uri } : null)
+  const target = kind === 'none' ? {} : kind === 'uri' ? (/^[a-z]+:\/\/./i.test(uri) || /^mailto:/i.test(uri) ? { uri } : null)
     : kind === 'place' ? (place ? { dest: place } : null)
     : kind === 'file' ? first ?? null
     : Number(pageNo) >= 1 && Number(pageNo) <= n ? { page: Number(pageNo) - 1 } : null;
@@ -289,7 +291,8 @@ function LinkForm() {
   const apply = () => {
     if (!target) return;
     if (dlg.ids?.length) {
-      s.updateMarkups(dlg.ids, () => ({ link: target, comment: comment(target) }));
+      const none = kind === 'none';
+      s.updateMarkups(dlg.ids, (m) => (m.type === 'link' ? { link: target, comment: comment(target) } : { link: none ? undefined : target }));
     } else {
       const m = s.addMarkup({ type: 'link', page: dlg.page, points: dlg.rect, style: s.toolDefaults.link, subject: 'Hyperlink', link: target, comment: comment(target) });
       s.select([m.id]);
@@ -299,6 +302,7 @@ function LinkForm() {
   return (
     <Modal title={dlg.ids?.length ? `Action${dlg.ids.length > 1 ? ` (${dlg.ids.length} links)` : ''}` : 'Hyperlink'} onClose={close}>
       <div className="scale-dialog" onKeyDown={(e) => e.key === 'Enter' && apply()}>
+        {!onLinks && <div className="form-row"><label><input type="radio" checked={kind === 'none'} onChange={() => setKind('none')} /> No action</label></div>}
         <div className="form-row">
           <label><input type="radio" checked={kind === 'uri'} onChange={() => setKind('uri')} /> Open web address</label>
           <input aria-label="Web address" value={uri} onChange={(e) => setUri(e.target.value)} onFocus={() => setKind('uri')} style={{ width: 240 }} />

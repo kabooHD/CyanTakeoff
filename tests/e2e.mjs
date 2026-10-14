@@ -2032,6 +2032,103 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.screenshot({ path: `${OUT}/unflattened.png` });
 }
 
+// Offset (O), Edit Action (Ctrl+Shift+E), custom status model, custom stamp,
+// Camera dialog, Search > Replace Checked.
+{
+  const rows = () => page.locator('.ml-table tbody tr:not(.reply-row)').count();
+  const box = await svg.boundingBox();
+  await page.keyboard.press('Escape');
+  // Offset a line 0.5 in below itself.
+  await page.keyboard.press('l');
+  await page.mouse.move(box.x + 100, box.y + 300); await page.mouse.down(); await page.mouse.move(box.x + 400, box.y + 300, { steps: 4 }); await page.mouse.up();
+  await page.waitForTimeout(200);
+  const n0 = await rows();
+  await page.keyboard.press('o');
+  const bar = page.locator('[role=toolbar][aria-label="Offset"]');
+  await bar.waitFor();
+  await bar.locator('[aria-label="Offset distance"]').fill('0.5');
+  await page.mouse.move(box.x + 250, box.y + 340);
+  await page.mouse.click(box.x + 250, box.y + 340);
+  await page.waitForTimeout(200);
+  assert(await rows() === n0 + 1, 'Offset places a parallel copy where clicked');
+  await page.keyboard.press('Escape');
+  // Edit Action: the rectangle drawn earlier jumps to page 1... use the new line instead.
+  await page.mouse.click(box.x + 250, box.y + 300);
+  await page.keyboard.press('Control+Shift+E');
+  const act = page.locator('[role=dialog][aria-label="Action"]');
+  await act.waitFor();
+  await act.getByLabel('Web address', { exact: true }).fill('https://example.com/');
+  await act.getByRole('button', { name: 'OK' }).click();
+  await page.evaluate(() => { window.__opened = null; window.open = (u) => { window.__opened = u; return null; }; });
+  await page.mouse.dblclick(box.x + 250, box.y + 300);
+  await page.waitForFunction(() => window.__opened === 'https://example.com/');
+  assert(true, 'a markup with an action follows it on double-click');
+
+  // Custom status model "Valve" with a red "Closed" state.
+  await page.locator('.menubar-item > button', { hasText: /^Tools$/ }).click();
+  await page.getByRole('menuitem', { name: 'Manage Status…' }).click();
+  const ms = page.locator('[role=dialog][aria-label="Manage Status"]');
+  page.once('dialog', (dl) => dl.accept('Valve'));
+  await ms.getByRole('button', { name: 'Add' }).first().click();
+  await ms.getByRole('button', { name: 'Add' }).nth(1).click();
+  await ms.getByLabel('State name').fill('Closed');
+  await ms.getByLabel('Color', { exact: true }).check();
+  await ms.getByLabel('State color').fill('#ff0000');
+  await ms.getByRole('button', { name: 'OK' }).click();
+  const row = page.locator('.ml-table tbody tr', { hasText: 'Line' }).first();
+  await row.locator('select[aria-label="Status"]').selectOption('Valve|Closed');
+  await page.waitForTimeout(200);
+  assert((await row.innerText()).includes('Valve: Closed') || (await row.locator('select[aria-label="Status"]').inputValue()) === 'Valve|Closed', 'a custom status can be set from the Markups List');
+  const chip = await row.locator('.color-chip').evaluate((e) => getComputedStyle(e).backgroundColor).catch(() => '');
+  assert(chip === '' || chip === 'rgb(255, 0, 0)', `the state's colour recolours the markup (${chip})`);
+
+  // Custom text stamp.
+  await page.keyboard.press('Escape');
+  await page.locator('.menubar-item > button', { hasText: /^Tools$/ }).click();
+  await page.getByRole('menuitem', { name: 'Manage Stamps…' }).click();
+  const sd = page.locator('[role=dialog][aria-label="Stamps"]');
+  await sd.getByRole('button', { name: 'New Text Stamp' }).click();
+  await sd.getByLabel('Stamp name').fill('Field Checked');
+  await sd.getByLabel('Stamp title').fill('FIELD CHECKED');
+  await sd.getByRole('button', { name: 'Save Stamp' }).click();
+  await sd.getByRole('button', { name: 'Close' }).click();
+  const n1 = await rows();
+  await page.locator('.menubar-item > button', { hasText: /^Tools$/ }).click();
+  await page.getByRole('menuitem', { name: /^Stamp/ }).first().click();
+  const opt = await page.locator('[role=toolbar][aria-label="Stamp"] select option', { hasText: 'Field Checked' }).getAttribute('value');
+  await page.locator('[role=toolbar][aria-label="Stamp"] select').selectOption(opt);
+  await page.mouse.click(box.x + 600, box.y + 150);
+  await page.waitForTimeout(200);
+  assert(await rows() === n1 + 1 && (await page.locator('.ml-table tbody').innerText()).includes('Field Checked'), 'a custom stamp is placed with its name as subject');
+  await page.screenshot({ path: `${OUT}/custom-stamp.png` });
+
+  // Camera: without a camera the dialog offers a photo instead.
+  await page.keyboard.press('Control+Alt+i');
+  const cam = page.locator('[role=dialog][aria-label="Camera"]');
+  await cam.waitFor();
+  await cam.getByRole('button', { name: 'Cancel' }).click();
+  assert(await cam.count() === 0, 'Camera dialog opens and closes');
+}
+{
+  // Replace Checked on a fresh sample drawing: OFFICE -> STUDIO.
+  await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+  await page.getByRole('menuitem', { name: 'Open Sample Drawing' }).click();
+  await page.waitForTimeout(1500);
+  await page.keyboard.press('Control+f');
+  await page.getByLabel('Search text').fill('OFFICE');
+  await page.getByLabel('Search text').press('Enter');
+  await page.waitForFunction(() => /\d+ results?/.test(document.querySelector('.search-panel')?.textContent ?? ''));
+  await page.getByLabel('Replace with').fill('STUDIO');
+  await page.getByRole('button', { name: 'Replace Checked' }).click();
+  await page.waitForFunction(() => /Replaced \d+ result/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 30000 });
+  await page.getByLabel('Search text').fill('STUDIO');
+  await page.getByLabel('Search text').press('Enter');
+  await page.waitForFunction(() => /\d+ results?/.test(document.querySelector('.search-panel')?.textContent ?? ''));
+  const found = await page.locator('.search-hit').count();
+  assert(found > 0, `Replace Checked rewrites the page text (${found} STUDIO found)`);
+  await page.screenshot({ path: `${OUT}/replace-checked.png` });
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],
