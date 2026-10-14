@@ -207,7 +207,9 @@ filling, image signatures, redaction and OCR.
   data, metadata, JPEG downsampling by placed dpi, object streams)
 - [x] XFDF export/import of markups (standard XFDF plus our measurement data
   in a namespaced element; Revu measurements round-trip)
-- [ ] Edit Text / Edit Content
+- [x] Edit Text (rewrite a run of the drawing's text in its own font and
+  colour when possible, else a standard font) and Erase Content (remove
+  everything under a rectangle); undoable
 - [ ] Touch and pen support
 
 ### Next 2: public test build in local mode (days)

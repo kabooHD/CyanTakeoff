@@ -1657,6 +1657,51 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert(true, `Reduce File Size: ${await page.getByText(/Reduced .*→|already compact/).innerText()}`);
 }
 
+// Edit Text and Erase Content (Tools menu) on the title block of A-101.
+{
+  const menu = async (m, item) => {
+    await page.locator('.menubar-item > button', { hasText: new RegExp(`^${m}$`) }).click();
+    await page.getByRole('menuitem', { name: item, exact: true }).click();
+  };
+  await page.locator('.doc-tab').first().click();
+  await page.mouse.click(5, 500);
+  await page.keyboard.press('Control+4');
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(600);
+  const lb = await page.locator('.page .markup-layer').boundingBox();
+  await menu('Tools', 'Edit Text');
+  await page.mouse.click(lb.x + lb.width * 0.865, lb.y + lb.height * 0.917);
+  const input = page.locator('[aria-label="Edit text"]');
+  await input.waitFor();
+  assert(await input.inputValue() === 'FLOOR PLAN', 'Edit Text opens the clicked line of text');
+  await input.fill('FLOOR PLAN REV');
+  await input.press('Enter');
+  await page.waitForTimeout(2500);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+f');
+  const box = page.locator('[aria-label="Search text"]');
+  await box.fill('FLOOR PLAN REV');
+  await box.press('Enter');
+  await page.waitForTimeout(800);
+  assert((await page.locator('.search-panel .muted.small').first().innerText()).startsWith('1 result'), 'the page text now reads FLOOR PLAN REV');
+  await page.screenshot({ path: `${OUT}/edit-text.png` });
+  await page.evaluate(() => document.activeElement?.blur());
+  await menu('Tools', 'Erase Content');
+  await page.mouse.move(lb.x + lb.width * 0.84, lb.y + lb.height * 0.905);
+  await page.mouse.down();
+  await page.mouse.move(lb.x + lb.width * 0.95, lb.y + lb.height * 0.93, { steps: 4 });
+  await page.mouse.up();
+  await page.waitForTimeout(2500);
+  await page.keyboard.press('Escape');
+  await box.fill('PLAN REV');
+  await box.press('Enter');
+  await page.waitForTimeout(800);
+  assert((await page.locator('.search-panel .muted.small').first().innerText()).startsWith('0 result'), 'Erase Content removed the title text');
+  await page.keyboard.press('Control+z');
+  await page.evaluate(() => document.activeElement?.blur());
+}
+
 // Print (Ctrl+P): sheets are prepared in the page, then the browser's print dialog opens.
 {
   await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });

@@ -2,7 +2,7 @@
 import type { PDFPageProxy, PageViewport } from 'pdfjs-dist';
 import type { Pt } from '../model/types';
 
-export interface TextBox { x0: number; y0: number; x1: number; y1: number; str: string }
+export interface TextBox { x0: number; y0: number; x1: number; y1: number; str: string; /** Font family (pdf.js style). */ font?: string }
 
 const textCache = new WeakMap<PDFPageProxy, Promise<TextBox[]>>();
 
@@ -22,7 +22,7 @@ export function pageText(page: PDFPageProxy, vp: PageViewport): Promise<TextBox[
         return vp.convertToViewportPoint(x, y);
       });
       const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]);
-      return [{ x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys), str: it.str }];
+      return [{ x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys), str: it.str, font: `${it.fontName} ${tc.styles[it.fontName]?.fontFamily ?? ''}` }];
     }));
     textCache.set(page, p);
   }

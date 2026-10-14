@@ -456,3 +456,4 @@ button.active { background: #d6e4fa; }
 .stamp-preview { background: #f4f4f4; margin: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
 .perm-list { display: flex; flex-direction: column; gap: 2px; }
 .error { color: #c00; }
+.edit-text-input { position: absolute; z-index: 5; border: 1px solid var(--accent); background: #fffde8; padding: 0 2px; font-family: Helvetica, Arial, sans-serif; box-sizing: border-box; }

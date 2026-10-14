@@ -146,11 +146,27 @@ export interface RedactOptions {
    * remove the image.
    */
   redactImage?: (ref: PDFRef, ctm: M) => Promise<PDFRef | null>;
+  /** Called for each text-showing operation that lost glyphs (Edit Text uses it to keep the style). */
+  onText?: (t: TextProbe) => void;
+}
+
+/** The state a removed run of text was drawn with. */
+export interface TextProbe {
+  /** Font resource name (valid in the page's resources when `inPage`). */
+  fontName?: string;
+  size: number; ctm: M;
+  /** Text matrix at the first removed glyph, and the run's spacing. */
+  tm: M; th: number; tc: number; tw: number;
+  /** Non-stroking colour operators in force (e.g. "0 0 1 rg"). */
+  fill: string;
+  /** Codes of the removed glyphs, in order; bytes per code. */
+  codes: number[]; bpc: 1 | 2;
+  inPage: boolean;
 }
 
 export interface RedactStats { glyphs: number; paths: number; images: number; forms: number }
 
-interface GState { ctm: M; font?: FontInfo; size: number; tc: number; tw: number; th: number; tl: number; ts: number; clip: Rect | null }
+interface GState { ctm: M; font?: FontInfo; fontName?: string; fill: string; fillCs: string; size: number; tc: number; tw: number; th: number; tl: number; ts: number; clip: Rect | null }
 
 const PAINT = new Set(['S', 's', 'f', 'F', 'f*', 'B', 'B*', 'b', 'b*', 'n']);
 
@@ -178,6 +194,7 @@ function flatten(sub: Sub, ctm: M): P[] {
 class Redactor {
   stats: RedactStats = { glyphs: 0, paths: 0, images: 0, forms: 0 };
   private fonts = new Map<PDFDict, FontInfo>();
+  private depth = 0;
   constructor(private doc: PDFDocument, private opts: RedactOptions) {}
   private get ctx() { return this.doc.context; }
 
@@ -211,7 +228,7 @@ class Redactor {
       return `CTRedacted${i}`;
     };
     const stack: GState[] = [];
-    let g: GState = { ctm: ctm0, size: 0, tc: 0, tw: 0, th: 1, tl: 0, ts: 0, clip: null };
+    let g: GState = { ctm: ctm0, fill: '0 g', fillCs: '', size: 0, tc: 0, tw: 0, th: 1, tl: 0, ts: 0, clip: null };
     let tm: M = ID, tlm: M = ID;
     let path: Sub[] = [];
     let pathOps: Op[] = [];
@@ -233,6 +250,8 @@ class Redactor {
       const trmBase = () => mul([fs * th, 0, 0, fs, 0, g.ts], mul(tm, g.ctm));
       const outItems: Operand[] = [];
       let removed = 0;
+      let firstTm: M | null = null;
+      const removedCodes: number[] = [];
       let pendingAdj = 0;
       let run: number[] = [];
       const flushRun = () => {
@@ -261,6 +280,8 @@ class Redactor {
           const adv = (w0 * fs + g.tc + space) * th;
           if (hits(box, rects)) {
             removed++;
+            if (!firstTm) firstTm = tm;
+            removedCodes.push(code);
             flushRun();
             // Keep the following glyphs in place: a TJ adjustment as wide as the removed glyph.
             pendingAdj += fs ? (-adv / (fs * th)) * 1000 : 0;
@@ -272,6 +293,7 @@ class Redactor {
         }
       }
       if (!removed) return null;
+      this.opts.onText?.({ fontName: g.fontName, size: fs, ctm: g.ctm, tm: firstTm!, th, tc: g.tc, tw: g.tw, fill: g.fill, codes: removedCodes, bpc: font.bpc as 1 | 2, inPage: this.depth === 0 });
       flushRun(); flushAdj();
       this.stats.glyphs += removed;
       const res: Op[] = [];
@@ -288,7 +310,10 @@ class Redactor {
         case 'Q': g = stack.pop() ?? g; out.push(op); continue;
         case 'cm': g = { ...g, ctm: mul([n(a[0]), n(a[1]), n(a[2]), n(a[3]), n(a[4]), n(a[5])], g.ctm) }; out.push(op); continue;
         case 'BT': tm = ID; tlm = ID; out.push(op); continue;
-        case 'Tf': g = { ...g, font: a[0]?.t === 'name' ? this.fontFor(res, a[0].v) : undefined, size: n(a[1]) }; out.push(op); continue;
+        case 'Tf': g = { ...g, font: a[0]?.t === 'name' ? this.fontFor(res, a[0].v) : undefined, fontName: a[0]?.t === 'name' ? a[0].v : undefined, size: n(a[1]) }; out.push(op); continue;
+        case 'cs': g = { ...g, fillCs: op.raw, fill: op.raw }; out.push(op); continue;
+        case 'sc': case 'scn': g = { ...g, fill: `${g.fillCs} ${op.raw}`.trim() }; out.push(op); continue;
+        case 'rg': case 'g': case 'k': g = { ...g, fillCs: '', fill: op.raw }; out.push(op); continue;
         case 'Tc': g = { ...g, tc: n(a[0]) }; out.push(op); continue;
         case 'Tw': g = { ...g, tw: n(a[0]) }; out.push(op); continue;
         case 'Tz': g = { ...g, th: n(a[0]) / 100 }; out.push(op); continue;
@@ -418,7 +443,8 @@ class Redactor {
           const box = bb.length === 4 ? bboxOf([apply(fctm, bb[0], bb[1]), apply(fctm, bb[2], bb[1]), apply(fctm, bb[0], bb[3]), apply(fctm, bb[2], bb[3])]) : null;
           if (box && !hits(box, rects)) { out.push(op); continue; }
           const fres = xo.dict.lookup(N('Resources'));
-          const inner = await this.stream(latin1(streamBytes(xo)), fres instanceof PDFDict ? fres : res, fctm);
+          this.depth++;
+          const inner = await this.stream(latin1(streamBytes(xo)), fres instanceof PDFDict ? fres : res, fctm).finally(() => { this.depth--; });
           if (!inner) { out.push(op); continue; }
           changed = true;
           this.stats.forms++;
@@ -465,7 +491,7 @@ export function streamBytes(s: PDFStream): Uint8Array {
  * Redact a page: rewrite its content (and nested forms) so nothing under
  * `rects` remains, then paint the rectangles black. Returns what was removed.
  */
-export async function redactPage(doc: PDFDocument, pageIdx: number, opts: RedactOptions, fill: [number, number, number] = [0, 0, 0]): Promise<RedactStats> {
+export async function redactPage(doc: PDFDocument, pageIdx: number, opts: RedactOptions, fill: [number, number, number] | null = [0, 0, 0]): Promise<RedactStats> {
   const page = doc.getPage(pageIdx);
   const ctx = doc.context;
   const contents = page.node.Contents();
@@ -477,7 +503,7 @@ export async function redactPage(doc: PDFDocument, pageIdx: number, opts: Redact
   const r = new Redactor(doc, opts);
   const done = await r.stream(text, res, ID);
   const boxes = opts.rects.map((q) => `${q[0]} ${q[1]} ${q[2] - q[0]} ${q[3] - q[1]} re`).join(' ');
-  const body = `q\n${done ? done.content : text}\nQ\nq ${fill.join(' ')} rg ${boxes} f Q\n`;
+  const body = `q\n${done ? done.content : text}\nQ\n${fill ? `q ${fill.join(' ')} rg ${boxes} f Q\n` : ''}`;
   page.node.set(N('Contents'), ctx.register(ctx.flateStream(bytesOfLatin1(body))));
   if (done?.res) page.node.set(N('Resources'), done.res);
   return r.stats;

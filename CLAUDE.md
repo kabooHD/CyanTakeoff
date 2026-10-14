@@ -98,7 +98,8 @@ Sequences (src/model/sequence.ts, src/ui/SequenceDialog.tsx); Quantity Link
 Footer, Bates, Watermark (src/pdf/stamps.ts, src/ui/HeaderFooter.tsx);
 password security (src/pdf/crypt.ts: R2-R6 decrypt, AES-256 encrypt;
 src/ui/Security.tsx), Reduce File Size (src/pdf/reduce.ts), XFDF
-(src/pdf/xfdf.ts); CyanTakeoff (=Revu)
+(src/pdf/xfdf.ts); Edit Text / Erase Content (src/pdf/editText.ts, using
+the redaction walker's text probe); CyanTakeoff (=Revu)
 and Batch menus; form filling (AcroForm inputs saved into the form) and
 field creation (Tools > field tools, X = signature field, Forms Editor
 Ctrl+Shift+F), image

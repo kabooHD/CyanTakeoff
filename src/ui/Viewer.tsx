@@ -27,6 +27,8 @@ import { setCursor } from './cursor';
 import { ViewOverlays, recordView } from './Rulers';
 import { setVisualTemplate } from './VisualSearch';
 import { finishPickRect } from './pickRect';
+import { editText, eraseContent } from '../pdf/editText';
+import type { TextBox } from './toolActions';
 import { formatSequence, nextInSequence, sequenceMembers } from '../model/sequence';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { snapGeometry, snapToContent, type SnapGeometry } from '../pdf/geometry';
@@ -88,6 +90,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const [drag, setDrag] = useState<Drag | null>(null);
   const [snapPt, setSnapPt] = useState<Pt | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  /** Edit Text: the run of the drawing's text being edited. */
+  const [textEdit, setTextEdit] = useState<TextBox | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const anchor = useRef<{ px: number; py: number; cx: number; cy: number } | null>(null);
   const spaceDown = useRef(false);
@@ -640,6 +644,14 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     if (e.button !== 0) return;
     const raw = toPage(e);
     if (align && isActivePane) { pickAlignPoint(snap(raw)); return; }
+    if (tool === 'edit-text') {
+      if (!pdfPage) return;
+      pageText(pdfPage, page.viewport).then((boxes) => {
+        const hit = boxes.find((b) => raw.x >= b.x0 - 1 && raw.x <= b.x1 + 1 && raw.y >= b.y0 - 1 && raw.y <= b.y1 + 1);
+        if (hit) setTextEdit(hit); else s.setStatus('Edit Text: no text there. Click on a line of the drawing\'s text.');
+      });
+      return;
+    }
 
     if (tool === 'dynamic-fill') {
       fillDown(raw);
@@ -861,6 +873,15 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       return;
     }
     if (draft.tool === 'snapshot') { takeSnapshot(a, p); return; }
+    if (draft.tool === 'erase-content') {
+      setDraft(null);
+      const [c0, c1] = [a, p].map((q) => page.viewport.convertToPdfPoint(q.x, q.y) as [number, number]);
+      const rect: [number, number, number, number] = [Math.min(c0[0], c1[0]), Math.min(c0[1], c1[1]), Math.max(c0[0], c1[0]), Math.max(c0[1], c1[1])];
+      let removed = false;
+      s.transformDoc(async (lib) => { removed = await eraseContent(lib, pageIdx, rect); }, 'Content erased', pageIdx)
+        .then((ok) => { if (ok && !removed) s.setStatus('Erase Content: nothing under that rectangle'); });
+      return;
+    }
     if (draft.tool === 'region-pick') { setDraft(null); s.setTool('select'); finishPickRect(doc.id, pageIdx, a, p); return; }
     if (draft.tool === 'visual-pick') { setDraft(null); s.setTool('select'); setVisualTemplate(doc, pageIdx, a, p); return; }
     if (draft.tool === 'cloudplus') { setDraft({ ...draft, points: [a, p], dragFrom: undefined }); return; }
@@ -1174,7 +1195,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     };
   } else if (draft && draft.cursor) {
     const pts = def.interaction === 'freehand' || draft.curving !== undefined ? draft.points : [...draft.points, draft.cursor];
-    const boxed = draft.tool.startsWith('form-') || draft.tool === 'lasso' || draft.tool === 'redact-text' || draft.tool === 'viewport' || draft.tool === 'snapshot' || draft.tool === 'visual-pick' || draft.tool === 'region-pick' || draft.tool === 'link' || def.interaction === 'text';
+    const boxed = draft.tool.startsWith('form-') || draft.tool === 'lasso' || draft.tool === 'redact-text' || draft.tool === 'viewport' || draft.tool === 'snapshot' || draft.tool === 'visual-pick' || draft.tool === 'region-pick' || draft.tool === 'erase-content' || draft.tool === 'link' || def.interaction === 'text';
     let type = (draft.tool === 'calibrate' ? 'length' : boxed ? 'rectangle' : draft.tool) as MarkupType;
     let P = pts;
     if (draft.tool === 'cloudplus' && pts.length >= 3) P = [pts[0], pts[1], pts[2], { x: pts[2].x + 144, y: pts[2].y + 40 }];
@@ -1308,6 +1329,28 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
                 fill="none" stroke="#00b050" strokeWidth={1.5 / zoom} pointerEvents="none" />
             )}
           </svg>
+          {textEdit && (
+            <input className="edit-text-input" aria-label="Edit text" autoFocus defaultValue={textEdit.str}
+              style={{ left: textEdit.x0 * zoom - 2, top: textEdit.y0 * zoom - 2, width: Math.max(60, (textEdit.x1 - textEdit.x0) * zoom * 1.4 + 8), height: (textEdit.y1 - textEdit.y0) * zoom + 4, fontSize: (textEdit.y1 - textEdit.y0) * zoom * 0.75 }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Escape') setTextEdit(null);
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+              }}
+              onBlur={(e) => {
+                const box = textEdit, text = e.target.value;
+                setTextEdit(null);
+                if (text === box.str) return;
+                // Shrink the box a little so neighbouring runs are not touched.
+                const h = box.y1 - box.y0;
+                const [c0, c1] = [{ x: box.x0 + 0.3, y: box.y0 + h * 0.2 }, { x: box.x1 - 0.3, y: box.y1 - h * 0.2 }].map((q) => page.viewport.convertToPdfPoint(q.x, q.y) as [number, number]);
+                const rect: [number, number, number, number] = [Math.min(c0[0], c1[0]), Math.min(c0[1], c1[1]), Math.max(c0[0], c1[0]), Math.max(c0[1], c1[1])];
+                let res = { reusedFont: false, found: false };
+                s.transformDoc(async (lib) => { res = await editText(lib, pageIdx, rect, box.str, text, box.font); }, 'Text edited', pageIdx)
+                  .then((ok) => { if (ok) s.setStatus(!res.found ? 'Edit Text: that text could not be found in the page content' : res.reusedFont ? 'Text edited' : 'Text edited (new characters use a standard font)'); });
+              }} />
+          )}
           {doc.loaded.fields.length > 0 && <FormLayer doc={doc} pageIdx={pageIdx} zoom={zoom} interactive={s.tool === 'select' || s.tool === 'pan'} />}
           {editingMarkup && (
             <TextEditor m={editingMarkup} zoom={zoom} onDone={(text) => {

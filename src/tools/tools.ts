@@ -38,6 +38,8 @@ export const TOOLS: ToolDef[] = [
   { id: 'select', name: 'Select', group: 'navigate', shortcut: 'V', interaction: 'none', subject: '' },
   { id: 'pan', name: 'Pan', group: 'navigate', shortcut: 'Shift+V', interaction: 'none', subject: '' },
   { id: 'zoom', name: 'Zoom', group: 'navigate', shortcut: 'Z', interaction: 'none', subject: '' },
+  { id: 'edit-text', name: 'Edit Text', group: 'navigate', interaction: 'point', subject: '' },
+  { id: 'erase-content', name: 'Erase Content', group: 'navigate', interaction: 'box', subject: '' },
   { id: 'region-pick', name: 'Select Region', group: 'navigate', interaction: 'box', subject: '' },
   { id: 'visual-pick', name: 'VisualSearch: Get Rectangle', group: 'navigate', interaction: 'box', subject: '' },
   { id: 'lasso', name: 'Lasso', group: 'navigate', shortcut: 'Shift+O', interaction: 'freehand', subject: '' },

@@ -258,6 +258,16 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - With the Area or Volume tool, clicking a cutout converts it into its own
   measurement (Shift: all cutouts of that markup); the cutout stays.
 
+## Edit Text, Erase Content
+Revu edits the PDF's own text in place; replacing text in a font that is
+not editable can be skipped or done with another font. Ours: Tools > Edit
+Text, click a line, type, Enter. The same font is kept when every new
+character already appears in that run (works with subset fonts); otherwise
+a standard font of the same family is used at the same position, size,
+spacing and colour. Tools > Erase Content removes text, vectors and images
+under a dragged rectangle (redaction without the box). Moving content is
+not supported yet.
+
 ## Security, Reduce File Size, XFDF
 Document > Security (Ctrl+L): No Security or Password Security with a
 password to open and/or a permissions password restricting printing,
