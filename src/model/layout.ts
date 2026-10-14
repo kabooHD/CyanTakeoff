@@ -10,10 +10,12 @@ export interface Slot { index: number; x: number; y: number; w: number; h: numbe
 export const GAP = 12;
 
 /** Pages shown by the view: all of them in continuous modes, else the current page (or its pair). */
-export function shownPages(mode: ViewMode, count: number, current: number): number[] {
+export function shownPages(mode: ViewMode, count: number, current: number, cover = false): number[] {
   if (mode === 'continuous' || mode === 'continuous-side') return Array.from({ length: count }, (_, i) => i);
   if (mode === 'side') {
-    const first = current - (current % 2);
+    // With a cover page the first page stands alone and the pairs are 2-3, 4-5…
+    if (cover && current === 0) return [0];
+    const first = cover ? current - ((current + 1) % 2) : current - (current % 2);
     return first + 1 < count ? [first, first + 1] : [first];
   }
   return [current];
@@ -24,11 +26,13 @@ export function shownPages(mode: ViewMode, count: number, current: number): numb
  * Rows are centred horizontally; side-by-side rows put pages 1-2, 3-4...
  * next to each other. `pad` is the margin round the whole layout.
  */
-export function layoutPages(sizes: { w: number; h: number }[], mode: ViewMode, current: number, pad: number, view: { w: number; h: number }) {
-  const shown = shownPages(mode, sizes.length, current);
+export function layoutPages(sizes: { w: number; h: number }[], mode: ViewMode, current: number, pad: number, view: { w: number; h: number }, cover = false) {
+  const shown = shownPages(mode, sizes.length, current, cover);
   const pairs = mode === 'side' || mode === 'continuous-side';
   const rows: number[][] = [];
-  for (let i = 0; i < shown.length; i += pairs ? 2 : 1) rows.push(shown.slice(i, i + (pairs ? 2 : 1)));
+  // A cover page takes a row of its own (Show Cover Page in Side-by-Side).
+  const rest = pairs && cover && shown[0] === 0 && shown.length > 1 ? (rows.push([0]), shown.slice(1)) : shown;
+  for (let i = 0; i < rest.length; i += pairs ? 2 : 1) rows.push(rest.slice(i, i + (pairs ? 2 : 1)));
   const rowW = rows.map((r) => r.reduce((s, i) => s + sizes[i].w, 0) + GAP * (r.length - 1));
   const rowH = rows.map((r) => Math.max(...r.map((i) => sizes[i].h)));
   const contentW = Math.max(...rowW);

@@ -78,7 +78,7 @@ Attachment, Eraser); Group/Ungroup, Arrange, Lock, Align, Flip, Format
 Painter, Lasso; Spaces (Revu /BSISpaces, panel, Space column); slope, rise/drop, wall area;
 custom columns incl. formulas; Summary to Excel (.xlsx), CSV or PDF report;
 Legends; Markups List replies, Checkmark/Lock/Creation Date columns, arrow
-keys and jump-to-markup; Search (Ctrl+F); split view (Ctrl+2/Ctrl+H); undo/redo of page operations; view modes (single, continuous, side by side,
+keys and jump-to-markup; Search (Ctrl+F); split view (Ctrl+2/Ctrl+H); undo/redo of page operations; view modes (single, continuous, side by side, cover page, Dark Mode, line-weight and reply-indicator toggles,
 continuous side by side: Ctrl+4..7) and Rotate View (Ctrl+Shift+Plus/Minus); page operations (insert,
 blank, delete, extract, replace keeping markups, rotate, reorder by
 thumbnail drag, split, combine) and Flatten; Compare Documents (clouds

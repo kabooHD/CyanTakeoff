@@ -73,7 +73,12 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 ## View modes and Rotate View
 - View > Mode: Single Page (Ctrl+4), Continuous (Ctrl+5, pages one under
   another), Side by Side (Ctrl+6, pages 1-2, 3-4... as pairs), Continuous
-  Side by Side (Ctrl+7). Markups can be drawn on any page shown.
+  Side by Side (Ctrl+7). Markups can be drawn on any page shown. Show
+  Cover Page in Side-by-Side keeps page 1 alone (pairs 2-3, 4-5...).
+- View toggles: Dark Mode (dark chrome), Disable Line Weights (ours: markup
+  lines one screen pixel at any zoom; the drawing itself keeps its line
+  weights), Always Show Reply Indicators (a bubble with the reply count on
+  markups that have replies).
 - Rotate View clockwise / counterclockwise (Ctrl+Shift+Plus / Minus) turns
   the display of all pages in 90 degree steps. It does not change the file
   (unlike Rotate Pages, which sets the page /Rotate).

@@ -67,6 +67,7 @@ export const STAMP_COLORS: Record<string, string> = {
 const TEXTUAL = new Set(['textbox', 'callout', 'typewriter', 'cloudplus']);
 
 export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
+  const replyIndicators = useApp((st) => !!st.toggles.replyIndicators);
   const st = m.style;
   const P = m.points;
   // Line style: simple ones are a dash pattern; others (parallel lines, text) are drawn along the outline.
@@ -317,6 +318,18 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
         <text x={label.at.x} y={label.at.y} fontSize={m.style.fontSize} fill={st.color}
           textAnchor="middle" dominantBaseline="middle" className="measure-label">{label.text}</text>
       )}
+      {replyIndicators && m.replies?.length && P.length > 0 ? <ReplyIndicator m={m} /> : null}
+    </g>
+  );
+}
+
+/** View > Always Show Reply Indicators: a speech bubble at the markup's top-right corner. */
+function ReplyIndicator({ m }: { m: Markup }) {
+  const b = bounds(m.points), x = b.maxX + 2, y = b.minY - 12;
+  return (
+    <g className="reply-indicator" pointerEvents="none">
+      <path d={`M${x},${y} h12 a2,2 0 0 1 2,2 v6 a2,2 0 0 1 -2,2 h-7 l-3,3 v-3 h-2 a2,2 0 0 1 -2,-2 v-6 a2,2 0 0 1 2,-2 z`} fill="#fff" stroke={m.style.color} strokeWidth={0.8} />
+      <text x={x + 7} y={y + 7.5} fontSize={7} fill={m.style.color} textAnchor="middle" fontFamily="Helvetica, Arial, sans-serif">{m.replies!.length}</text>
     </g>
   );
 }

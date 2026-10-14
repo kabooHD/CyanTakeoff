@@ -2010,6 +2010,23 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.waitForTimeout(800);
     await page.keyboard.press('Control+z');
     await page.waitForTimeout(800);
+    // View toggles: Dark Mode themes the chrome; Show Cover Page leaves page 1 alone in Side by Side.
+    const viewItem = async (name) => { await page.keyboard.press('Escape'); await page.waitForTimeout(150); await page.locator('.menubar-item > button', { hasText: /^View$/ }).click(); await page.getByRole('menuitem', { name }).click(); await page.waitForTimeout(250); };
+    await viewItem('Dark Mode');
+    assert(await page.evaluate(() => document.documentElement.dataset.theme) === 'dark', 'Dark Mode sets the dark theme');
+    await viewItem('Dark Mode');
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Control+6');
+    await page.waitForTimeout(400);
+    const shownPages = () => page.locator('.page-tile').count(); // one tile per page slot in multi-page views
+    const pairPages = await shownPages();
+    await viewItem('Show Cover Page in Side-by-Side');
+    await page.waitForTimeout(400);
+    const coverPages = await shownPages();
+    assert(pairPages === 2 && coverPages === 1, `Show Cover Page shows the first page alone in Side by Side (${pairPages} -> ${coverPages})`);
+    await viewItem('Show Cover Page in Side-by-Side');
+    await page.keyboard.press('Control+4');
+    await page.waitForTimeout(300);
     if (!hadThumbs) await page.keyboard.press('Alt+t');
   }
 }

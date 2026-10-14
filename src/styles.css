@@ -12,6 +12,14 @@
   --row-alt: #f8f8f8;
   color-scheme: light;
 }
+/* View > Dark Mode */
+:root[data-theme="dark"] {
+  --chrome: #2b2b2b; --chrome-2: #353535; --panel: #1e1e1e; --border: #4a4a4a; --text: #e6e6e6; --muted: #a0a0a0;
+  --accent: #4d9bff; --accent-soft: #2d3f5c; --canvas: #3a3a3a; --hover: #3a4a60; --row-alt: #262626;
+  color-scheme: dark;
+}
+/* View > Disable Line Weights: markups at one screen pixel whatever the zoom. */
+.no-line-weights .markup-layer :is(path, line, polyline, polygon, rect, ellipse, circle)[stroke]:not([fill="none"][stroke="none"]) { vector-effect: non-scaling-stroke; stroke-width: 1px; }
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }

@@ -137,7 +137,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   // View mode and Rotate View: where each shown page sits in the scroll area.
   const mode = s.viewMode, rot = s.viewRotation;
   const multi = mode !== 'single';
-  const lay = layoutPages(doc.loaded.pages.map((p) => rotatedSize(p.width * zoom, p.height * zoom, rot)), mode, pageIdx, PAD, size);
+  const lay = layoutPages(doc.loaded.pages.map((p) => rotatedSize(p.width * zoom, p.height * zoom, rot)), mode, pageIdx, PAD, size, !!s.toggles.coverPage);
   const { innerW, innerH } = lay;
   const slot = lay.slots.find((x) => x.index === page.index)!;
   const left = slot.x, top = slot.y;
@@ -1484,7 +1484,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     : tool === 'select' ? 'default' : tool === 'zoom' ? 'zoom-in' : 'crosshair';
 
   return (
-    <div className={`viewer-wrap ${split ? (isActivePane ? 'pane-active' : 'pane-inactive') : ''} ${s.toggles.rulers ? 'with-rulers' : ''}`}
+    <div className={`viewer-wrap ${split ? (isActivePane ? 'pane-active' : 'pane-inactive') : ''} ${s.toggles.rulers ? 'with-rulers' : ''} ${s.toggles.noLineWeights ? 'no-line-weights' : ''}`}
       onPointerDownCapture={() => { if (split && !isActivePane) s.focusPane(pane); }}>
     <div className="viewer" ref={scrollRef} onScroll={onScroll} onPointerLeave={() => { pointerIn.current = false; }}>
       <div style={{ width: innerW, height: innerH, position: 'relative' }} onPointerMove={onLayoutMove}>

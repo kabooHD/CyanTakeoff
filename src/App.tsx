@@ -63,6 +63,8 @@ export function App() {
   const [dialog, setDialog] = useState<'shortcuts' | 'about' | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
+  const darkMode = useApp((s) => !!s.toggles.darkMode);
+  useEffect(() => { document.documentElement.dataset.theme = darkMode ? 'dark' : 'light'; }, [darkMode]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isEditable(e.target)) return;

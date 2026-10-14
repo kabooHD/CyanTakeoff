@@ -246,4 +246,12 @@ export interface Toggles {
   penMode: boolean;
   /** Window > Navigation Bar (F4): page navigation in the status bar. */
   navBar: boolean;
+  /** View > Show Cover Page in Side-by-Side: the first page alone, then pairs 2-3, 4-5… */
+  coverPage?: boolean;
+  /** View > Dark Mode. */
+  darkMode?: boolean;
+  /** View > Disable Line Weights: markups drawn with a 1 px line whatever the zoom. */
+  noLineWeights?: boolean;
+  /** View > Always Show Reply Indicators: a bubble on markups that have replies. */
+  replyIndicators?: boolean;
 }
