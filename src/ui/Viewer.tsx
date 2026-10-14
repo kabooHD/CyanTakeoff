@@ -12,6 +12,7 @@ import { layerIds } from '../pdf/layers';
 import { markupShown, ocConfig, visibilityKey } from './layersView';
 import { openSignDialog } from './DigitalSignature';
 import { cancelPicking, pickAlignPoint, pickingPrompt, useCompareDialog } from './Compare';
+import { addToLegend, applyLegendToAllPages, copyLegendToSnapshot } from './legendCommands';
 import { STAMPS, downloadBase64, loadImage, pageText, pickFile, readAsDataUrl, snapshot, textRectsIn } from './toolActions';
 import { applyCutout, ellipsePolygon } from '../model/cutouts';
 import { expandGroups } from '../model/arrange';
@@ -677,7 +678,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     const def: LegendDef = { title: 'Legend', keys, source: 'page', showQuantity: true, showMeasurement: keys.some((k) => MEASURE_TYPES.has(k.split('|')[0])) };
     useApp.setState({ legendKeys: null });
     // The click is the table's top-left corner.
-    const L = legendLayout(def, legendRows(def, doc.markups, pageIdx), (s.preset?.style ?? s.toolDefaults.legend).fontSize);
+    const L = legendLayout(def, legendRows(def, doc.markups, pageIdx, { pageCount: doc.loaded.pages.length, columns: doc.columns }), (s.preset?.style ?? s.toolDefaults.legend).fontSize, doc.columns);
     finish('legend', [p, { x: p.x + L.w, y: p.y + L.h }], { legend: def });
   };
 
@@ -1494,12 +1495,21 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         { label: 'Reply', action: () => { s.setPanels({ markupsList: true }); useApp.setState({ replyTo: hit.id }); } },
         { label: hit.checked ? 'Uncheck' : 'Check', action: () => s.updateMarkups(ids, () => ({ checked: !hit.checked || undefined })) },
         { label: 'Clear All Checkmarks', action: () => s.updateMarkups(doc.markups.filter((x) => x.checked).map((x) => x.id), () => ({ checked: undefined })) },
-        { label: 'Create Legend', action: () => {
-          const sel = doc.markups.filter((m) => ids.includes(m.id) && m.type !== 'legend');
-          useApp.setState({ legendKeys: [...new Set(sel.map(legendKey))] });
-          s.setTool('legend');
-          s.setStatus('Click on the drawing to place the Legend.');
-        } },
+        ...(hit.type === 'legend' ? [
+          { label: 'Apply to All Pages', action: () => applyLegendToAllPages(hit) },
+          { label: 'Copy Legend to Snapshot', action: () => void copyLegendToSnapshot(hit) },
+        ] : [
+          { label: 'Legend › Create New Legend', action: () => {
+            const sel = doc.markups.filter((m) => ids.includes(m.id) && m.type !== 'legend');
+            useApp.setState({ legendKeys: [...new Set(sel.map(legendKey))] });
+            s.setTool('legend');
+            s.setStatus('Click on the drawing to place the Legend.');
+          } },
+          // Legend > <title>: add the selected markups to a Legend already on this page.
+          ...doc.markups.filter((m) => m.type === 'legend' && m.legend && m.page === pageIdx).map((l) => ({
+            label: `Legend › ${l.legend!.title || 'Legend'}`, action: () => addToLegend(l.id, doc.markups.filter((m) => ids.includes(m.id))),
+          })),
+        ]),
         { sep: true },
         ...arrangeItems(),
       );

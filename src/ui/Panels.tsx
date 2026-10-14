@@ -26,7 +26,7 @@ import { LINE_ENDS, LINE_END_TYPES, defaultEnds, endsOf } from '../model/lineEnd
 import { usePageSetup } from './PageSetup';
 import { useApp, useActiveDoc, type DocState } from '../model/store';
 import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, formatNumber, measure, precisionOf, unitLabel, withPrecision } from '../model/measure';
-import type { Markup, MarkupStyle, MarkupType, Scale, ToolPreset, ToolSet } from '../model/types';
+import type { CustomColumn, Markup, MarkupStyle, MarkupType, Scale, ToolPreset, ToolSet } from '../model/types';
 import { toolById } from '../tools/tools';
 import { Icon } from './icons';
 import { SpacesPanel } from './SpacesPanel';
@@ -46,7 +46,7 @@ import { useSheetsDialog } from './Sheets';
 import { openPrint } from './Print';
 import { emailBytes } from './DocTools';
 import { exportSummaryCsv } from './actions';
-import { legendKey } from '../model/legend';
+import { LEGEND_COLUMNS, legendKey, legendSizes, type FontFlags, type LegendDef } from '../model/legend';
 
 // ---------------- side tab strips ----------------
 
@@ -279,6 +279,77 @@ function Thumbnails({ doc }: { doc: DocState }) {
 
 // ---------------- Properties ----------------
 
+/** The Legend section of the Properties panel (Revu: Title, Columns, Table, Text). */
+function LegendEditor({ def, columns, onChange }: { def: LegendDef; columns: CustomColumn[]; onChange: (p: Partial<LegendDef>) => void }) {
+  const z = legendSizes(def, 10);
+  const flags = (key: 'titleStyle' | 'headerStyle', f: FontFlags) => (
+    <span className="font-flags">
+      {(['bold', 'italic', 'underline', 'strike'] as const).map((k) => (
+        <button key={k} type="button" className={`icon-btn${f[k] ? ' on' : ''}`} aria-label={`${key === 'titleStyle' ? 'Title' : 'Header'} ${k}`} aria-pressed={!!f[k]}
+          onClick={() => onChange({ [key]: { ...f, [k]: !f[k] } })} style={{ fontWeight: k === 'bold' ? 'bold' : undefined, fontStyle: k === 'italic' ? 'italic' : undefined, textDecoration: k === 'underline' ? 'underline' : k === 'strike' ? 'line-through' : undefined }}>
+          {k === 'bold' ? 'B' : k === 'italic' ? 'I' : k === 'underline' ? 'U' : 'S'}
+        </button>
+      ))}
+    </span>
+  );
+  const extra = def.columns ?? [];
+  const choices = [...LEGEND_COLUMNS, ...columns.map((c) => ({ id: `custom:${c.id}`, label: c.name }))];
+  return (
+    <>
+      <div className="prop-section">Legend</div>
+      <Row label="Title"><input aria-label="Legend title" value={def.title} onChange={(e) => onChange({ title: e.target.value })} /></Row>
+      <Row label="Show Title"><input type="checkbox" aria-label="Show title" checked={z.showTitle} onChange={(e) => onChange({ showTitle: e.target.checked })} /></Row>
+      <Row label="Title Size">
+        <input type="number" aria-label="Title size" min={1} max={144} step={0.5} value={def.titleSize ?? ''} placeholder="auto" onChange={(e) => onChange({ titleSize: e.target.value === '' ? undefined : Math.max(1, Math.min(144, Number(e.target.value))) })} />
+        {flags('titleStyle', def.titleStyle ?? { bold: true })}
+      </Row>
+      <Row label="Source Pages">
+        <select aria-label="Source pages" value={def.source} onChange={(e) => onChange({ source: e.target.value as LegendDef['source'] })}>
+          <option value="page">Current page</option><option value="all">All pages</option><option value="custom">Custom</option>
+        </select>
+      </Row>
+      {def.source === 'custom' && <Row label="Pages"><input aria-label="Source page range" placeholder="1-3, 5, 9" value={def.pages ?? ''} onChange={(e) => onChange({ pages: e.target.value })} /></Row>}
+      <Row label="Columns">
+        <label><input type="checkbox" checked={def.showQuantity} onChange={(e) => onChange({ showQuantity: e.target.checked })} /> Quantity</label>
+        <label><input type="checkbox" checked={def.showMeasurement} onChange={(e) => onChange({ showMeasurement: e.target.checked })} /> Measurement</label>
+      </Row>
+      <Row label="More Columns">
+        <select aria-label="Add legend column" value="" onChange={(e) => { if (e.target.value && !extra.includes(e.target.value)) onChange({ columns: [...extra, e.target.value] }); }}>
+          <option value="">Add column…</option>
+          {choices.filter((c) => !extra.includes(c.id)).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </select>
+      </Row>
+      {extra.length > 0 && (
+        <div className="legend-columns">
+          {extra.map((id, i) => (
+            <div key={id} className="legend-column">
+              <span>{choices.find((c) => c.id === id)?.label ?? id}</span>
+              <button type="button" className="icon-btn" aria-label={`Move ${choices.find((c) => c.id === id)?.label ?? id} up`} disabled={i === 0} onClick={() => { const n = [...extra]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; onChange({ columns: n }); }}>▲</button>
+              <button type="button" className="icon-btn" aria-label={`Remove ${choices.find((c) => c.id === id)?.label ?? id} column`} onClick={() => onChange({ columns: extra.filter((x) => x !== id) })}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <Row label="Show Headers"><input type="checkbox" aria-label="Show column headers" checked={z.showHeaders} onChange={(e) => onChange({ showHeaders: e.target.checked })} /></Row>
+      <Row label="Header Size">
+        <input type="number" aria-label="Header size" min={1} max={144} step={0.5} value={def.headerSize ?? ''} placeholder="auto" onChange={(e) => onChange({ headerSize: e.target.value === '' ? undefined : Math.max(1, Math.min(144, Number(e.target.value))) })} />
+        {flags('headerStyle', def.headerStyle ?? { bold: true })}
+      </Row>
+      <Row label="Symbol Size (%)"><input type="number" aria-label="Symbol size" min={1} max={5000} value={def.symbolSize ?? 100} onChange={(e) => onChange({ symbolSize: Math.max(1, Math.min(5000, Number(e.target.value) || 100)) })} /></Row>
+      <Row label="Margin"><input type="number" aria-label="Legend margin" min={0} max={50} value={def.margin ?? 5} onChange={(e) => onChange({ margin: Math.max(0, Math.min(50, Number(e.target.value) || 0)) })} /></Row>
+      <Row label="Alignment">
+        <select aria-label="Legend text alignment" value={z.align} onChange={(e) => onChange({ align: e.target.value as LegendDef['align'] })}>
+          <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
+        </select>
+      </Row>
+      <Row label="Text Color">
+        <input type="color" aria-label="Legend text color" value={def.textColor ?? '#000000'} onChange={(e) => onChange({ textColor: e.target.value })} />
+        {def.textColor && <button type="button" className="link-btn" onClick={() => onChange({ textColor: undefined })}>Same as lines</button>}
+      </Row>
+    </>
+  );
+}
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="prop-row"><span>{label}</span>{children}</label>;
 }
@@ -436,21 +507,7 @@ function Properties() {
       <Row label="Author"><input value={m.author} readOnly /></Row>
       <Row label="Date"><input value={new Date(m.modified).toLocaleString()} readOnly /></Row>
       <StyleEditor style={m.style} type={m.type} onChange={(p) => { upd((x) => ({ style: { ...x.style, ...p } })); if (s.prefs.dynamicDefaults && s.toolDefaults[m.type]) s.setToolDefault(m.type, p); }} />
-      {m.type === 'legend' && m.legend && (
-        <>
-          <div className="prop-section">Legend</div>
-          <Row label="Title"><input aria-label="Legend title" value={m.legend.title} onChange={(e) => upd((x) => ({ legend: { ...x.legend!, title: e.target.value } }))} /></Row>
-          <Row label="Source Pages">
-            <select aria-label="Source pages" value={m.legend.source} onChange={(e) => upd((x) => ({ legend: { ...x.legend!, source: e.target.value as 'page' } }))}>
-              <option value="page">This page</option><option value="all">All pages</option>
-            </select>
-          </Row>
-          <Row label="Columns">
-            <label><input type="checkbox" checked={m.legend.showQuantity} onChange={(e) => upd((x) => ({ legend: { ...x.legend!, showQuantity: e.target.checked } }))} /> Quantity</label>
-            <label><input type="checkbox" checked={m.legend.showMeasurement} onChange={(e) => upd((x) => ({ legend: { ...x.legend!, showMeasurement: e.target.checked } }))} /> Measurement</label>
-          </Row>
-        </>
-      )}
+      {m.type === 'legend' && m.legend && <LegendEditor def={m.legend} columns={doc?.columns ?? []} onChange={(p) => upd((x) => ({ legend: { ...x.legend!, ...p } }))} />}
       {meas && (
         <>
           <div className="prop-section">Measurement</div>

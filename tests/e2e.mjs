@@ -701,7 +701,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
 {
   const p = await toScreen(20, 38);
   await page.mouse.click(p.x, p.y, { button: 'right' });
-  await page.getByRole('menuitem', { name: 'Create Legend' }).click();
+  await page.getByRole('menuitem', { name: 'Legend › Create New Legend' }).click();
   const q = await toScreen(62, 38);
   await page.mouse.click(q.x, q.y);
   await page.waitForTimeout(300);
@@ -712,6 +712,43 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await ld.saveAs(`${OUT}/saved-legend.pdf`);
   await page.waitForTimeout(800);
   assert((await page.locator('.markup-layer g.legend').count()) === 1, 'Legend survives save and reload');
+  // Legend properties (Revu): Show Title, extra columns, custom source pages; right-click: Copy Legend to Snapshot, Apply to All Pages.
+  const legendRect = page.locator('.markup-layer g.legend > rect').first();
+  const lbox = await legendRect.boundingBox();
+  await page.mouse.click(lbox.x + lbox.width / 2, lbox.y + 8);
+  const openedProps = !(await page.locator('[aria-label="Legend title"]').count());
+  if (openedProps) await page.keyboard.press('Alt+P');
+  await page.getByLabel('Legend title').waitFor();
+  const legendTexts = async () => page.locator('.markup-layer g.legend text').count();
+  const n0 = await legendTexts();
+  await page.getByLabel('Show title').uncheck();
+  assert((await legendTexts()) === n0 - 1, 'Show Title off removes the title bar');
+  await page.getByLabel('Add legend column').selectOption('label');
+  assert((await page.locator('.markup-layer g.legend').innerHTML()).includes('Label'), 'an extra Legend column shows its header');
+  await page.getByLabel('Source pages').selectOption('custom');
+  await page.getByLabel('Source page range').fill('1');
+  assert((await page.locator('.markup-layer g.legend').innerHTML()).includes('419.43 sf'), 'a custom source page range still totals the page');
+  await page.getByLabel('Show title').check();
+  await page.getByLabel('Remove Label column').click();
+  const images0 = await page.locator('.markup-layer image').count();
+  await page.mouse.click(lbox.x + lbox.width / 2, lbox.y + 8, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Copy Legend to Snapshot' }).click();
+  await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Legend copied as a snapshot'));
+  await page.keyboard.press('Control+V');
+  await page.waitForFunction((n) => document.querySelectorAll('.markup-layer image').length === n + 1, images0);
+  assert(true, 'Copy Legend to Snapshot pastes a static image of the table');
+  await page.evaluate(() => document.activeElement?.blur?.());
+  await page.keyboard.press('Delete');
+  await page.waitForFunction((n) => document.querySelectorAll('.markup-layer image').length === n, images0);
+  await page.mouse.click(lbox.x + lbox.width / 2, lbox.y + 8, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Apply to All Pages' }).click();
+  await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Legend applied to'));
+  const pagesNow = Number((await page.locator('.statusbar').innerText()).match(/of (\d+)\)/)[1]);
+  const legendsNow = (await page.evaluate(() => (document.querySelector('.statusbar')?.textContent?.match(/applied to (\d+)/) ?? [])[1]));
+  assert(Number(legendsNow) === pagesNow - 1, `Apply to All Pages copies the Legend to every other page (${legendsNow} of ${pagesNow - 1})`);
+  if (pagesNow > 1) { await page.evaluate(() => document.activeElement?.blur?.()); await page.keyboard.press('Control+z'); await page.waitForTimeout(300); }
+  await page.keyboard.press('Escape');
+  if (openedProps) await page.keyboard.press('Alt+P'); // leave the panel as it was
 }
 
 // Replies, Checkmark and the PDF summary report.

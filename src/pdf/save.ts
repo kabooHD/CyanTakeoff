@@ -10,7 +10,7 @@ import {
 } from 'pdf-lib';
 import type { CustomColumn, Cutout, Markup, MarkupStyle, Pt, Scale, Space, Viewport } from '../model/types';
 import { spaceTree, type SpaceNode } from '../model/spaces';
-import { LEGEND_HEADERS, legendLayout, legendRows, type LegendRow } from '../model/legend';
+import { cellAnchor, cellX, legendHeader, legendLayout, legendRows, type LegendRow } from '../model/legend';
 import { arcPoints, arcThrough, bounds, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import { fitFontSize, quadding, shapeOutline, textStyleOf, toDS, toRC } from '../model/textStyle';
 import { countRadius, countStyleName, countSymbolPolygon, countSymbolStrokes } from '../model/count';
@@ -151,6 +151,8 @@ const FONT_NAMES: Record<string, StandardFonts> = {
 export async function embedTextFonts(doc: PDFDocument, helv: PDFFont, markups: Markup[] = []): Promise<FontSet> {
   const out: FontSet = { Helv: helv };
   const needed = new Set(markups.filter((m) => ['textbox', 'callout', 'typewriter', 'cloudplus'].includes(m.type)).map((m) => fontNameOf(m.style)));
+  // Legends: title and headers are bold by default; italic is an option.
+  for (const m of markups) if (m.type === 'legend' && m.legend) for (const fl of [m.legend.titleStyle ?? { bold: true }, m.legend.headerStyle ?? { bold: true }]) needed.add(fl.bold && fl.italic ? 'HeBO' : fl.bold ? 'HeBo' : fl.italic ? 'HeOb' : 'Helv');
   for (const name of needed) if (name !== 'Helv' && FONT_NAMES[name]) out[name] = await doc.embedFont(FONT_NAMES[name]);
   return out;
 }
@@ -230,7 +232,7 @@ function pdfHandles(m: Markup, page: PageInfo): Markup['handles'] {
   });
 }
 
-function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], rot = 0, rows: LegendRow[] = [], fonts: FontSet = { Helv: font }) {
+function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], rot = 0, rows: LegendRow[] = [], fonts: FontSet = { Helv: font }, columns?: CustomColumn[]) {
   const fr = textFrame(rot);
   const o = new Ops();
   const st = m.style;
@@ -339,28 +341,40 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
     case 'legend': {
       if (!m.legend) break;
       // The table, drawn in the page's reading direction from the top-left corner.
-      const L = legendLayout(m.legend, rows, st.fontSize);
+      const L = legendLayout(m.legend, rows, st.fontSize, columns);
+      const z = L.sizes;
       const cs = P.map((q) => proj(fr, q));
       const u0 = Math.min(...cs.map((c) => c.u)), v0 = Math.max(...cs.map((c) => c.v));
       const pt = (u: number, v: number) => at(fr, u0 + u, v0 - v);
       const box = [pt(0, 0), pt(L.w, 0), pt(L.w, L.h), pt(0, L.h)];
+      const lw = st.width > 0 ? Math.min(st.width, 4) : 0;
       o.add(`${fillRgb ?? '1 1 1'} rg`); o.poly(box, true); o.add('f');
-      o.add(`${rgb} RG 0.8 w`); o.poly(box, true); o.add('S');
-      o.add('0.4 w');
-      for (let k = 0; k <= rows.length; k++) { o.moveTo(pt(0, L.title + L.row * k)); o.lineTo(pt(L.w, L.title + L.row * k)); o.add('S'); }
+      if (lw) { o.add(`${rgb} RG ${f(lw)} w`); o.poly(box, true); o.add('S'); }
+      if (lw) {
+        o.add(`${f(lw * 0.5)} w`);
+        const ys = [...(z.showTitle ? [L.title] : []), ...(z.showHeaders ? [L.title + L.header] : [])];
+        for (let k = 1; k < rows.length; k++) ys.push(L.title + L.header + L.row * k);
+        for (const y of ys) { o.moveTo(pt(0, y)); o.lineTo(pt(L.w, y)); o.add('S'); }
+      }
       const fs = st.fontSize;
-      const put = (t: string, u: number, v: number, align: 'start' | 'end' | 'middle') => {
+      const textRgb = m.legend.textColor ? hexToRgb(m.legend.textColor).map(f).join(' ') : rgb;
+      const put = (t: string, u: number, v: number, align: 'start' | 'end' | 'middle', size = fs, flags?: { bold?: boolean; italic?: boolean }) => {
         const s2 = safeText(font, t);
-        const w = font.widthOfTextAtSize(s2, fs);
+        const want = flags?.bold && flags?.italic ? 'HeBO' : flags?.bold ? 'HeBo' : flags?.italic ? 'HeOb' : 'Helv';
+        const fname = fonts[want] ? want : 'Helv';
+        const fnt = fonts[fname] ?? font;
+        const w = fnt.widthOfTextAtSize(s2, size);
         const du = align === 'end' ? -w : align === 'middle' ? -w / 2 : 0;
-        textAt(o, font, s2, fs, u0 + u + du, v0 - v - fs * 0.35, rgb, fr);
+        textAt(o, fnt, s2, size, u0 + u + du, v0 - v - size * 0.35, textRgb, fr, fname);
       };
-      put(m.legend.title, L.w / 2, L.title / 2, 'middle');
+      if (z.showTitle) put(m.legend.title, L.w / 2, L.title / 2, 'middle', z.title, m.legend.titleStyle ?? { bold: true });
       let cx = 0;
       L.cols.forEach((c) => {
-        if (c.id !== 'symbol') put(LEGEND_HEADERS[c.id], c.id === 'description' ? cx + 5 : cx + c.w - 5, L.title + L.row / 2, c.id === 'description' ? 'start' : 'end');
+        const a = cellAnchor(c.id, z.align, columns);
+        const tx = cellX(a, cx, c.w, z.margin);
+        if (c.id !== 'symbol' && z.showHeaders) put(legendHeader(c.id, columns), tx, L.title + L.header / 2, a, z.header, m.legend!.headerStyle ?? { bold: true });
         rows.forEach((r, k) => {
-          const cy = L.title + L.row * (k + 1.5);
+          const cy = L.title + L.header + L.row * (k + 0.5);
           if (c.id === 'symbol') {
             const [rr, gg, bb] = hexToRgb(r.style.color).map(f);
             const fillC = (r.style.fill ? hexToRgb(r.style.fill) : hexToRgb(r.style.color)).map(f).join(' ');
@@ -370,8 +384,10 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
               o.add(r.style.fill || r.type === 'count' ? 'B' : 'S');
             } else { o.moveTo(pt(cx + c.w * 0.1, cy)); o.lineTo(pt(cx + c.w * 0.9, cy)); o.add('S'); }
             o.add('Q');
-          } else if (c.id === 'description') put(r.description, cx + 5, cy, 'start');
-          else put(c.id === 'quantity' ? String(r.quantity) : r.measurement, cx + c.w - 5, cy, 'end');
+          } else {
+            const v = c.id === 'description' ? r.description : c.id === 'quantity' ? String(r.quantity) : c.id === 'measurement' ? r.measurement : r.cells[c.id] ?? '';
+            put(v, tx, cy, a);
+          }
         });
         cx += c.w;
       });
@@ -673,7 +689,7 @@ function quads(P: Pt[]): number[] {
 
 const base64ToBytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
 
-function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, image?: PDFRef, pageRefs: PDFRef[] = [], rows: LegendRow[] = [], fonts: FontSet = { Helv: font }): PDFRef[] {
+function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, image?: PDFRef, pageRefs: PDFRef[] = [], rows: LegendRow[] = [], fonts: FontSet = { Helv: font }, columns?: CustomColumn[]): PDFRef[] {
   if (m.type === 'count') return buildCount(doc, m, page);
   const ctx = doc.context;
   const P = toPdf(m, page);
@@ -681,7 +697,7 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
   if (handles) m = { ...m, handles };
   const ct = ctData(m, P);
   const cutouts = m.cutouts?.map((c) => ({ ...c, points: c.points.map((q) => toPdfPt(q, page)), handles: hasCurves(c.handles) ? pdfHandles({ ...m, points: c.points, handles: c.handles }, page) : undefined }));
-  const { ops, bbox, hatch, fontsUsed } = buildAppearance(m, P, font, cutouts, (page.viewport as { rotation?: number }).rotation ?? 0, rows, fonts);
+  const { ops, bbox, hatch, fontsUsed } = buildAppearance(m, P, font, cutouts, (page.viewport as { rotation?: number }).rotation ?? 0, rows, fonts, columns);
   if (cutouts?.length) ct.cutouts = cutouts.map((c) => ({ kind: c.kind, points: c.points.flatMap((q) => [q.x, q.y]), handles: c.handles?.map((h) => (h ? [h.in.x, h.in.y, h.out.x, h.out.y] : null)) }));
   const st = m.style;
   const gs = ctx.obj({
@@ -834,6 +850,8 @@ export interface SaveInput {
   dirtySpaces?: Set<number>;
   /** Custom column definitions, when changed. */
   columns?: CustomColumn[];
+  /** The document's custom columns, for Legends that show them (always given). */
+  legendColumns?: CustomColumn[];
   /** Form field values that changed, by field name. */
   formValues?: Record<string, FieldValue>;
   /** Layers, when the layer list changed. */
@@ -912,8 +930,8 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
       annots = doc.context.obj([]);
       page.node.set(N('Annots'), annots);
     }
-    const rows = m.type === 'legend' && m.legend ? legendRows(m.legend, input.markups, m.page) : [];
-    const built = buildAnnot(doc, font, m, input.pages[m.page], image, pageRefs, rows, fonts);
+    const rows = m.type === 'legend' && m.legend ? legendRows(m.legend, input.markups, m.page, { pageCount: input.pages.length, columns: input.legendColumns, pageLabels: input.pages.map((p) => p.label) }) : [];
+    const built = buildAnnot(doc, font, m, input.pages[m.page], image, pageRefs, rows, fonts, input.legendColumns);
     if (m.source) carryOver(doc, PDFRef.of(m.source.objectNumber, m.source.generation), built[0]);
     const oc = m.layer ? layerRef(m.layer) : undefined;
     if (oc) for (const r of built) (doc.context.lookup(r) as PDFDict).set(N('OC'), oc);

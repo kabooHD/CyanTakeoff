@@ -601,3 +601,13 @@ label.button, a.button { display: inline-block; padding: 2px 8px; border: 1px so
 .fill-settings { position: absolute; top: 100%; right: 0; z-index: 30; background: var(--panel-bg, #fff); border: 1px solid var(--border, #ccc); box-shadow: 0 4px 12px rgba(0,0,0,0.2); padding: 8px; display: flex; flex-direction: column; gap: 6px; min-width: 220px; }
 .fill-settings label { display: flex; align-items: center; gap: 6px; }
 .fill-settings input[type=number] { width: 56px; }
+
+/* Legend properties: font style toggles and the extra-column list */
+.font-flags { display: inline-flex; gap: 2px; margin-left: 4px; }
+.font-flags .icon-btn { width: 22px; height: 22px; padding: 0; border: 1px solid #bbb; background: #fff; border-radius: 3px; cursor: pointer; font-size: 12px; }
+.font-flags .icon-btn.on { background: #cfe3ff; border-color: #5b8fd6; }
+.legend-columns { margin: 2px 0 4px 92px; display: flex; flex-direction: column; gap: 2px; }
+.legend-column { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+.legend-column > span { flex: 1; }
+.legend-column .icon-btn { border: 1px solid #bbb; background: #fff; border-radius: 3px; cursor: pointer; font-size: 10px; padding: 0 4px; }
+.link-btn { background: none; border: none; color: #1a56c4; cursor: pointer; font-size: 11px; padding: 0 4px; }

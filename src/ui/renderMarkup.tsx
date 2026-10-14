@@ -11,7 +11,7 @@ import { countRadius, countSymbolPolygon, countSymbolStrokes } from '../model/co
 import { calloutTips, endsOf, lineEndShape, type LineEnd } from '../model/lineEnds';
 import { textWidth } from './quickCommands';
 import { useApp } from '../model/store';
-import { LEGEND_HEADERS, legendLayout, legendRows } from '../model/legend';
+import { cellAnchor, cellX, legendHeader, legendLayout, legendRows, type FontFlags } from '../model/legend';
 
 const pts = (p: Pt[]) => p.map((q) => `${q.x},${q.y}`).join(' ');
 
@@ -403,8 +403,9 @@ export function LegendSymbol({ type, style, x, y, w, h }: { type: MarkupType; st
 function LegendShape({ m }: { m: Markup }) {
   const doc = useApp((s) => s.docs.find((d) => d.id === s.activeId));
   const def = m.legend;
-  const rows = def && doc ? legendRows(def, doc.markups, m.page) : [];
-  const L = def ? legendLayout(def, rows, m.style.fontSize) : null;
+  const ctx = doc ? { pageCount: doc.loaded.pages.length, columns: doc.columns, pageLabels: doc.loaded.pages.map((p) => p.label) } : {};
+  const rows = def && doc ? legendRows(def, doc.markups, m.page, ctx) : [];
+  const L = def ? legendLayout(def, rows, m.style.fontSize, doc?.columns) : null;
   const P = m.points;
   // Anchored at the centre of its box: stable when the page is rotated and back
   // (the stored box keeps its orientation while the table is drawn upright).
@@ -418,29 +419,34 @@ function LegendShape({ m }: { m: Markup }) {
     }
   });
   if (!def || !L) return null;
-  const st = m.style, x0 = tl.x, y0 = tl.y, fs = st.fontSize;
+  const st = m.style, x0 = tl.x, y0 = tl.y, fs = st.fontSize, z = L.sizes, color = def.textColor ?? st.color, lw = st.width > 0 ? Math.min(st.width, 4) : 0;
   let x = x0;
   const colX = L.cols.map((c) => { const at = x; x += c.w; return at; });
-  const text = (t: string | number, cx: number, cy: number, bold = false, anchor: 'start' | 'end' | 'middle' = 'start') => (
-    <text x={cx} y={cy} fontSize={fs} fontWeight={bold ? 'bold' : undefined} fill={st.color} textAnchor={anchor} dominantBaseline="middle" fontFamily="Helvetica, Arial, sans-serif">{t}</text>
+  const deco = (f?: FontFlags) => [f?.underline ? 'underline' : '', f?.strike ? 'line-through' : ''].filter(Boolean).join(' ') || undefined;
+  const text = (t: string | number, cx: number, cy: number, size: number, flags: FontFlags | undefined, anchor: 'start' | 'end' | 'middle') => (
+    <text x={cx} y={cy} fontSize={size} fontWeight={flags?.bold ? 'bold' : undefined} fontStyle={flags?.italic ? 'italic' : undefined} textDecoration={deco(flags)} fill={color} textAnchor={anchor} dominantBaseline="middle" fontFamily="Helvetica, Arial, sans-serif">{t}</text>
   );
   const cell = (id: string, r: (typeof rows)[number], i: number, cy: number) => {
     const cx = colX[i], w = L.cols[i].w;
     if (id === 'symbol') return <LegendSymbol key={id} type={r.type} style={r.style} x={cx} y={cy - L.row / 2} w={w} h={L.row} />;
-    if (id === 'description') return <g key={id}>{text(r.description, cx + 5, cy)}</g>;
-    if (id === 'quantity') return <g key={id}>{text(r.quantity, cx + w - 5, cy, false, 'end')}</g>;
-    return <g key={id}>{text(r.measurement, cx + w - 5, cy, false, 'end')}</g>;
+    const v = id === 'description' ? r.description : id === 'quantity' ? r.quantity : id === 'measurement' ? r.measurement : r.cells[id] ?? '';
+    const a = cellAnchor(id, z.align, doc?.columns);
+    return <g key={id}>{text(v, cellX(a, cx, w, z.margin), cy, fs, undefined, a)}</g>;
   };
+  const hline = (y: number, width: number) => <line x1={x0} x2={x0 + L.w} y1={y} y2={y} stroke={st.color} strokeWidth={width} strokeOpacity={st.opacity} />;
   return (
     <g className="legend">
-      <rect x={x0} y={y0} width={L.w} height={L.h} fill={st.fill ?? '#fff'} fillOpacity={st.fillOpacity} stroke={st.color} strokeWidth={0.8} />
-      <line x1={x0} x2={x0 + L.w} y1={y0 + L.title} y2={y0 + L.title} stroke={st.color} strokeWidth={0.8} />
-      {text(def.title, x0 + L.w / 2, y0 + L.title / 2, true, 'middle')}
-      {L.cols.map((c, i) => <g key={c.id}>{text(LEGEND_HEADERS[c.id], colX[i] + (c.id === 'description' ? 5 : c.w - 5), y0 + L.title + L.row / 2, true, c.id === 'description' ? 'start' : 'end')}</g>)}
+      <rect x={x0} y={y0} width={L.w} height={L.h} fill={st.fill ?? '#fff'} fillOpacity={st.fillOpacity} stroke={st.color} strokeWidth={lw} strokeOpacity={st.opacity} />
+      {z.showTitle && hline(y0 + L.title, lw)}
+      {z.showTitle && text(def.title, x0 + L.w / 2, y0 + L.title / 2, z.title, def.titleStyle ?? { bold: true }, 'middle')}
+      {z.showHeaders && L.cols.map((c, i) => {
+        const a = cellAnchor(c.id, z.align, doc?.columns);
+        return <g key={c.id}>{text(legendHeader(c.id, doc?.columns), cellX(a, colX[i], c.w, z.margin), y0 + L.title + L.header / 2, z.header, def.headerStyle ?? { bold: true }, a)}</g>;
+      })}
       {rows.map((r, k) => {
-        const cy = y0 + L.title + L.row * (k + 1.5);
+        const cy = y0 + L.title + L.header + L.row * (k + 0.5);
         return <g key={r.key}>
-          <line x1={x0} x2={x0 + L.w} y1={cy - L.row / 2} y2={cy - L.row / 2} stroke={st.color} strokeWidth={0.4} />
+          {(k > 0 || z.showHeaders) && hline(cy - L.row / 2, lw * 0.5)}
           {L.cols.map((c, i) => cell(c.id, r, i, cy))}
         </g>;
       })}

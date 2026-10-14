@@ -253,9 +253,24 @@ displayed value (in the markup's own unit when set), as Revu writes it.
 - Ad-hoc Legend: select markups > right-click > Legend > Create New Legend,
   click to place; matching markups (same type and appearance) added later
   are included. Tool set Legend: from a Tool Chest tool set.
-- Properties: Title (+ show), Source Pages, columns, fonts, table colours.
+- Properties: Title (text, Show Title, font size 1-144 pt, bold/italic/
+  underline/strikethrough), Columns (Description, Edit Columns to add any
+  Markups List or custom column, Show Column Headers, header font), Table
+  (line colour, fill colour and opacity, line opacity, line width (0 hides
+  the lines), Source Pages: Current page / All Pages / Custom range such as
+  "1-3, 5, 9", Symbol Size 1-5000 %), Text (font, size, colour, style,
+  margin, alignment left/center/right).
+- Right-click a Legend: Add to Tool Chest, Copy Legend to Snapshot (a
+  static Snapshot that no longer updates), Apply to All Pages (a dynamic
+  copy on every page in the same position, each counting its own page).
+  Copy/Paste makes a dynamic copy that counts the page it is pasted on.
+  Right-click other markups: Legend › Create New Legend, Legend › <title>
+  adds them to that Legend.
 - CyanTakeoff: kinds match on type, subject and colour; saved as a Stamp
-  with the current table as its appearance (rewritten on every save).
+  with the current table as its appearance (rewritten on every save). Extra
+  columns: Label, Comments, Status, Author, Layer, Pages, Color and the
+  document's custom columns (numeric ones are totalled per kind, text ones
+  list the distinct values).
 
 ## Spaces (Alt+S)
 - Spaces panel: Add Space (drag a rectangle or click corners, close on the

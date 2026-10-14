@@ -253,6 +253,11 @@ filling, image signatures, redaction and OCR.
   Reset Caption Position
 - [x] Manage Columns: choice items with Subject/numeric value/CSV import/custom
   text, Number min/max, Text multiline, Save to / Delete from Profile
+- [x] Legend options: Show Title / Show Column Headers, title and header
+  size and style, extra columns (Markups List fields, custom columns),
+  Source Pages custom range, symbol size, margin, alignment, text colour;
+  right-click Legend › Create New Legend / add to a Legend, Apply to All
+  Pages, Copy Legend to Snapshot
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

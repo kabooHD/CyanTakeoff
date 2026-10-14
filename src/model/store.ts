@@ -362,7 +362,7 @@ export function serialize(d: DocState): Promise<Uint8Array> {
     original: d.bytes, pages: d.loaded.pages, markups: d.markups,
     importedRefs: d.importedRefs, calibrations: d.calibrations, viewports: d.viewports,
     dirtyCalibrations: d.dirtyCalibrations, spaces: d.spaces, dirtySpaces: d.dirtySpaces,
-    columns: d.dirtyColumns ? d.columns : undefined,
+    columns: d.dirtyColumns ? d.columns : undefined, legendColumns: d.columns,
     formValues: d.formValues,
     layers: d.dirtyLayers ? d.layers : undefined,
     bookmarks: d.dirtyBookmarks ? d.bookmarks : undefined,
