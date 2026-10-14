@@ -478,6 +478,16 @@ pages, margins options, Dim Filtered Markups, Print Spaces.
 - Search > Replace Checked: replaces the checked results in the drawing's
   text (as Edit Text does).
 
+## Signature trust and timestamps
+- Trusted Certificates (Signatures panel): import .cer/.crt/.pem files. A
+  signer is trusted when its certificate is in the list or chains up to
+  one in it (each link's signature is checked; a same-name certificate
+  with another key does not count). Kept in this browser.
+- Sign Document can ask a Time Stamp Authority (RFC 3161 URL) for a
+  timestamp token; the panel shows a timestamp's time and authority and
+  whether it matches the signature. The server must accept browser
+  requests (CORS). Revocation (OCSP/CRL) is not checked.
+
 ## Status bar
 - Left: help for the current tool and the toggles Show Grid, Snap to
   Grid, Snap to Content, Snap to Markup (points and guidelines from nearby

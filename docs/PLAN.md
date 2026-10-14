@@ -241,6 +241,8 @@ filling, image signatures, redaction and OCR.
   who/when recorded), Edit Action on any markup (Ctrl+Shift+E), Offset (O:
   distance, Replace Markup, miter limit, Offset as), Camera (Ctrl+Alt+I),
   Search > Replace Checked (rewrites the page text)
+- [x] Signatures: trust list with certificate chain checks, RFC 3161
+  timestamps (request when signing, check when verifying)
 
 ### Next 2: public test build in local mode (days)
 - Host on a VPS (static site + HTTPS), with a feedback link

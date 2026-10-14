@@ -70,6 +70,39 @@ export interface SignOptions {
   /** Sign this existing (empty) signature field instead of adding one. */
   field?: string;
   date?: Date;
+  /** Time Stamp Authority URL (RFC 3161): the signature gets a timestamp token from it. */
+  tsa?: string;
+  /** How to send the timestamp request (default: HTTP POST to `tsa`). */
+  fetchTimestamp?: (request: Uint8Array) => Promise<Uint8Array>;
+}
+
+/** RFC 3161 TimeStampReq for a SHA-256 hash of `data`, asking for the TSA's certificate. */
+export async function timestampRequest(data: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
+  const forge = await loadForge();
+  const a = forge.asn1, U = a.Class.UNIVERSAL, T = a.Type;
+  const hash = toBinary(new Uint8Array(await crypto.subtle.digest('SHA-256', data)));
+  const nonce = toBinary(crypto.getRandomValues(new Uint8Array(8))).replace(/^[\x80-\xff]/, '\x01');
+  const req = a.create(U, T.SEQUENCE, true, [
+    a.create(U, T.INTEGER, false, '\x01'),
+    a.create(U, T.SEQUENCE, true, [
+      a.create(U, T.SEQUENCE, true, [a.create(U, T.OID, false, a.oidToDer(OID.sha256).getBytes()), a.create(U, T.NULL, false, '')]),
+      a.create(U, T.OCTETSTRING, false, hash),
+    ]),
+    a.create(U, T.INTEGER, false, nonce),
+    a.create(U, T.BOOLEAN, false, '\xff'),
+  ]);
+  return fromBinary(a.toDer(req).getBytes());
+}
+
+async function postTimestamp(url: string, request: Uint8Array): Promise<Uint8Array> {
+  let res: Response;
+  try {
+    res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/timestamp-query' }, body: request as BlobPart });
+  } catch {
+    throw new Error(`The timestamp server ${url} could not be reached from the browser (it must allow web requests, CORS, over https).`);
+  }
+  if (!res.ok) throw new Error(`The timestamp server answered ${res.status}.`);
+  return new Uint8Array(await res.arrayBuffer());
 }
 
 function findField(doc: PDFDocument, name: string): PDFDict | undefined {
@@ -135,8 +168,8 @@ export async function signPdf(pdf: Uint8Array, opts: SignOptions): Promise<Uint8
     form.acroForm.addField(ref);
   }
   // Appearance on the widget (the field itself, or its first kid).
-  const kids = widget.lookup(N('Kids'));
-  const w0 = kids instanceof PDFArray ? ctx.lookup(kids.get(0)) as PDFDict : widget;
+  const wkids = widget.lookup(N('Kids'));
+  const w0 = wkids instanceof PDFArray ? ctx.lookup(wkids.get(0)) as PDFDict : widget;
   const r = (w0.lookup(N('Rect')) as PDFArray | undefined)?.asArray().map((x) => (x as PDFNumber).asNumber()) ?? [0, 0, 0, 0];
   const w = Math.abs(r[2] - r[0]), h = Math.abs(r[3] - r[1]);
   if (w > 1 && h > 1) {
@@ -172,7 +205,27 @@ export async function signPdf(pdf: Uint8Array, opts: SignOptions): Promise<Uint8
     ],
   });
   p7.sign({ detached: true });
-  const der = forge.asn1.toDer(p7.toAsn1()).getBytes();
+  const ci = p7.toAsn1();
+  if (opts.tsa || opts.fetchTimestamp) {
+    // RFC 3161: timestamp the signature value; the token goes in the signer's unsigned attributes.
+    const a = forge.asn1;
+    const signerInfos = kids(kids(kids(ci)[1])[0]);
+    const si = kids(signerInfos[signerInfos.length - 1])[0];
+    const siKids = kids(si);
+    const sigValue = fromBinary(siKids[siKids.length - 1].value as string);
+    const req = await timestampRequest(sigValue);
+    const resp = a.fromDer(toBinary(opts.fetchTimestamp ? await opts.fetchTimestamp(req) : await postTimestamp(opts.tsa!, req)));
+    const [status, token] = kids(resp);
+    const code = (kids(status)[0]?.value as string ?? '\x02').charCodeAt(0);
+    if (code > 1 || !token) throw new Error('The timestamp server refused the request.');
+    siKids.push(a.create(a.Class.CONTEXT_SPECIFIC, 1, true, [
+      a.create(a.Class.UNIVERSAL, a.Type.SEQUENCE, true, [
+        a.create(a.Class.UNIVERSAL, a.Type.OID, false, a.oidToDer(OID.timeStampToken).getBytes()),
+        a.create(a.Class.UNIVERSAL, a.Type.SET, true, [token]),
+      ]),
+    ]));
+  }
+  const der = forge.asn1.toDer(ci).getBytes();
   const hex = Array.from(der, (c) => c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
   if (hex.length > SIG_BYTES * 2) throw new Error('Signature too large');
   out.set(new TextEncoder().encode(hex), start + 1);
@@ -196,12 +249,18 @@ export interface SignatureInfo {
   /** Signing time (or now) within the certificate's validity period. */
   certInDate: boolean;
   selfSigned: boolean;
+  /** The signer's certificate is, or chains up to, a certificate in the trust list. */
+  trusted: boolean;
+  /** The trusted certificate the chain ends at. */
+  trustedBy?: string;
+  /** An RFC 3161 timestamp in the signature: when, by which authority, and whether it checks out. */
+  timestamp?: { time: Date; tsa: string; ok: boolean };
 }
 
 const OID = {
   sha1: '1.3.14.3.2.26', sha256: '2.16.840.1.101.3.4.2.1', sha384: '2.16.840.1.101.3.4.2.2', sha512: '2.16.840.1.101.3.4.2.3',
   rsa: '1.2.840.113549.1.1.1', ec: '1.2.840.10045.2.1',
-  messageDigest: '1.2.840.113549.1.9.4', signingTime: '1.2.840.113549.1.9.5', cn: '2.5.4.3', o: '2.5.4.10',
+  messageDigest: '1.2.840.113549.1.9.4', signingTime: '1.2.840.113549.1.9.5', timeStampToken: '1.2.840.113549.1.9.16.2.14', cn: '2.5.4.3', o: '2.5.4.10',
 };
 const HASH: Record<string, string> = { [OID.sha1]: 'SHA-1', [OID.sha256]: 'SHA-256', [OID.sha384]: 'SHA-384', [OID.sha512]: 'SHA-512' };
 const CURVES: Record<string, [string, number]> = { '1.2.840.10045.3.1.7': ['P-256', 32], '1.3.132.0.34': ['P-384', 48], '1.3.132.0.35': ['P-521', 66] };
@@ -244,16 +303,174 @@ function derToRaw(sig: Uint8Array, size: number, forge: Forge): Uint8Array<Array
   return raw;
 }
 
-/** Verify every signature in `pdf`. */
-export async function verifySignatures(pdf: Uint8Array): Promise<SignatureInfo[]> {
+// ---------------- Certificates ----------------
+
+export interface Cert {
+  /** DER bytes as a binary string. */
+  der: string; tbs: string; subject: string; issuer: string; subjectName: string; issuerName: string;
+  serial: string; notBefore?: Date; notAfter?: Date; spki: string; keyOid: string; curveOid?: string; sigOid: string; sig: Uint8Array<ArrayBuffer>;
+}
+
+/** Signature algorithms of certificates: WebCrypto hash and key type. */
+const CERT_SIG: Record<string, [string, 'rsa' | 'ec']> = {
+  '1.2.840.113549.1.1.5': ['SHA-1', 'rsa'], '1.2.840.113549.1.1.11': ['SHA-256', 'rsa'], '1.2.840.113549.1.1.12': ['SHA-384', 'rsa'], '1.2.840.113549.1.1.13': ['SHA-512', 'rsa'],
+  '1.2.840.10045.4.3.2': ['SHA-256', 'ec'], '1.2.840.10045.4.3.3': ['SHA-384', 'ec'], '1.2.840.10045.4.3.4': ['SHA-512', 'ec'],
+};
+
+function parseCert(forge: Forge, node: Asn1): Cert {
+  const asn1 = forge.asn1;
+  const [tbsN, algN, sigN] = kids(node);
+  const tbs = kids(tbsN);
+  const off = tbs[0].tagClass === asn1.Class.CONTEXT_SPECIFIC ? 1 : 0;
+  const nameOf = (n: Asn1) => {
+    let o = '';
+    for (const set of kids(n)) for (const atv of kids(set)) {
+      const oid = asn1.derToOid(kids(atv)[0].value as string);
+      if (oid === OID.cn || (oid === OID.o && !o)) o = forge.util.decodeUtf8(kids(atv)[1].value as string);
+    }
+    return o || 'Unknown';
+  };
+  const validity = kids(tbs[off + 3]).map((t) => (t.type === asn1.Type.UTCTIME ? asn1.utcTimeToDate(t.value as string) : asn1.generalizedTimeToDate(t.value as string)));
+  const spkiN = tbs[off + 5];
+  const keyAlg = kids(kids(spkiN)[0]);
+  const bits = sigN.value as string;
+  return {
+    der: asn1.toDer(node).getBytes(), tbs: asn1.toDer(tbsN).getBytes(),
+    issuer: asn1.toDer(tbs[off + 2]).getBytes(), subject: asn1.toDer(tbs[off + 4]).getBytes(),
+    issuerName: nameOf(tbs[off + 2]), subjectName: nameOf(tbs[off + 4]),
+    serial: tbs[off].value as string, notBefore: validity[0], notAfter: validity[1],
+    spki: asn1.toDer(spkiN).getBytes(), keyOid: asn1.derToOid(keyAlg[0].value as string),
+    curveOid: keyAlg[1]?.type === asn1.Type.OID ? asn1.derToOid(keyAlg[1].value as string) : undefined,
+    sigOid: asn1.derToOid(kids(algN)[0].value as string),
+    // BIT STRING: the first byte is the unused-bits count.
+    sig: fromBinary(bits.charCodeAt(0) === 0 ? bits.slice(1) : bits),
+  };
+}
+
+/** Certificates from DER or PEM files (several PEM blocks allowed). */
+export async function readCertificates(bytes: Uint8Array): Promise<Cert[]> {
+  const forge = await loadForge();
+  const text = new TextDecoder('latin1').decode(bytes);
+  const ders = /-----BEGIN CERTIFICATE-----/.test(text)
+    ? [...text.matchAll(/-----BEGIN CERTIFICATE-----([\s\S]*?)-----END CERTIFICATE-----/g)].map((m) => forge.util.decode64(m[1].replace(/\s+/g, '')))
+    : [toBinary(bytes)];
+  return ders.map((d) => parseCert(forge, forge.asn1.fromDer(d)));
+}
+
+/** Verify `sig` over `data` with a public key (SPKI DER) for a signature or key algorithm. */
+async function verifyRaw(forge: Forge, spki: string, keyOid: string, curveOid: string | undefined, hash: string, sig: Uint8Array<ArrayBuffer>, data: Uint8Array<ArrayBuffer>): Promise<boolean | null> {
+  const der = fromBinary(spki);
+  if (keyOid === OID.rsa) {
+    const key = await crypto.subtle.importKey('spki', der, { name: 'RSASSA-PKCS1-v1_5', hash }, false, ['verify']);
+    return crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, sig, data);
+  }
+  if (keyOid === OID.ec) {
+    const curve = curveOid ? CURVES[curveOid] : undefined;
+    if (!curve) return null;
+    const key = await crypto.subtle.importKey('spki', der, { name: 'ECDSA', namedCurve: curve[0] }, false, ['verify']);
+    return crypto.subtle.verify({ name: 'ECDSA', hash }, key, derToRaw(sig, curve[1], forge), data);
+  }
+  return null;
+}
+
+/** Whether `child` was signed by `parent`'s key. */
+async function issuedBy(forge: Forge, child: Cert, parent: Cert): Promise<boolean> {
+  if (child.issuer !== parent.subject) return false;
+  const alg = CERT_SIG[child.sigOid];
+  if (!alg) return false;
+  try { return !!(await verifyRaw(forge, parent.spki, parent.keyOid, parent.curveOid, alg[0], child.sig, fromBinary(child.tbs))); } catch { return false; }
+}
+
+/** The trusted certificate `cert` chains up to (through `pool`), if any. */
+export async function chainToTrust(forge: Forge, cert: Cert, pool: Cert[], trusted: Cert[]): Promise<Cert | null> {
+  let cur = cert;
+  for (let depth = 0; depth < 10; depth++) {
+    const t = trusted.find((x) => x.der === cur.der);
+    if (t) return t;
+    const next = trusted.find((x) => x.subject === cur.issuer) ?? pool.find((x) => x.subject === cur.issuer && x.der !== cur.der);
+    if (!next || !(await issuedBy(forge, cur, next))) {
+      // An issuer in the trust list with the same name but a different key does not count.
+      return null;
+    }
+    if (trusted.some((x) => x.der === next.der)) return next;
+    cur = next;
+  }
+  return null;
+}
+
+// ---------------- Verification ----------------
+
+/** Read the time and imprint of an RFC 3161 timestamp token and check its own signature. */
+async function readTimestamp(forge: Forge, token: Asn1, signature: Uint8Array<ArrayBuffer>): Promise<SignatureInfo['timestamp']> {
+  const asn1 = forge.asn1;
+  const sd = kids(kids(kids(token)[1])[0]);
+  const encap = kids(sd[2]);
+  const eContent = kids(encap[1])[0];
+  const tst = asn1.fromDer(eContent.value as string);
+  const t = kids(tst);
+  const imprint = kids(t[2]);
+  const hash = HASH[asn1.derToOid(kids(imprint[0])[0].value as string)];
+  const genTime = asn1.generalizedTimeToDate(t[4].value as string);
+  const want = hash ? toBinary(new Uint8Array(await crypto.subtle.digest(hash, signature))) : '';
+  const r = await checkSignedData(forge, sd, fromBinary(eContent.value as string));
+  return { time: genTime, tsa: r.cert?.subjectName ?? 'Unknown', ok: !!hash && imprint[1].value === want && r.status === 'valid' };
+}
+
+interface SignedDataCheck { status: 'valid' | 'invalid' | 'unknown'; detail: string; cert?: Cert; pool: Cert[]; time?: Date; signature?: Uint8Array<ArrayBuffer>; unsigned?: Asn1 }
+
+/** Check the (first) signer of a CMS SignedData over `content` (detached, or its own eContent). */
+async function checkSignedData(forge: Forge, sd: Asn1[], content: Uint8Array<ArrayBuffer>): Promise<SignedDataCheck> {
+  const asn1 = forge.asn1;
+  const certsNode = sd.find((n) => n.tagClass === asn1.Class.CONTEXT_SPECIFIC && n.type === 0);
+  const pool = kids(certsNode).filter((c) => c.tagClass === asn1.Class.UNIVERSAL).map((c) => parseCert(forge, c));
+  const si = kids(kids(sd[sd.length - 1])[0]);
+  const sid = si[1];
+  const digestOid = asn1.derToOid(kids(si[2])[0].value as string);
+  const hash = HASH[digestOid];
+  if (!hash) return { status: 'unknown', detail: 'Unsupported digest algorithm.', pool };
+  let k = 3;
+  const signedAttrs = si[k]?.tagClass === asn1.Class.CONTEXT_SPECIFIC && si[k].type === 0 ? si[k++] : undefined;
+  k++; // signature algorithm
+  const signature = fromBinary(si[k].value as string);
+  const unsigned = si[k + 1]?.tagClass === asn1.Class.CONTEXT_SPECIFIC && si[k + 1].type === 1 ? si[k + 1] : undefined;
+  const wanted = sid.tagClass === asn1.Class.UNIVERSAL ? kids(sid)[1]?.value as string : undefined;
+  const cert = pool.find((c) => wanted !== undefined && c.serial === wanted) ?? pool[0];
+  if (!cert) return { status: 'unknown', detail: 'No certificate in the signature.', pool };
+  const digest = new Uint8Array(await crypto.subtle.digest(hash, content));
+  let toVerify: Uint8Array<ArrayBuffer> = content;
+  let time: Date | undefined;
+  if (signedAttrs) {
+    let md: string | undefined;
+    for (const attr of kids(signedAttrs)) {
+      const oid = asn1.derToOid(kids(attr)[0].value as string);
+      const val = kids(kids(attr)[1])[0];
+      if (oid === OID.messageDigest) md = val.value as string;
+      if (oid === OID.signingTime) time = val.type === asn1.Type.UTCTIME ? asn1.utcTimeToDate(val.value as string) : asn1.generalizedTimeToDate(val.value as string);
+    }
+    if (md !== toBinary(digest)) return { status: 'invalid', detail: 'The document was altered after it was signed.', cert, pool, time };
+    // The signature covers the attributes, DER-encoded as a SET.
+    toVerify = fromBinary(asn1.toDer(asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SET, true, kids(signedAttrs))).getBytes());
+  }
+  const ok = await verifyRaw(forge, cert.spki, cert.keyOid, cert.curveOid, hash, signature, toVerify);
+  if (ok === null) return { status: 'unknown', detail: 'Unsupported key type.', cert, pool, time };
+  return { status: ok ? 'valid' : 'invalid', detail: ok ? '' : 'The signature does not match the signer\'s certificate.', cert, pool, time, signature, unsigned };
+}
+
+/**
+ * Verify every signature in `pdf`. `trusted` is the trust list (DER or PEM
+ * certificate files): a signer is trusted when its certificate is in it or
+ * chains up to one in it.
+ */
+export async function verifySignatures(pdf: Uint8Array, trusted: Uint8Array[] = []): Promise<SignatureInfo[]> {
   const doc = await PDFDocument.load(pdf, { updateMetadata: false, ignoreEncryption: true });
   const fields = signatureFields(doc);
   if (!fields.length) return [];
   const forge = await loadForge();
   const asn1 = forge.asn1;
+  const trust = (await Promise.all(trusted.map((b) => readCertificates(b).catch(() => [])))).flat();
   const out: SignatureInfo[] = [];
   for (const { name, v } of fields) {
-    const info: SignatureInfo = { field: name, signer: 'Unknown', issuer: '', status: 'unknown', detail: '', coversDocument: false, certInDate: false, selfSigned: false };
+    const info: SignatureInfo = { field: name, signer: 'Unknown', issuer: '', status: 'unknown', detail: '', coversDocument: false, certInDate: false, selfSigned: false, trusted: false };
     const text = (k: string) => { const x = v.lookup(N(k)); return x instanceof PDFString || x instanceof PDFHexString ? x.decodeText() : undefined; };
     info.reason = text('Reason'); info.location = text('Location');
     out.push(info);
@@ -268,78 +485,28 @@ export async function verifySignatures(pdf: Uint8Array): Promise<SignatureInfo[]
       data.set(pdf.subarray(br[0], br[0] + br[1])); data.set(pdf.subarray(br[2], br[2] + br[3]), br[1]);
 
       const cms = asn1.fromDer(toBinary(contents.asBytes()), { parseAllBytes: false } as never);
-      const signedData = kids(kids(cms)[1])[0];
-      const sd = kids(signedData);
-      const certsNode = sd.find((n) => n.tagClass === asn1.Class.CONTEXT_SPECIFIC && n.type === 0);
-      const signerInfo = kids(sd[sd.length - 1])[0];
-      const si = kids(signerInfo);
-      const sid = si[1];
-      const digestOid = asn1.derToOid(kids(si[2])[0].value as string);
-      const hash = HASH[digestOid];
-      if (!hash) { info.detail = 'Unsupported digest algorithm.'; continue; }
-      let k = 3;
-      const signedAttrs = si[k]?.tagClass === asn1.Class.CONTEXT_SPECIFIC && si[k].type === 0 ? si[k++] : undefined;
-      k++; // signature algorithm
-      const signature = fromBinary(si[k].value as string);
-
-      // The signer's certificate: matched by issuer and serial number.
-      const certs = kids(certsNode);
-      const serialOf = (c: Asn1) => { const tbs = kids(kids(c)[0]); const off = tbs[0].tagClass === asn1.Class.CONTEXT_SPECIFIC ? 1 : 0; return tbs[off].value as string; };
-      const wanted = sid.tagClass === asn1.Class.UNIVERSAL ? kids(sid)[1]?.value as string : undefined;
-      const cert = certs.find((c) => wanted !== undefined && serialOf(c) === wanted) ?? certs[0];
-      if (!cert) throw new Error('No certificate in the signature');
-      const tbs = kids(kids(cert)[0]);
-      const off = tbs[0].tagClass === asn1.Class.CONTEXT_SPECIFIC ? 1 : 0;
-      const nameOf = (n: Asn1) => {
-        let o = '';
-        for (const set of kids(n)) for (const atv of kids(set)) {
-          const oid = asn1.derToOid(kids(atv)[0].value as string);
-          if (oid === OID.cn || (oid === OID.o && !o)) o = forge.util.decodeUtf8(kids(atv)[1].value as string);
-        }
-        return o || 'Unknown';
-      };
-      info.issuer = nameOf(tbs[off + 2]);
-      info.signer = nameOf(tbs[off + 4]);
-      info.selfSigned = asn1.toDer(tbs[off + 2]).getBytes() === asn1.toDer(tbs[off + 4]).getBytes();
-      const validity = kids(tbs[off + 3]).map((t) => (t.type === asn1.Type.UTCTIME ? asn1.utcTimeToDate(t.value as string) : asn1.generalizedTimeToDate(t.value as string)));
-
-      // The document digest must match the signed messageDigest attribute.
-      const digest = new Uint8Array(await crypto.subtle.digest(hash, data));
-      let toVerify = data;
-      if (signedAttrs) {
-        let md: string | undefined;
-        for (const attr of kids(signedAttrs)) {
-          const oid = asn1.derToOid(kids(attr)[0].value as string);
-          const val = kids(kids(attr)[1])[0];
-          if (oid === OID.messageDigest) md = val.value as string;
-          if (oid === OID.signingTime) info.time = val.type === asn1.Type.UTCTIME ? asn1.utcTimeToDate(val.value as string) : asn1.generalizedTimeToDate(val.value as string);
-        }
-        if (md !== toBinary(digest)) { info.status = 'invalid'; info.detail = 'The document was altered after it was signed.'; continue; }
-        // The signature covers the attributes, DER-encoded as a SET.
-        toVerify = fromBinary(asn1.toDer(asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SET, true, kids(signedAttrs))).getBytes());
+      const r = await checkSignedData(forge, kids(kids(kids(cms)[1])[0]), data);
+      info.status = r.status;
+      info.time = r.time;
+      if (r.cert) {
+        info.signer = r.cert.subjectName; info.issuer = r.cert.issuerName;
+        info.selfSigned = r.cert.subject === r.cert.issuer;
       }
-      const when = info.time ?? new Date();
-      info.certInDate = validity.length === 2 && when >= validity[0] && when <= validity[1];
-
-      // Check the signature with the certificate's public key.
-      const spki = tbs[off + 5];
-      const keyAlg = kids(spki)[0];
-      const keyOid = asn1.derToOid(kids(keyAlg)[0].value as string);
-      const spkiDer = fromBinary(asn1.toDer(spki).getBytes());
-      let ok: boolean;
-      if (keyOid === OID.rsa) {
-        const key = await crypto.subtle.importKey('spki', spkiDer, { name: 'RSASSA-PKCS1-v1_5', hash }, false, ['verify']);
-        ok = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, signature, toVerify);
-      } else if (keyOid === OID.ec) {
-        const curve = CURVES[asn1.derToOid(kids(keyAlg)[1].value as string)];
-        if (!curve) { info.detail = 'Unsupported elliptic curve.'; continue; }
-        const key = await crypto.subtle.importKey('spki', spkiDer, { name: 'ECDSA', namedCurve: curve[0] }, false, ['verify']);
-        ok = await crypto.subtle.verify({ name: 'ECDSA', hash }, key, derToRaw(signature, curve[1], forge), toVerify);
-      } else { info.detail = 'Unsupported key type.'; continue; }
-      info.status = ok ? 'valid' : 'invalid';
-      info.detail = ok
-        ? `Signed content is intact${info.coversDocument ? '' : '; the document was changed after this signature (later revision)'}. Signer identity is not checked against a trusted list${info.selfSigned ? ' (self-signed certificate)' : ''}.`
-        : 'The signature does not match the signer\'s certificate.';
+      // A timestamp (unsigned attribute id-aa-timeStampToken) gives a trusted signing time.
+      for (const attr of kids(r.unsigned)) {
+        if (asn1.derToOid(kids(attr)[0].value as string) !== OID.timeStampToken || !r.signature) continue;
+        try { info.timestamp = await readTimestamp(forge, kids(kids(attr)[1])[0], r.signature); } catch { /* unreadable token */ }
+      }
+      const when = (info.timestamp?.ok ? info.timestamp.time : undefined) ?? info.time ?? new Date();
+      info.certInDate = !!r.cert?.notBefore && !!r.cert.notAfter && when >= r.cert.notBefore && when <= r.cert.notAfter;
+      if (r.cert && r.status === 'valid') {
+        const anchor = await chainToTrust(forge, r.cert, r.pool, trust);
+        info.trusted = !!anchor;
+        info.trustedBy = anchor?.subjectName;
+      }
+      info.detail = r.status !== 'valid' ? r.detail
+        : `Signed content is intact${info.coversDocument ? '' : '; the document was changed after this signature (later revision)'}. ${
+          info.trusted ? `Signer trusted through ${info.trustedBy}.` : `Signer identity is not trusted: add its certificate or its issuer to Trusted Certificates${info.selfSigned ? ' (self-signed certificate)' : ''}.`}`;
     } catch (e) {
       info.status = 'unknown';
       info.detail = `Could not read the signature: ${(e as Error).message}`;

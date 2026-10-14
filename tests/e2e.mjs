@@ -950,6 +950,20 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const sp = page.locator('.signatures-panel');
   await sp.getByText('Signature is valid').waitFor({ timeout: 15000 });
   assert((await sp.innerText()).includes('Test Signer') && (await sp.innerText()).includes('Approved'), 'Signatures panel (Alt+4) shows the valid signature');
+  // Trust list: the self-signed test certificate becomes trusted once added.
+  assert((await sp.innerText()).includes('Identity not trusted'), 'a signer is not trusted until its certificate is added');
+  {
+    const forge = (await import('node-forge')).default;
+    const p = forge.pkcs12.pkcs12FromAsn1(forge.asn1.fromDer(readFileSync('tests/fixtures/test-cert.p12').toString('latin1')), 'test');
+    const cert = p.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag][0].cert;
+    writeFileSync(`${OUT}/test-signer.pem`, forge.pki.certificateToPem(cert));
+  }
+  await sp.getByRole('button', { name: 'Trusted Certificates…' }).click();
+  const [tfc] = await Promise.all([page.waitForEvent('filechooser'), sp.getByRole('button', { name: 'Add Certificate…' }).click()]);
+  await tfc.setFiles(`${OUT}/test-signer.pem`);
+  await sp.getByText(/Identity trusted/).waitFor({ timeout: 15000 });
+  assert(true, 'adding the certificate to Trusted Certificates trusts the signature');
+  await sp.getByRole('button', { name: 'Remove' }).click();
   await page.screenshot({ path: `${OUT}/16-signed.png` });
   const [sd2] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
   await sd2.saveAs(`${OUT}/signed-form.pdf`);

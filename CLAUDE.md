@@ -123,6 +123,7 @@ field creation (Tools > field tools, X = signature field, Forms Editor
 Ctrl+Shift+F), image
 signatures (draw/type, reusable), digital signatures (src/pdf/sign.ts:
 .pfx/.p12, PKCS#7 detached, incremental updates in src/pdf/incremental.ts;
+trust list src/model/trust.ts with chain checks, RFC 3161 timestamps;
 Signatures panel Alt+4), redaction (mark area/text; apply removes the
 content under the marks: src/pdf/redactContent.ts), OCR (tesseract.js,
 7 Latin-script languages, assets served from /ocr/, invisible text);
@@ -155,6 +156,6 @@ Known gaps: low-end performance measured only with CPU throttling (docs/perf.md,
 first paint, not only when a file is opened (split chunks, docs/perf.md); need Revu-made samples (none public; wanted list in
 tests/fixtures/revu/README.md): cutout storage (ours in CTData), custom
 column values (/BSIColumnData kept on edit but not read), .btx tool sets;
-signatures are not checked against a
-trust list and have no timestamps; OCR languages limited to Latin scripts
+timestamps need a TSA that allows browser
+requests (CORS); revocation (OCSP/CRL) is not checked; OCR languages limited to Latin scripts
 (the text layer is WinAnsi).
