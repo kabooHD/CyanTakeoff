@@ -334,8 +334,10 @@ at the risk of false positives. Search Multiple Rotations tries 45° steps.
 Filter by Color / Refine Colors limit the colours considered. Results show
 a picture of each match; clicking one goes there. Checked results can get a
 Count measurement (Actions > Apply Count Measurement to Checked), a
-Highlight, a Hyperlink or a Mark for Redaction. Ours: no colour filter or
-folder search yet; matching is on rendered ink (1.5 px per point).
+Highlight, a Hyperlink or a Mark for Redaction. Ours: Filter by Color
+lists the symbol's colours as swatches to switch off (matching then uses
+only pixels near the colours left on); no folder search yet; matching is
+on rendered ink (1.5 px per point).
 
 ## Spell check (Edit > Check Spelling, F7)
 While editing text in a markup or form field, unknown words get a squiggly

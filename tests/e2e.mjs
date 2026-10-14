@@ -1520,6 +1520,19 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForFunction(() => !document.querySelector('.visual-search')?.textContent?.includes('Searching'), null, { timeout: 90000 });
   const n2 = await page.locator('.vs-result').count();
   assert(n2 > n, `with multiple rotations the turned door swings are found too (${n2})`);
+  // Filter by Color: the symbol's colours as swatches; with every colour off nothing matches.
+  await page.getByText('Filter by Color').click();
+  const swatches = await page.locator('.vs-colors input').count();
+  assert(swatches >= 1, `Filter by Color lists the symbol's colours (${swatches})`);
+  for (let i = 0; i < swatches; i++) await page.locator('.vs-colors input').nth(i).uncheck();
+  await page.locator('.vs-colors input').first().check();
+  await page.getByText('Search multiple rotations').click();
+  await page.locator('.visual-search').getByRole('button', { name: 'Search', exact: true }).click();
+  await page.waitForTimeout(500);
+  await page.waitForFunction(() => !document.querySelector('.visual-search')?.textContent?.includes('Searching'), null, { timeout: 90000 });
+  const n3 = await page.locator('.vs-result').count();
+  assert(n3 >= 3 && n3 <= 6, `matching on the symbol's main colour still finds the door swings (${n3})`);
+  await page.getByText('Filter by Color').click();
   await page.getByRole('tab', { name: 'Text' }).click();
 }
 

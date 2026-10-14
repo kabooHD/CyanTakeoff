@@ -436,6 +436,9 @@ button.active { background: #d6e4fa; }
 .search-modes button { flex: 1; }
 .vs-preview { max-width: 120px; max-height: 60px; border: 1px solid var(--border); background: #fff; }
 .vs-result { display: flex; align-items: center; gap: 4px; }
+.vs-colors { flex-wrap: wrap; }
+.vs-colors label { display: inline-flex; align-items: center; gap: 2px; }
+.vs-swatch { display: inline-block; width: 16px; height: 16px; border: 1px solid var(--border); border-radius: 2px; }
 .vs-hit { display: flex; align-items: center; gap: 6px; flex: 1; text-align: left; background: none; border: 0; padding: 2px; }
 .vs-hit img { width: 48px; height: 48px; object-fit: contain; background: #fff; border: 1px solid var(--border); }
 

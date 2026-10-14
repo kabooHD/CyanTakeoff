@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findMatches, rotate90, trim, type Mask } from '../src/model/visualSearch';
+import { findMatches, paletteOf, rotate90, toColorMask, trim, type Mask } from '../src/model/visualSearch';
 
 const blank = (w: number, h: number): Mask => ({ w, h, data: new Uint8Array(w * h) });
 const set = (m: Mask, x: number, y: number) => { if (x >= 0 && y >= 0 && x < m.w && y < m.h) m.data[y * m.w + x] = 1; };
@@ -32,5 +32,23 @@ describe('VisualSearch', () => {
     for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) if (r.data[y * r.w + x]) set(page, 100 + x, 50 + y);
     expect(findMatches(page, t, 0.8)).toHaveLength(0);
     expect(findMatches(page, rotate90(t, 1), 0.8)).toHaveLength(1);
+  });
+});
+
+describe('Filter by Color', () => {
+  /** 4×1 picture: black, red, white, light grey (as paper would be). */
+  const px = new Uint8ClampedArray([0, 0, 0, 255, 220, 0, 0, 255, 255, 255, 255, 255, 245, 245, 245, 255]);
+  it('lists the drawn colours, most frequent first, without the paper', () => {
+    const pal = paletteOf(px, 4, 1);
+    expect(pal).toHaveLength(2);
+    expect(pal[0][0]).toBeLessThan(16); // black
+    expect(pal[1][0]).toBeGreaterThan(200); expect(pal[1][1]).toBeLessThan(16); // red
+    expect(paletteOf(new Uint8ClampedArray([255, 255, 255, 255]), 1, 1)).toEqual([]);
+  });
+  it('masks only the pixels close to the chosen colours', () => {
+    expect([...toColorMask(px, 4, 1, [[0, 0, 0]]).data]).toEqual([1, 0, 0, 0]);
+    expect([...toColorMask(px, 4, 1, [[255, 0, 0]]).data]).toEqual([0, 1, 0, 0]);
+    expect([...toColorMask(px, 4, 1, [[0, 0, 0], [255, 0, 0]]).data]).toEqual([1, 1, 0, 0]);
+    expect([...toColorMask(px, 4, 1, []).data]).toEqual([0, 0, 0, 0]);
   });
 });

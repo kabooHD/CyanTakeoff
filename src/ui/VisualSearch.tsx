@@ -7,7 +7,7 @@ import { create } from 'zustand';
 import type { PDFPageProxy } from 'pdfjs-dist';
 import { useApp, type DocState } from '../model/store';
 import type { Pt } from '../model/types';
-import { findMatches, rotateMask, scaleMask, suppress, toMask, trim, type Mask, type Match } from '../model/visualSearch';
+import { findMatches, paletteOf, rotateMask, scaleMask, suppress, toColorMask, toMask, trim, type Mask, type Match, type RGB } from '../model/visualSearch';
 import { toolById } from '../tools/tools';
 import { showHit, useSearch } from './Search';
 
@@ -17,11 +17,16 @@ const kFor = (w: number, h: number) => Math.min(K, Math.sqrt(MAX_PX / (w * h)));
 
 export interface VResult { docId: string; page: number; rect: [Pt, Pt]; score: number; thumb: string; checked: boolean }
 interface VState {
-  template: { docId: string; page: number; rect: [Pt, Pt]; mask: Mask; k: number; preview: string } | null;
+  template: { docId: string; page: number; rect: [Pt, Pt]; mask: Mask; k: number; preview: string; pixels: Uint8ClampedArray; w: number; h: number } | null;
   sensitivity: number; rotations: boolean; scope: 'page' | 'document' | 'all';
+  /** Filter by Color: the symbol's colours, each on or off. */
+  byColor: boolean; colors: { rgb: RGB; on: boolean }[];
   results: VResult[]; running: boolean; progress: string;
 }
-export const useVisual = create<VState>(() => ({ template: null, sensitivity: 0.8, rotations: false, scope: 'document', results: [], running: false, progress: '' }));
+export const useVisual = create<VState>(() => ({ template: null, sensitivity: 0.8, rotations: false, scope: 'document', byColor: false, colors: [], results: [], running: false, progress: '' }));
+
+/** The colours to match, or null when Filter by Color is off. */
+const activeColors = (st: VState): RGB[] | null => (st.byColor && st.colors.some((c) => c.on) ? st.colors.filter((c) => c.on).map((c) => c.rgb) : null);
 
 async function render(page: PDFPageProxy, k: number) {
   const vp = page.getViewport({ scale: k });
@@ -54,7 +59,10 @@ export async function setVisualTemplate(d: DocState, pageIdx: number, a: Pt, b: 
   crop.getContext('2d')!.putImageData(img, 0, 0);
   c.width = c.height = 0;
   if (!t) { useApp.getState().setStatus('VisualSearch: nothing drawn inside that rectangle.'); return; }
-  useVisual.setState({ template: { docId: d.id, page: pageIdx, rect: [a, b], mask: t.mask, k, preview: crop.toDataURL() }, results: [] });
+  useVisual.setState({
+    template: { docId: d.id, page: pageIdx, rect: [a, b], mask: t.mask, k, preview: crop.toDataURL(), pixels: img.data, w, h }, results: [],
+    colors: paletteOf(img.data, w, h).map((rgb) => ({ rgb, on: true })),
+  });
   useApp.getState().setPanels({ left: 'search' });
   useSearch.setState({ mode: 'visual' });
   useApp.getState().setStatus('VisualSearch: symbol set. Click Search.');
@@ -69,6 +77,9 @@ export async function runVisualSearch() {
   if (!active) return;
   const docs = st.scope === 'all' ? app.docs : [active];
   const angles = st.rotations ? [0, 45, 90, 135, 180, 225, 270, 315] : [0];
+  const colors = activeColors(st);
+  const tMask = colors ? trim(toColorMask(t.pixels, t.w, t.h, colors))?.mask : t.mask;
+  if (!tMask) { app.setStatus('VisualSearch: none of the chosen colours is in the symbol.'); return; }
   useVisual.setState({ running: true, results: [], progress: '' });
   const results: VResult[] = [];
   for (const d of docs) {
@@ -78,8 +89,9 @@ export async function runVisualSearch() {
       const info = d.loaded.pages[p];
       const k = kFor(info.width, info.height);
       const { c, ctx } = await render(await d.loaded.pdf.getPage(p + 1), k);
-      const mask = toMask(ctx.getImageData(0, 0, c.width, c.height).data, c.width, c.height);
-      const base = scaleMask(t.mask, k / t.k);
+      const px = ctx.getImageData(0, 0, c.width, c.height).data;
+      const mask = colors ? toColorMask(px, c.width, c.height, colors) : toMask(px, c.width, c.height);
+      const base = scaleMask(tMask, k / t.k);
       let found: Match[] = [];
       for (const a of angles) {
         found.push(...findMatches(mask, rotateMask(base, a), st.sensitivity, a));
@@ -158,6 +170,17 @@ export function VisualSearchPanel() {
         <span>{Math.round(st.sensitivity * 100)}%</span>
       </div>
       <div className="search-row small"><label><input type="checkbox" checked={st.rotations} onChange={(e) => set({ rotations: e.target.checked })} /> Search multiple rotations</label></div>
+      <div className="search-row small"><label><input type="checkbox" checked={st.byColor} disabled={!st.colors.length} onChange={(e) => set({ byColor: e.target.checked })} /> Filter by Color</label></div>
+      {st.byColor && st.colors.length > 0 && (
+        <div className="search-row small vs-colors" aria-label="Colors">
+          {st.colors.map((c, i) => (
+            <label key={i} title={`rgb(${c.rgb.join(', ')})`}>
+              <input type="checkbox" aria-label={`Color ${i + 1}`} checked={c.on} onChange={(e) => set({ colors: st.colors.map((x, j) => (j === i ? { ...x, on: e.target.checked } : x)) })} />
+              <span className="vs-swatch" style={{ background: `rgb(${c.rgb.join(',')})` }} />
+            </label>
+          ))}
+        </div>
+      )}
       <div className="search-row"><button className="primary" disabled={!st.template || st.running} onClick={() => runVisualSearch()}>Search</button></div>
       <div className="muted small">{st.running ? `Searching… ${st.progress}` : st.results.length ? `${st.results.length} result${st.results.length === 1 ? '' : 's'}` : ''}</div>
       {st.results.length > 0 && (

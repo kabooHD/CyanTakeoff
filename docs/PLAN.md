@@ -187,7 +187,7 @@ filling, image signatures, redaction and OCR.
   Add to Dictionary, Change/Change All), Markup Spelling Mistakes on PDF
   text (Squiggly markups, suggestions in the comment); English dictionary
 - [x] VisualSearch (Search panel > Visual): Get Rectangle, sensitivity,
-  multiple rotations, current page/document/all open documents, result
+  multiple rotations, Filter by Color, current page/document/all open documents, result
   thumbnails; Count / Highlight / Mark for Redaction on checked results
 - [x] Sequences: Tool Chest > Sequence: Define (1/A/a, start, increment,
   digits, prefix, suffix), Reset, Remove; markups placed number themselves;
