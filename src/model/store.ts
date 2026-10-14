@@ -6,6 +6,7 @@ import type { LoadedDoc } from '../pdf/document';
 import { openPdf } from '../pdf/document';
 import { savePdf } from '../pdf/save';
 import { DEFAULT_STYLES, toolById } from '../tools/tools';
+import { DEFAULT_TOOL_CHEST, type ToolChestPrefs } from './toolScale';
 import { MEASURE_TYPES, scaleAt } from './measure';
 import { translated } from './markup';
 import { expandGroups } from './arrange';
@@ -148,6 +149,11 @@ interface AppState {
   /** Tool Chest tool sets; the first is "My Tools". */
   toolSets: ToolSet[];
   recentTools: ToolPreset[];
+  /** Tool Chest settings (Revu): Comment Persistence, Update Tool Set Item on Reuse, Maximum Recents, icon size. */
+  toolChest: ToolChestPrefs;
+  /** Tool Chest > Recent Tools > Hide (this session). */
+  recentHidden?: boolean;
+  setToolChest(p: Partial<ToolChestPrefs>): void;
   /**
    * Apply Scale to Pages dialog. `pagePts` is set after calibrating (distance
    * between the two picked points); `then` is the measure tool to resume.
@@ -299,7 +305,7 @@ function savePrefs(s: AppState) {
   try {
     localStorage.setItem(LS, JSON.stringify({
       toolDefaults: s.toolDefaults, toggles: s.toggles, author: s.author,
-      toolSets: s.toolSets, customKeys: s.customKeys, recentTools: s.recentTools, savedScales: s.savedScales,
+      toolSets: s.toolSets, customKeys: s.customKeys, recentTools: s.recentTools, savedScales: s.savedScales, toolChest: s.toolChest,
       left: s.left, right: s.right, markupsList: s.markupsList, dimLevel: s.dimLevel, rulerUnit: s.rulerUnit,
       customLineStyles: s.customLineStyles, customHatches: s.customHatches,
     }));
@@ -427,6 +433,8 @@ export const useApp = create<AppState>((set, get) => {
       { id: 'takeoff', name: 'Sample Takeoff', tools: SAMPLE_TOOL_CHEST },
     ],
     recentTools: prefs.recentTools ?? [],
+    toolChest: { ...DEFAULT_TOOL_CHEST, ...(prefs.toolChest ?? {}) },
+    setToolChest(p) { set((st) => ({ toolChest: { ...st.toolChest, ...p } })); savePrefs(get()); },
     scaleDialog: null,
     calibrateFor: null,
     radiusTool: 'radius',
@@ -613,7 +621,7 @@ export const useApp = create<AppState>((set, get) => {
       // Recent Tools, like Revu: newest first, unique by type+subject+colour.
       const p: ToolPreset = { id: crypto.randomUUID(), name: m.subject, type: m.type, style: m.style, subject: m.subject, depth: m.depth };
       const key = (x: ToolPreset) => `${x.type}|${x.subject}|${x.style.color}|${x.style.fill}`;
-      set((st) => ({ recentTools: [p, ...st.recentTools.filter((r) => key(r) !== key(p))].slice(0, 12) }));
+      set((st) => ({ recentTools: [p, ...st.recentTools.filter((r) => key(r) !== key(p))].slice(0, Math.max(1, st.toolChest.maxRecents)) }));
       savePrefs(get());
       return m;
     },
@@ -625,6 +633,15 @@ export const useApp = create<AppState>((set, get) => {
     },
     updateMarkups(ids, fn, opts = { history: true }) {
       const set_ = new Set(ids);
+      // Update Tool Set Item on Reuse (Revu): a style change on a markup made with a tool goes back to the tool.
+      if (get().toolChest.updateOnReuse) {
+        const d0 = activeDoc();
+        const changed = (d0?.markups ?? []).filter((m) => set_.has(m.id) && m.toolId).map((m) => ({ m, patch: fn(m) })).filter((x) => x.patch.style);
+        if (changed.length) {
+          set((st) => ({ toolSets: st.toolSets.map((t) => ({ ...t, tools: t.tools.map((p) => { const c = changed.find((x) => x.m.toolId === p.id); return c ? { ...p, style: { ...p.style, ...c.patch.style } } : p; }) })) }));
+          savePrefs(get());
+        }
+      }
       withDoc((d) => ({
         markups: d.markups.map((m) => {
           if (!set_.has(m.id)) return m;

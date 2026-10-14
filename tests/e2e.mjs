@@ -1717,6 +1717,29 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.locator('.doc-tab').first().click();
     await page.waitForTimeout(300);
   }
+  // Tool Chest: Symbol view, Hide a set and show it again from the Tool Chest menu.
+  {
+    await page.keyboard.press('Escape');
+    if (!(await page.locator('.toolchest').count())) await page.keyboard.press('Alt+x');
+    await page.locator('.toolchest').waitFor({ timeout: 5000 });
+    const gear = page.locator('.toolchest details').nth(1).locator('.toolset-gear');
+    await gear.click();
+    await page.getByRole('menuitem', { name: 'Symbol' }).click();
+    await page.waitForTimeout(200);
+    assert(await page.locator('.toolchest .tool-symbols').count() === 1, 'Symbol view shows the tool set as icons');
+    await gear.click();
+    await page.getByRole('menuitem', { name: 'Detail' }).click();
+    const setsBefore = await page.locator('.toolchest details').count();
+    await gear.click();
+    await page.getByRole('menuitem', { name: 'Hide', exact: true }).click();
+    await page.waitForTimeout(200);
+    assert(await page.locator('.toolchest details').count() === setsBefore - 1, 'Hide removes the tool set from the panel');
+    await page.getByRole('button', { name: 'Tool Chest menu' }).click();
+    const first = page.getByRole('menuitem').first();
+    await first.click();
+    await page.waitForTimeout(200);
+    assert(await page.locator('.toolchest details').count() === setsBefore, 'the Tool Chest menu shows the set again');
+  }
   // Markups List: right-click menu, Hide Markups, saved filters, grouping.
   {
     await page.keyboard.press('Escape');

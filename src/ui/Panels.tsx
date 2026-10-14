@@ -9,6 +9,8 @@ import { layerIds } from '../pdf/layers';
 import { SignaturesPanel } from './DigitalSignature';
 import { useEffect, useRef, useState } from 'react';
 import { create } from 'zustand';
+import { applyToolProperties } from '../model/toolScale';
+import { scaleAt } from '../model/measure';
 import { usePageSetup } from './PageSetup';
 import { useApp, useActiveDoc, type DocState } from '../model/store';
 import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, formatNumber, measure, precisionOf, unitLabel, withPrecision } from '../model/measure';
@@ -303,16 +305,26 @@ function Properties() {
 
 // ---------------- Tool Chest ----------------
 
-function ToolItem({ p, onRemove, onMenu }: { p: ToolPreset; onRemove?: () => void; onMenu?: (e: React.MouseEvent) => void }) {
+function ToolItem({ p, onRemove, onMenu, symbol }: { p: ToolPreset; onRemove?: () => void; onMenu?: (e: React.MouseEvent) => void; symbol?: boolean }) {
   const s = useApp();
   const active = s.preset?.id === p.id;
+  const use = (e: React.MouseEvent) => {
+    // Shift+click with markups selected: apply the tool's appearance to them (Revu applies on a plain click).
+    const d = s.docs.find((x) => x.id === s.activeId);
+    if (e.shiftKey && d?.selection.length && p.mode !== 'drawing') {
+      s.updateMarkups(d.selection, (m) => applyToolProperties(m, p, s.toolChest.commentPersistence));
+      s.setStatus(`Applied "${p.name}" to ${d.selection.length} markup${d.selection.length === 1 ? '' : 's'}`);
+      return;
+    }
+    s.setTool(p.type, { preset: p });
+  };
   return (
-    <div className={`tool-item ${active ? 'active' : ''}`} title={`${p.name} (${toolById(p.type).name}, ${p.mode === 'drawing' ? 'Drawing' : 'Properties'} mode)\nClick to use, double-click to lock`}
-      onClick={() => s.setTool(p.type, { preset: p })}
+    <div className={`tool-item ${active ? 'active' : ''} ${symbol ? 'symbol' : ''}`} title={`${p.name} (${toolById(p.type).name}, ${p.mode === 'drawing' ? 'Drawing' : 'Properties'} mode)\nClick to use, Shift+click to apply its properties to the selected markups, double-click to lock`}
+      onClick={use}
       onDoubleClick={() => s.setTool(p.type, { preset: p, locked: true })}
       onContextMenu={(e) => { e.preventDefault(); onMenu?.(e); }}>
       <span className="tool-swatch" style={{ borderColor: p.style.color, background: p.style.fill ?? 'transparent' }}><Icon name={p.type} size={16} /></span>
-      <span className="tool-name">{p.name}</span>
+      {!symbol && <span className="tool-name">{p.name}</span>}
       {p.mode === 'drawing' && <span className="tool-mode" title="Drawing mode">D</span>}
       {p.sequence && <span className="tool-mode" title="Sequence">#</span>}
       {onRemove && <button className="tool-remove" title="Remove" onClick={(e) => { e.stopPropagation(); onRemove(); }}><Icon name="close" size={10} /></button>}
@@ -348,9 +360,18 @@ function ToolChest() {
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const sets = s.toolSets;
   const update = (id: string, fn: (t: ToolSet) => ToolSet | null) => s.setToolSets(sets.flatMap((t) => (t.id === id ? (fn(t) ? [fn(t)!] : []) : [t])));
+  const doc = s.docs.find((x) => x.id === s.activeId);
+  const pageScale = doc ? scaleAt(doc.calibrations[doc.page], doc.viewports[doc.page], undefined) : null;
   const setMenuFor = (e: React.MouseEvent, set: ToolSet) => setMenu({ x: e.clientX, y: e.clientY, items: [
+    { label: 'Symbol', checked: set.view === 'symbol', action: () => update(set.id, (t) => ({ ...t, view: 'symbol' })) },
+    { label: 'Detail', checked: set.view !== 'symbol', action: () => update(set.id, (t) => ({ ...t, view: 'detail' })) },
+    { sep: true },
+    { label: set.scale ? `Set Scale (now ${set.scale.label || 'set'})…` : 'Set Scale…', disabled: !pageScale, action: () => { if (pageScale) { update(set.id, (t) => ({ ...t, scale: pageScale })); s.setStatus(`${set.name}: tools keep their real size (scale ${pageScale.label || 'of this page'})`); } } },
+    { label: 'Remove Scale', disabled: !set.scale, action: () => update(set.id, (t) => ({ ...t, scale: undefined })) },
+    { sep: true },
     { label: 'Rename…', action: () => { const n = prompt('Tool set name', set.name); if (n) update(set.id, (t) => ({ ...t, name: n })); } },
     { label: 'Export…', action: () => exportToolSet(set) },
+    { label: 'Hide', action: () => update(set.id, (t) => ({ ...t, hidden: true })) },
     { label: 'Create Legend', disabled: !set.tools.length, action: () => {
       useApp.setState({ legendKeys: [...new Set(set.tools.map(legendKey))] });
       s.setTool('legend');
@@ -370,23 +391,45 @@ function ToolChest() {
     { label: 'Rename…', action: () => { const n = prompt('Tool name', p.name); if (n) update(set.id, (t) => ({ ...t, tools: t.tools.map((x) => (x.id === p.id ? { ...x, name: n } : x)) })); } },
     { label: 'Remove', action: () => s.removeFromToolChest(p.id) },
   ] });
+  const tc = s.toolChest;
+  const chestMenu = (e: React.MouseEvent) => setMenu({ x: e.clientX, y: e.clientY, items: [
+    ...sets.map((t) => ({ label: t.name, checked: !t.hidden, action: () => update(t.id, (x) => ({ ...x, hidden: !x.hidden })) })),
+    { label: 'Recent Tools', checked: !tc.size || !s.recentHidden, action: () => useApp.setState({ recentHidden: !s.recentHidden }) },
+    { sep: true },
+    { label: 'Manage Tool Sets: New Tool Set…', action: () => { const n = prompt('New tool set name', 'New Tool Set'); if (n) s.setToolSets([...sets, { id: crypto.randomUUID(), name: n, tools: [] }]); } },
+    { label: 'Manage Tool Sets: Import…', action: async () => { const t = await importToolSet(); if (t) s.setToolSets([...sets, t]); } },
+    { sep: true },
+    { label: 'Comment Persistence › No', checked: tc.commentPersistence === 'none', action: () => s.setToolChest({ commentPersistence: 'none' }) },
+    { label: 'Comment Persistence › Exclude Text Boxes', checked: tc.commentPersistence === 'excludeText', action: () => s.setToolChest({ commentPersistence: 'excludeText' }) },
+    { label: 'Comment Persistence › All Markups', checked: tc.commentPersistence === 'all', action: () => s.setToolChest({ commentPersistence: 'all' }) },
+    { label: 'Update Tool Set Item on Reuse', checked: tc.updateOnReuse, action: () => s.setToolChest({ updateOnReuse: !tc.updateOnReuse }) },
+  ] });
+  const recentMenu = (e: React.MouseEvent) => setMenu({ x: e.clientX, y: e.clientY, items: [
+    { label: 'Maximum Recents…', action: () => { const n = prompt('Maximum recent tools', String(tc.maxRecents)); if (n && Number(n) > 0) s.setToolChest({ maxRecents: Math.floor(Number(n)) }); } },
+    { label: 'Clear Recents', disabled: !s.recentTools.length, action: () => useApp.setState({ recentTools: [] }) },
+    { label: 'Hide', action: () => useApp.setState({ recentHidden: true }) },
+  ] });
   return (
-    <div className="toolchest">
+    <div className="toolchest" style={{ ['--tool-size' as string]: tc.size }}>
       <div className="prop-actions pad">
-        <button onClick={() => { const n = prompt('New tool set name', 'New Tool Set'); if (n) s.setToolSets([...sets, { id: crypto.randomUUID(), name: n, tools: [] }]); }}>New Tool Set</button>
-        <button onClick={async () => { const t = await importToolSet(); if (t) s.setToolSets([...sets, t]); }}>Import…</button>
+        <button aria-label="Tool Chest menu" onClick={chestMenu}>Tool Chest ▾</button>
+        <input aria-label="Tool size" type="range" min={0.7} max={1.8} step={0.1} value={tc.size} title="Size" onChange={(e) => s.setToolChest({ size: Number(e.target.value) })} style={{ width: 70 }} />
       </div>
-      <details open>
-        <summary>Recent Tools</summary>
-        {s.recentTools.length ? s.recentTools.map((p) => <ToolItem key={p.id} p={p} />) : <p className="muted pad">Markups you create appear here.</p>}
-      </details>
-      {sets.map((set, i) => (
+      {!s.recentHidden && (
+        <details open>
+          <summary onContextMenu={(e) => { e.preventDefault(); recentMenu(e); }}>Recent Tools<button className="toolset-gear" title="Recent Tools options" onClick={(e) => { e.preventDefault(); recentMenu(e); }}>⚙</button></summary>
+          {s.recentTools.length ? s.recentTools.map((p) => <ToolItem key={p.id} p={p} />) : <p className="muted pad">Markups you create appear here.</p>}
+        </details>
+      )}
+      {sets.filter((t) => !t.hidden).map((set, i) => (
         <details key={set.id} open>
           <summary onContextMenu={(e) => { e.preventDefault(); setMenuFor(e, set); }}>
-            {set.name}
+            {set.name}{set.scale ? <span className="muted small"> · scale {set.scale.label || 'set'}</span> : null}
             <button className="toolset-gear" title="Tool set options" onClick={(e) => { e.preventDefault(); setMenuFor(e, set); }}>⚙</button>
           </summary>
-          {set.tools.map((p) => <ToolItem key={p.id} p={p} onRemove={() => s.removeFromToolChest(p.id)} onMenu={(e) => toolMenuFor(e, set, p)} />)}
+          {set.view === 'symbol'
+            ? <div className="tool-symbols">{set.tools.map((p) => <ToolItem key={p.id} p={p} symbol onRemove={() => s.removeFromToolChest(p.id)} onMenu={(e) => toolMenuFor(e, set, p)} />)}</div>
+            : set.tools.map((p) => <ToolItem key={p.id} p={p} onRemove={() => s.removeFromToolChest(p.id)} onMenu={(e) => toolMenuFor(e, set, p)} />)}
           {i === 0 && <p className="muted pad small">Right-click a markup and choose “Add to My Tools” to save it here. Right-click a tool for Drawing mode.</p>}
         </details>
       ))}

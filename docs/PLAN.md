@@ -218,6 +218,9 @@ filling, image signatures, redaction and OCR.
 - [x] XFDF export/import of markups (standard XFDF plus our measurement data
   in a namespaced element; Revu measurements round-trip; stamp artwork in
   <appearance>)
+- [x] Tool Chest: Symbol/Detail view, tool set scale, Hide/show sets,
+  Recent Tools options, Comment Persistence, Update Tool Set Item on
+  Reuse, size slider, apply a tool's properties to selected markups
 - [x] Markups List: right-click menu, Hide Markups, Saved Filters, section
   grouping, X/Y, centre, document and real-world size columns
 - [x] File: New PDF from Template (templates kept in the browser)

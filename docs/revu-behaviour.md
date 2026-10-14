@@ -452,6 +452,19 @@ Ours: the markup keeps a copy of a custom style so the file is
 self-contained; hatches are drawn in the fill colour and saved as PDF
 tiling patterns so any viewer shows them.
 
+## Tool Chest extras
+Tool set menu: Symbol (icons only) or Detail view, Set Scale (the active
+page's scale; Drawing mode tools then keep their real size on sheets at
+other scales) / Remove Scale, Rename, Export, Create Legend, Hide, Delete.
+Tool Chest menu: show hidden sets, Manage Tool Sets (new, import),
+Comment Persistence (No / Exclude Text Boxes / All Markups: whether a
+Properties mode tool clicked with markups selected copies its comment),
+Update Tool Set Item on Reuse (a style change on a markup made with a tool
+goes back to the tool). Recent Tools: Maximum Recents, Clear Recents, Hide.
+A size slider scales the icons. Revu applies a Properties mode tool to
+the selected markups on a click; ours does it on Shift+click, so a plain
+click always picks the tool.
+
 ## Bookmarks (Alt+B)
 Add Bookmark goes to the current view of the active page and is named after
 the page label, ready to type over; it goes below the selected bookmark

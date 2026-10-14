@@ -86,7 +86,9 @@ thumbnail drag, split, combine) and Flatten; Compare Documents (clouds
 differences, visual or vector, alignment points) and Overlay Pages (two-colour overlay PDF); Page Labels from
 title-block sheet numbers, Batch Link (incl. across open files), Sets panel
 (open files as one set), Slip Sheet (by sheet number, markups carried);
-Tool Chest tool sets (new/rename/export/import, Properties vs Drawing mode),
+Tool Chest tool sets (new/rename/export/import, Properties vs Drawing mode,
+Symbol/Detail view, set scale, hide, Comment Persistence, Update on Reuse:
+src/model/toolScale.ts),
 Keyboard Shortcuts editor (src/ui/commands.ts), Profiles; Print (Ctrl+P,
 src/ui/Print.tsx, layout math in src/model/print.ts; Selected pages from
 the Thumbnails selection in src/ui/Panels.tsx, margins); Rulers, crosshair,

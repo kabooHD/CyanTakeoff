@@ -517,3 +517,8 @@ button.active { background: #d6e4fa; }
 /* Markups List section headings (sorted by a grouping column) and the Hide Markups button */
 .ml-table tr.ml-section td { background: var(--chrome-2); font-weight: 600; cursor: pointer; }
 .ml-toolbar button.on, .markups-list button.on { background: var(--accent-soft); border-color: var(--accent); }
+
+/* Tool Chest: Symbol view and the size slider */
+.toolchest .tool-item { zoom: var(--tool-size, 1); }
+.tool-symbols { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; }
+.tool-item.symbol { display: inline-flex; padding: 3px; }

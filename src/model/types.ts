@@ -197,6 +197,8 @@ export interface Markup {
   replies?: Reply[];
   /** Member of a Sequence: the tool's id, its run and this markup's value. */
   seq?: { id: string; run: number; n: number };
+  /** The Tool Chest tool this markup was made with (Update Tool Set Item on Reuse); not saved. */
+  toolId?: string;
   /** Markups List Checkmark column. */
   checked?: boolean;
   /** Values of the document's custom columns, by column id. */
@@ -227,7 +229,15 @@ export interface ToolPreset {
 }
 
 /** A named tool set in the Tool Chest. */
-export interface ToolSet { id: string; name: string; tools: ToolPreset[] }
+export interface ToolSet {
+  id: string; name: string; tools: ToolPreset[];
+  /** Tool Chest > Hide: the set stays but is not shown. */
+  hidden?: boolean;
+  /** Symbol (icons only) or Detail (a table) view. */
+  view?: 'symbol' | 'detail';
+  /** Set Scale: Drawing mode tools are resized for the page's scale so they keep their real size. */
+  scale?: Scale;
+}
 
 export interface Toggles {
   snap: boolean;

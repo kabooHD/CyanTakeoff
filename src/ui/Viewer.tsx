@@ -38,6 +38,7 @@ import { setVisualTemplate } from './VisualSearch';
 import { finishPickRect } from './pickRect';
 import { editText, eraseContent } from '../pdf/editText';
 import { SKETCH_TOOLS } from '../model/sketch';
+import { scaledPoints, toolScaleFactor } from '../model/toolScale';
 import { SketchBar } from './SketchBar';
 import { reviewTextMark } from './ReviewText';
 import type { TextBox } from './toolActions';
@@ -595,6 +596,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const finish = (type: MarkupType, points: Pt[], extra: Partial<Markup> = {}) => {
     const preset = s.preset;
     const style = preset?.style ?? s.toolDefaults[type];
+    if (preset) extra = { toolId: preset.id, ...extra };
     let P = points;
     if (type === 'cloud' && points.length === 2) P = rectCorners(points[0], points[1]);
     if (type === 'callout') P = [points[0], points[1], { x: points[1].x + 144, y: points[1].y + 40 }];
@@ -907,9 +909,13 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     // Tool Chest tool in Drawing mode: place a copy of the saved markup, centred on the click (Revu).
     if (!draft && s.preset?.mode === 'drawing' && s.preset.markup) {
       const shape = s.preset.markup;
-      const b = bounds(shape.points);
-      const moved = translated({ ...shape, id: '', page: pageIdx, author: '', created: '', modified: '' } as Markup, raw.x - (b.minX + b.w / 2), raw.y - (b.minY + b.h / 2));
-      const m = s.addMarkup({ ...shape, ...moved, page: pageIdx, scale: undefined, replies: undefined, groupId: undefined, seq: undefined, ...seqFields(shape.type) });
+      // A tool set with a scale keeps the tool's real size on this page's scale.
+      const setScale = s.toolSets.find((t) => t.tools.some((x) => x.id === s.preset!.id))?.scale;
+      const k = toolScaleFactor(setScale, scaleFor(raw));
+      const scaledShape = k === 1 ? shape : { ...shape, points: scaledPoints(shape.points, k), cutouts: shape.cutouts?.map((c) => ({ ...c, points: scaledPoints(c.points, k) })) };
+      const b = bounds(scaledShape.points);
+      const moved = translated({ ...scaledShape, id: '', page: pageIdx, author: '', created: '', modified: '' } as Markup, raw.x - (b.minX + b.w / 2), raw.y - (b.minY + b.h / 2));
+      const m = s.addMarkup({ ...scaledShape, ...moved, page: pageIdx, scale: undefined, replies: undefined, groupId: undefined, seq: undefined, toolId: s.preset.id, ...seqFields(shape.type) });
       if (!s.toolLocked && !s.toggles.reuse) s.setTool('select');
       s.select([m.id]);
       return;
