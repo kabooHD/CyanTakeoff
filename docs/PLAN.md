@@ -251,6 +251,8 @@ filling, image signatures, redaction and OCR.
   Tool Chest tool for the created markups, Preferences > Measure defaults
 - [x] Measurement captions: move (Shift+drag), rotate (anchor, 15° steps),
   Reset Caption Position
+- [x] Manage Columns: choice items with Subject/numeric value/CSV import/custom
+  text, Number min/max, Text multiline, Save to / Delete from Profile
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

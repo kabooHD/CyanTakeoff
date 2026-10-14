@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useApp, useActiveDoc } from '../model/store';
 import { checkFormula } from '../model/formula';
 import type { CustomColumn } from '../model/types';
+import { parseChoiceCsv, profileColumns, saveProfileColumns } from '../model/columns';
+import { pickFile } from './toolActions';
 
 const TYPES: { id: CustomColumn['type']; label: string }[] = [
   { id: 'text', label: 'Text' }, { id: 'number', label: 'Number' }, { id: 'checkmark', label: 'Checkmark' },
@@ -55,6 +57,8 @@ export function ManageColumns({ onClose }: { onClose: () => void }) {
             </table>
             <div className="modal-actions">
               <button onClick={() => setEditing({ id: crypto.randomUUID(), name: '', type: 'text' })}>Add…</button>
+              <button disabled={!cols.length} title="These columns start every new document that has none of its own (Revu: Save to Profile)" onClick={() => { saveProfileColumns(cols); s.setStatus(`${cols.length} custom column${cols.length === 1 ? '' : 's'} saved to the profile`); }}>Save to Profile</button>
+              <button disabled={!profileColumns().length} title="Future documents start without custom columns" onClick={() => { saveProfileColumns(null); s.setStatus('Custom columns removed from the profile'); }}>Delete from Profile</button>
               <span className="spacer" />
               <button className="primary" onClick={onClose}>Close</button>
             </div>
@@ -85,11 +89,15 @@ function ColumnForm({ col, names, onSave, onCancel }: { col: CustomColumn; names
         </div>
       )}
       {c.type === 'formula' && <p className="muted small">Columns: {names.join(', ')}. Use [brackets] for names with spaces; + - * / ^ ( ), min, max, round, abs, sqrt.{formulaError && c.expression ? ` ${formulaError}.` : ''}</p>}
-      {c.type === 'choice' && (
-        <div className="form-row"><span>Options</span>
-          <textarea aria-label="Options" rows={4} value={(c.options ?? []).join('\n')} onChange={(e) => set({ options: e.target.value.split('\n').map((x) => x.trim()).filter(Boolean) })}
-            placeholder="One per line" style={{ width: 220 }} />
+      {c.type === 'choice' && <ChoiceItems c={c} set={set} />}
+      {c.type === 'number' && (
+        <div className="form-row"><span>Range</span>
+          <input aria-label="Minimum" type="number" placeholder="Min" value={c.min ?? ''} onChange={(e) => set({ min: e.target.value === '' ? undefined : Number(e.target.value) })} style={{ width: 80 }} />
+          <input aria-label="Maximum" type="number" placeholder="Max" value={c.max ?? ''} onChange={(e) => set({ max: e.target.value === '' ? undefined : Number(e.target.value) })} style={{ width: 80 }} />
         </div>
+      )}
+      {c.type === 'text' && (
+        <div className="form-row"><span /><label><input type="checkbox" checked={!!c.multiline} onChange={(e) => set({ multiline: e.target.checked || undefined })} /> Multiline</label></div>
       )}
       {numeric && (
         <div className="form-row"><span>Format</span>
@@ -124,5 +132,58 @@ function ColumnForm({ col, names, onSave, onCancel }: { col: CustomColumn; names
         <button onClick={onCancel}>Cancel</button>
       </div>
     </div>
+  );
+}
+
+/** Choice items with Revu's Subject link and numeric value, CSV import and Allow Custom Text. */
+function ChoiceItems({ c, set }: { c: CustomColumn; set: (p: Partial<CustomColumn>) => void }) {
+  const [item, setItem] = useState('');
+  const items = c.options ?? [];
+  const meta = c.choiceMeta ?? {};
+  const setMeta = (name: string, p: { subject?: string; value?: number }) => {
+    const next = { ...meta, [name]: { ...(meta[name] ?? {}), ...p } };
+    if (next[name].subject === '' ) delete next[name].subject;
+    if (next[name].value === undefined) delete next[name].value;
+    if (!Object.keys(next[name]).length) delete next[name];
+    set({ choiceMeta: next });
+  };
+  const add = () => { const n = item.trim(); if (!n || items.includes(n)) return; set({ options: [...items, n] }); setItem(''); };
+  const importCsv = async () => {
+    const f = await pickFile('.csv,text/csv');
+    if (!f) return;
+    const r = parseChoiceCsv(await f.text());
+    set({ options: [...items, ...r.options.filter((o) => !items.includes(o))], choiceMeta: { ...meta, ...r.choiceMeta } });
+  };
+  return (
+    <>
+      <div className="form-row" style={{ alignItems: 'flex-start' }}><span>Items</span>
+        <table className="cc-list choice-items">
+          <thead><tr><th>Item</th><th>Subject</th><th>Numeric value</th><th /></tr></thead>
+          <tbody>
+            {items.map((o, i) => (
+              <tr key={o}>
+                <td>{o}</td>
+                <td><input aria-label={`Subject of ${o}`} value={meta[o]?.subject ?? ''} placeholder="(any)" onChange={(e) => setMeta(o, { subject: e.target.value })} style={{ width: 110 }} /></td>
+                <td><input aria-label={`Value of ${o}`} type="number" step="any" value={meta[o]?.value ?? ''} onChange={(e) => setMeta(o, { value: e.target.value === '' ? undefined : Number(e.target.value) })} style={{ width: 80 }} /></td>
+                <td className="cc-actions">
+                  <button title="Up" disabled={!i} onClick={() => { const n = [...items]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; set({ options: n }); }}>▲</button>
+                  <button title="Down" disabled={i === items.length - 1} onClick={() => { const n = [...items]; [n[i + 1], n[i]] = [n[i], n[i + 1]]; set({ options: n }); }}>▼</button>
+                  <button aria-label={`Remove ${o}`} onClick={() => { const next = { ...meta }; delete next[o]; set({ options: items.filter((x) => x !== o), choiceMeta: next, defaultValue: c.defaultValue === o ? undefined : c.defaultValue }); }}>×</button>
+                </td>
+              </tr>
+            ))}
+            <tr>
+              <td colSpan={4}>
+                <input aria-label="New item" placeholder="New item" value={item} onChange={(e) => setItem(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} style={{ width: 160 }} />
+                <button onClick={add} disabled={!item.trim()}>Add</button>
+                <button onClick={importCsv} title="CSV: item, subject, numeric value">Import…</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div className="form-row"><span /><label><input type="checkbox" checked={!!c.allowCustomText} onChange={(e) => set({ allowCustomText: e.target.checked || undefined })} /> Allow custom text</label></div>
+      <p className="muted small">Subject links an item to markups with that Subject (filters); a numeric value lets formulas use the choice.</p>
+    </>
   );
 }

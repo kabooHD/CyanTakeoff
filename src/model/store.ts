@@ -1,4 +1,5 @@
 import { withDefaults, type Prefs } from './prefs';
+import { profileColumns } from './columns';
 import { create } from 'zustand';
 import { useStatusModels } from './statusModels';
 import { rememberFile } from './recent';
@@ -497,8 +498,9 @@ export const useApp = create<AppState>((set, get) => {
           dirtyCalibrations: new Set(),
           spaces: loaded.spaces,
           dirtySpaces: new Set(),
-          columns: loaded.columns,
-          dirtyColumns: false,
+          // Manage Columns > Save to Profile: a file without custom columns starts with the profile's.
+          columns: loaded.columns.length ? loaded.columns : profileColumns(),
+          dirtyColumns: !loaded.columns.length && profileColumns().length > 0,
           formValues: {},
           page: 0, zoom: 0, selection: [], undo: [], redo: [], dirty: false,
           ...layerState(loaded), bookmarks: loaded.bookmarks, dirtyBookmarks: false,

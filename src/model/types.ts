@@ -111,6 +111,15 @@ export interface CustomColumn {
   type: 'text' | 'number' | 'checkmark' | 'choice' | 'date' | 'formula';
   /** Choice items. */
   options?: string[];
+  /** Choice: Subject the item links to (filters) and a numeric value for formulas, per item (by item name). */
+  choiceMeta?: Record<string, { subject?: string; value?: number }>;
+  /** Choice: the cell accepts text that is not in the list. */
+  allowCustomText?: boolean;
+  /** Number: allowed range. */
+  min?: number;
+  max?: number;
+  /** Text: wraps onto several lines. */
+  multiline?: boolean;
   /** Default for new markups ('today' for Date: the current date). */
   defaultValue?: string | number | boolean;
   expression?: string;

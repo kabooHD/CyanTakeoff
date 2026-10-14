@@ -7,6 +7,8 @@ import { comboFromEvent } from '../tools/tools';
 import { allCommands, effectiveCombo, usersOf } from './commands';
 import { pickFile } from './toolActions';
 import { DEFAULT_PREFS, type Prefs } from '../model/prefs';
+import { saveStatusConfig, useStatusModels } from '../model/statusModels';
+import { profileColumns, saveProfileColumns } from '../model/columns';
 
 export const usePrefsDialog = create<{ open: 'keys' | 'profiles' | 'prefs' | null }>(() => ({ open: null }));
 const close = () => usePrefsDialog.setState({ open: null });
@@ -95,13 +97,14 @@ interface Profile {
   name: string;
   left: unknown; right: unknown; markupsList: boolean; toggles: unknown;
   toolDefaults: unknown; toolSets: unknown; customKeys: Record<string, string>;
+  statusConfig?: unknown; profileColumns?: unknown;
 }
 const load = (): Profile[] => { try { return JSON.parse(localStorage.getItem(LS) ?? '[]'); } catch { return []; } };
 const store = (p: Profile[]) => { try { localStorage.setItem(LS, JSON.stringify(p)); } catch { /* storage unavailable */ } };
 
 function capture(name: string): Profile {
   const s = useApp.getState();
-  return { name, left: s.left, right: s.right, markupsList: s.markupsList, toggles: s.toggles, toolDefaults: s.toolDefaults, toolSets: s.toolSets, customKeys: s.customKeys };
+  return { name, left: s.left, right: s.right, markupsList: s.markupsList, toggles: s.toggles, toolDefaults: s.toolDefaults, toolSets: s.toolSets, customKeys: s.customKeys, statusConfig: useStatusModels.getState(), profileColumns: profileColumns() };
 }
 
 export function applyProfile(p: Profile) {
@@ -109,6 +112,8 @@ export function applyProfile(p: Profile) {
   useApp.setState({ toggles: p.toggles as never, toolDefaults: p.toolDefaults as never, toolSets: p.toolSets as never });
   s.setCustomKeys(p.customKeys ?? {});
   s.setPanels({ left: p.left as never, right: p.right as never, markupsList: p.markupsList });
+  if (p.statusConfig) saveStatusConfig(p.statusConfig as never);
+  if (Array.isArray(p.profileColumns)) saveProfileColumns(p.profileColumns as never);
   s.setStatus(`Profile "${p.name}" applied`);
 }
 

@@ -12,6 +12,7 @@ import { ContextMenu, type MenuItem } from './ContextMenu';
 import { markupMenuItems } from './markupMenu';
 import { openCapturePreview } from './Capture';
 import { openSummaryDialog } from './SummaryDialog';
+import { clampNumber } from '../model/columns';
 
 /** Saved filter sets (Revu's Saved Filters), kept in the browser. */
 interface SavedFilter { name: string; filters: Record<string, string>; search: string }
@@ -332,19 +333,38 @@ function CustomCell({ m, col }: { m: Markup; col: CustomColumn }) {
     case 'checkmark':
       return <input type="checkbox" aria-label={col.name} checked={!!value} onClick={stop} onChange={(e) => set(e.target.checked)} />;
     case 'choice':
+      // Items whose Subject is set are offered to markups with that Subject (Revu); custom text when allowed.
+      if (col.allowCustomText) {
+        const id = `dl-${col.id}`;
+        return (
+          <>
+            <input className="ml-cell-input" aria-label={col.name} list={id} defaultValue={String(value ?? '')} key={String(value ?? '')} onClick={stop}
+              onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+              onBlur={(e) => { if (e.target.value !== String(value ?? '')) set(e.target.value); }} />
+            <datalist id={id}>{(col.options ?? []).filter((o) => !col.choiceMeta?.[o]?.subject || col.choiceMeta[o].subject === m.subject).map((o) => <option key={o} value={o} />)}</datalist>
+          </>
+        );
+      }
       return (
         <select aria-label={col.name} value={String(value ?? '')} onClick={stop} onChange={(e) => set(e.target.value)}>
           <option value="" />
-          {(col.options ?? []).map((o) => <option key={o}>{o}</option>)}
+          {(col.options ?? []).filter((o) => !col.choiceMeta?.[o]?.subject || col.choiceMeta[o].subject === m.subject || o === value).map((o) => <option key={o}>{o}</option>)}
         </select>
       );
     case 'date':
       return <input type="date" aria-label={col.name} value={String(value ?? '')} onClick={stop} onChange={(e) => set(e.target.value)} />;
     default:
+      if (col.type === 'text' && col.multiline) {
+        return (
+          <textarea className="ml-cell-input" aria-label={col.name} rows={2} defaultValue={String(value ?? '')} key={String(value ?? '')}
+            onClick={stop} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) (e.target as HTMLTextAreaElement).blur(); }}
+            onBlur={(e) => { if (e.target.value !== String(value ?? '')) set(e.target.value); }} />
+        );
+      }
       return (
-        <input className="ml-cell-input" aria-label={col.name} type={col.type === 'number' ? 'number' : 'text'} defaultValue={String(value ?? '')} key={String(value ?? '')}
+        <input className="ml-cell-input" aria-label={col.name} type={col.type === 'number' ? 'number' : 'text'} min={col.min} max={col.max} defaultValue={String(value ?? '')} key={String(value ?? '')}
           onClick={stop} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-          onBlur={(e) => { const t = e.target.value; if (t !== String(value ?? '')) set(col.type === 'number' ? (t === '' ? undefined : Number(t)) : t); }} />
+          onBlur={(e) => { const t = e.target.value; if (t !== String(value ?? '')) set(col.type === 'number' ? (t === '' ? undefined : clampNumber(col, Number(t))) : t); }} />
       );
   }
 }

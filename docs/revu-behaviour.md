@@ -230,6 +230,13 @@ displayed value (in the markup's own unit when set), as Revu writes it.
   gives wall area (length × depth). Depth and Rise/Drop are exclusive.
 
 ## Custom columns (Markups List > Columns > Manage Columns)
+- Choice items carry an optional Subject (the item is offered to markups
+  with that Subject) and a numeric value for formulas (Assign Numeric
+  Value); items can be imported from a CSV (item, subject, value); Allow
+  Custom Text lets the cell take other text. Number columns have Min/Max;
+  Text columns can be Multiline. Save to Profile makes the columns the
+  start of every new document that has none; Delete from Profile stops
+  that. Profiles also carry the status models and the profile columns.
 - Types: Checkmark, Choice (options, default), Date (format, default none/
   current/custom), Formula (expression over other columns; Measurement =
   the primary value without units; format Normal/Currency/Percentage,

@@ -657,12 +657,34 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await mc.getByLabel('Expression').fill('Area * [Unit Cost]');
   await mc.getByLabel('Format').selectOption('currency');
   await mc.getByRole('button', { name: 'OK' }).click();
+  // A Choice column with items carrying numeric values (Revu: Assign Numeric Value), used by a formula.
+  await mc.getByRole('button', { name: 'Add…' }).click();
+  await mc.getByLabel('Column name').fill('Tier');
+  await mc.getByLabel('Column type').selectOption('choice');
+  for (const [item, v] of [['Standard', '1'], ['Premium', '1.5']]) {
+    await mc.getByLabel('New item').fill(item);
+    await mc.getByRole('button', { name: 'Add', exact: true }).click();
+    await mc.getByLabel(`Value of ${item}`).fill(v);
+  }
+  await mc.getByRole('button', { name: 'OK' }).click();
+  await mc.getByRole('button', { name: 'Add…' }).click();
+  await mc.getByLabel('Column name').fill('Graded Cost');
+  await mc.getByLabel('Column type').selectOption('formula');
+  await mc.getByLabel('Expression').fill('[Total Cost] * Tier');
+  await mc.getByLabel('Format').selectOption('currency');
+  await mc.getByRole('button', { name: 'OK' }).click();
+  await mc.getByRole('button', { name: 'Save to Profile' }).click();
+  await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('saved to the profile'));
+  assert(true, 'Save to Profile keeps the custom columns for new documents');
   await mc.getByRole('button', { name: 'Close' }).click();
   const row = page.locator('.ml-table tbody tr').filter({ hasText: '419.43 sf' }).first();
   await page.screenshot({ path: `${OUT}/10-columns.png` });
   await row.getByLabel('Unit Cost').fill('2');
   await row.getByLabel('Unit Cost').press('Enter');
   assert((await row.innerText()).includes("$838.87"), `formula column computes Area * Unit Cost ($838.87): ${(await row.innerText()).replace(/\s+/g, " ")}`);
+  await row.getByLabel('Tier').selectOption('Premium');
+  await page.waitForTimeout(200);
+  assert(/\$1,258\.3[01]/.test(await row.innerText()),`a choice item's numeric value feeds the formula ($838.87 × 1.5): ${(await row.innerText()).replace(/\s+/g, ' ')}`);
   await page.getByRole('button', { name: 'Summary ▾' }).click();
   const [x] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Excel (.xlsx)' }).click()]);
   await x.saveAs(`${OUT}/summary.xlsx`);
