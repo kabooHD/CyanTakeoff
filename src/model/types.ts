@@ -197,6 +197,8 @@ export interface Markup {
   replies?: Reply[];
   /** Member of a Sequence: the tool's id, its run and this markup's value. */
   seq?: { id: string; run: number; n: number };
+  /** How a measurement shows: caption, segment values, centroid, own units. */
+  display?: import('./measureDisplay').MeasureDisplay;
   /** The Tool Chest tool this markup was made with (Update Tool Set Item on Reuse); not saved. */
   toolId?: string;
   /** Markups List Checkmark column. */

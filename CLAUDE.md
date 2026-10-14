@@ -156,7 +156,8 @@ groups, rename, delete with content/markups, properties, configurations,
 drag to reorder, Add Layer from Page with Align Points, zoom-range and
 Export usage, Export Layer to Page, Move/Rotate/Scale a layer, Flatten >
 Assign Layer; markups' /OC);
-separate X/Y scales; 3-point radius; viewports (regions with their own scale, Revu
+measurement display options (caption, segment values, centroid, own units:
+src/model/measureDisplay.ts); separate X/Y scales; 3-point radius; viewports (regions with their own scale, Revu
 `/VP` layout); Apply Scale to Pages dialog (preset/custom/
 calibrate, page range, precision, saved presets) and scale prompt; snap to
 content/markup/grid; live measurement preview; Markups List (columns,

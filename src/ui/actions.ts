@@ -8,6 +8,7 @@ import { buildXlsx } from '../model/xlsx';
 import { buildSummaryPdf } from '../pdf/summary';
 import { pickFile } from './toolActions';
 import { placeColumns } from '../model/listColumns';
+import { displayText } from '../model/measureDisplay';
 import { scaleAt } from '../model/measure';
 
 /** Position and size columns (inches from the page's lower left; real-world size at the markup's scale). */
@@ -88,7 +89,7 @@ export const SUMMARY_COLUMNS: SummaryColumn[] = [
   { key: 'status', label: 'Status', value: (m) => statusLabel(m) },
   { key: 'layer', label: 'Layer', value: (m, d) => (m.layer ? d.layers?.layers[m.layer]?.name ?? '' : '') },
   { key: 'color', label: 'Color', value: (m) => m.style.color },
-  { key: 'measurement', label: 'Measurement', value: (m) => meas(m)?.text ?? '' },
+  { key: 'measurement', label: 'Measurement', value: (m) => displayText(m, meas(m)) },
   { key: 'length', label: 'Length', value: (m) => round(meas(m)?.length), numeric: true },
   { key: 'area', label: 'Area', value: (m) => round(meas(m)?.area), numeric: true },
   { key: 'volume', label: 'Volume', value: (m) => round(meas(m)?.volume), numeric: true },

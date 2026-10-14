@@ -1,3 +1,4 @@
+import type { LengthUnit } from '../model/types';
 import { BookmarksPanel } from './BookmarksPanel';
 import { updateTool, useSequenceDialog } from './SequenceDialog';
 import { HatchSelect, LineStyleSelect } from './LineStyles';
@@ -10,7 +11,9 @@ import { SignaturesPanel } from './DigitalSignature';
 import { useEffect, useRef, useState } from 'react';
 import { create } from 'zustand';
 import { applyToolProperties } from '../model/toolScale';
-import { scaleAt } from '../model/measure';
+import { scaleAt, areaLabel, volumeLabel } from '../model/measure';
+import { LENGTH_UNITS, SEGMENT_TYPES, displayText } from '../model/measureDisplay';
+import { placeColumns } from '../model/listColumns';
 import { usePageSetup } from './PageSetup';
 import { useApp, useActiveDoc, type DocState } from '../model/store';
 import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, formatNumber, measure, precisionOf, unitLabel, withPrecision } from '../model/measure';
@@ -292,7 +295,36 @@ function Properties() {
             </Row>
           )}
           {meas.area !== undefined && m.type !== 'area' && m.type !== 'volume' && <Row label="Wall Area"><input readOnly value={formatNumber(meas.area, 2, true)} /></Row>}
-          <Row label="Value"><input readOnly value={meas.text} /></Row>
+          <Row label="Value"><input readOnly value={displayText(m, meas)} /></Row>
+          {m.scale && ['area', 'volume', 'count', 'diameter', 'rectangle', 'ellipse'].includes(m.type) && (() => {
+            const pc = placeColumns(m.points, doc?.loaded.pages[m.page]?.height ?? 0, m.scale);
+            return <Row label="Width / Height"><input readOnly value={`${pc.width} × ${pc.height} ${unitLabel(m.scale.unit)}`} /></Row>;
+          })()}
+          <Row label="Show Caption">
+            <select aria-label="Show caption" value={m.display?.caption ?? 'value'} onChange={(e) => upd((x) => ({ display: { ...x.display, caption: e.target.value as 'value' } }))}>
+              <option value="value">Value</option><option value="label">Label</option><option value="both">Label and value</option><option value="none">None</option>
+            </select>
+          </Row>
+          {SEGMENT_TYPES.has(m.type) && (
+            <Row label="Segment Values">
+              <label className="inline"><input type="checkbox" aria-label="Show segment values" checked={!!m.display?.segments} onChange={(e) => upd((x) => ({ display: { ...x.display, segments: e.target.checked || undefined } }))} /> Show</label>
+              {m.display?.segments && (
+                <select aria-label="Segment value alignment" value={m.display?.segmentAlign ?? 'center'} onChange={(e) => upd((x) => ({ display: { ...x.display, segmentAlign: e.target.value as 'center' } }))}>
+                  <option value="center">On the line</option><option value="inside">Inside</option><option value="outside">Outside</option>
+                </select>
+              )}
+            </Row>
+          )}
+          {m.points.length > 2 && <Row label="Centroid"><label className="inline"><input type="checkbox" aria-label="Show centroid" checked={!!m.display?.centroid} onChange={(e) => upd((x) => ({ display: { ...x.display, centroid: e.target.checked || undefined } }))} /> Show</label></Row>}
+          {m.scale && meas.length !== undefined && meas.area === undefined && (
+            <Row label="Length Unit"><select aria-label="Length unit" value={m.display?.lengthUnit ?? ''} onChange={(e) => upd((x) => ({ display: { ...x.display, lengthUnit: (e.target.value || undefined) as LengthUnit | undefined } }))}><option value="">Page scale ({unitLabel(m.scale.unit)})</option>{LENGTH_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}</select></Row>
+          )}
+          {m.scale && meas.area !== undefined && meas.volume === undefined && (
+            <Row label="Area Unit"><select aria-label="Area unit" value={m.display?.areaUnit ?? ''} onChange={(e) => upd((x) => ({ display: { ...x.display, areaUnit: (e.target.value || undefined) as LengthUnit | undefined } }))}><option value="">Page scale</option>{LENGTH_UNITS.map((u) => <option key={u} value={u}>{areaLabel(u)}</option>)}</select></Row>
+          )}
+          {m.scale && meas.volume !== undefined && (
+            <Row label="Volume Unit"><select aria-label="Volume unit" value={m.display?.volumeUnit ?? ''} onChange={(e) => upd((x) => ({ display: { ...x.display, volumeUnit: (e.target.value || undefined) as LengthUnit | undefined } }))}><option value="">Page scale</option>{LENGTH_UNITS.map((u) => <option key={u} value={u}>{volumeLabel(u)}</option>)}</select></Row>
+          )}
         </>
       )}
       <div className="prop-actions">

@@ -1,5 +1,6 @@
 import { writeLayers, type LayerSet } from './layers';
 import { writeBookmarks, type Bookmark } from './bookmarks';
+import { captionText, displayText } from '../model/measureDisplay';
 import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTileWH, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type HatchDef } from '../model/lineStyles';
 import { flattenPath, hasCurves, pdfPath, segments } from '../model/curves';
 import { hasSignatures, incrementalUpdate, loadForUpdate } from './incremental';
@@ -454,7 +455,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
       : m.type === 'angle' ? P[1]
         : centroid(P);
     const size = st.fontSize;
-    const t = safeText(font, meas.text);
+    const t = safeText(font, captionText(m, meas) ?? '');
     const w = font.widthOfTextAtSize(t, size);
     const q = proj(fr, pos);
     const lift = m.type === 'angle' ? 8 : m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter' || m.type === 'dimension' ? 3 : 0;
@@ -496,6 +497,7 @@ function ctData(m: Markup, P: Pt[]): CTData {
     statusModel: m.statusModel, statusBy: m.statusBy, statusDate: m.statusDate,
     depth: m.depth, fillOpacity: m.style.fillOpacity, lineStyle: m.style.lineStyle,
     seq: m.seq,
+    display: m.display,
     lineDef: m.style.lineDef, hatch: m.style.hatch, hatchScale: m.style.hatch ? m.style.hatchScale : undefined,
     points: m.type === 'count' || m.type === 'arc' || m.type === 'cloudplus' ? P.flatMap((p) => [p.x, p.y]) : undefined,
     comment: measure(m) || m.type === 'cloudplus' || m.type === 'stamp' ? m.comment || undefined : undefined,
@@ -614,7 +616,7 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
     T: PDFHexString.fromText(m.author),
     Subj: PDFHexString.fromText(m.subject),
     // Like Revu, a measurement's /Contents is its displayed value.
-    Contents: PDFHexString.fromText(m.type === 'textbox' || m.type === 'callout' || m.type === 'typewriter' || m.type === 'cloudplus' ? m.text ?? '' : meas ? meas.text : m.comment),
+    Contents: PDFHexString.fromText(m.type === 'textbox' || m.type === 'callout' || m.type === 'typewriter' || m.type === 'cloudplus' ? m.text ?? '' : meas ? displayText(m, meas) : m.comment),
     Label: PDFHexString.fromText(m.label),
     FillOpacity: st.fillOpacity,
     M: PDFString.of(now),

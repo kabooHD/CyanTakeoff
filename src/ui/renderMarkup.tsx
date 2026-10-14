@@ -1,4 +1,5 @@
 import { hasCurves, svgPath } from '../model/curves';
+import { captionText, segmentValues } from '../model/measureDisplay';
 import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTileWH, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type LineStyleDef } from '../model/lineStyles';
 import { calloutAttach } from '../pdf/save';
 import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
@@ -91,13 +92,16 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
   const cm = styled ? { ...c, stroke: 'none' } : c;
   const meas = measure(m);
   let label: { at: Pt; text: string } | null = null;
-  if (meas && m.type !== 'count' && P.length > 1) {
+  const caption = captionText(m, meas);
+  if (meas && caption && m.type !== 'count' && P.length > 1) {
     const at = m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter' || m.type === 'dimension'
       ? { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 - 3 }
       : m.type === 'angle' && P[1] ? { x: P[1].x + 8, y: P[1].y - 8 }
         : centroid(P);
-    label = { at, text: meas.text };
+    label = { at, text: caption };
   }
+  const segments = meas && m.display?.segments ? segmentValues(m) : [];
+  const centroidAt = meas && m.display?.centroid && P.length > 2 ? centroid(P) : null;
 
   let shape: React.ReactNode = null;
   switch (m.type) {
@@ -318,6 +322,11 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
         <text x={label.at.x} y={label.at.y} fontSize={m.style.fontSize} fill={st.color}
           textAnchor="middle" dominantBaseline="middle" className="measure-label">{label.text}</text>
       )}
+      {segments.map((sg, i) => (
+        <text key={`sg${i}`} x={sg.at.x} y={sg.at.y} fontSize={Math.max(6, m.style.fontSize * 0.8)} fill={st.color}
+          textAnchor="middle" dominantBaseline="middle" className="segment-label" pointerEvents="none">{sg.text}</text>
+      ))}
+      {centroidAt && <circle className="centroid-mark" cx={centroidAt.x} cy={centroidAt.y} r={Math.max(2, st.width * 1.5)} fill={st.color} pointerEvents="none" />}
       {replyIndicators && m.replies?.length && P.length > 0 ? <ReplyIndicator m={m} /> : null}
     </g>
   );

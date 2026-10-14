@@ -1717,6 +1717,32 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.locator('.doc-tab').first().click();
     await page.waitForTimeout(300);
   }
+  // Measurement display: segment values, centroid and caption off on an area measurement.
+  {
+    await page.keyboard.press('Escape');
+    const areaRow = page.locator('.ml-table tbody tr', { hasText: 'Area Measurement' }).first();
+    await areaRow.click();
+    await page.waitForTimeout(300);
+    if (!(await page.locator('[aria-label="Show segment values"]').count())) await page.keyboard.press('Alt+P');
+    await page.locator('[aria-label="Show segment values"]').waitFor({ timeout: 5000 });
+    await page.locator('[aria-label="Show segment values"]').check();
+    await page.locator('[aria-label="Show centroid"]').check();
+    await page.waitForTimeout(200);
+    assert(await page.locator('.page .markup-layer .segment-label').count() >= 3 && await page.locator('.page .markup-layer .centroid-mark').count() === 1, 'Show Segment Values and Show Centroid draw on the area');
+    const captions = await page.locator('.page .markup-layer .measure-label').count();
+    await page.locator('[aria-label="Show caption"]').selectOption('none');
+    await page.waitForTimeout(200);
+    assert(await page.locator('.page .markup-layer .measure-label').count() === captions - 1, 'Show Caption: None hides the value');
+    await page.locator('[aria-label="Show caption"]').selectOption('value');
+    await page.locator('[aria-label="Area unit"]').selectOption('m');
+    await page.waitForTimeout(200);
+    assert((await page.locator('.ml-table tbody tr.selected').first().innerText()).includes('m²') || (await page.locator('.page .markup-layer .measure-label').allInnerTexts()).some((t) => /m²|sq m|m2/.test(t)), 'the area shows in square metres');
+    await page.locator('[aria-label="Area unit"]').selectOption('');
+    await page.locator('[aria-label="Show segment values"]').uncheck();
+    await page.locator('[aria-label="Show centroid"]').uncheck();
+    await page.evaluate(() => document.activeElement?.blur());
+    await page.keyboard.press('Escape');
+  }
   // Tool Chest: Symbol view, Hide a set and show it again from the Tool Chest menu.
   {
     await page.keyboard.press('Escape');

@@ -38,6 +38,15 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - Precision dropdown: decimal or fractional depending on the scale.
 - Revu prompts for a scale before placing a measurement on an unscaled page.
 
+## Measurement display (Properties)
+Revu's measurement properties: Show Caption (which captions show, or
+none), Show Segment Values (each segment's length, aligned on, inside or
+outside the line), Show Centroid, and the Length / Area / Volume unit of
+that measurement; Width / Height read-only. Ours keeps them in CTData so
+they round-trip; the drawing shows segment values and the centroid on
+screen, the saved appearance carries the caption; /Contents is the
+displayed value (in the markup's own unit when set), as Revu writes it.
+
 ## Viewports
 - Regions of a sheet with their own scale (e.g. a detail drawn at a larger
   scale); units and systems may differ from the page scale.
