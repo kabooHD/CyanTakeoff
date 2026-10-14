@@ -9,6 +9,7 @@ import { layerIds } from '../pdf/layers';
 import { SignaturesPanel } from './DigitalSignature';
 import { useEffect, useRef, useState } from 'react';
 import { create } from 'zustand';
+import { usePageSetup } from './PageSetup';
 import { useApp, useActiveDoc, type DocState } from '../model/store';
 import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, formatNumber, measure, precisionOf, unitLabel, withPrecision } from '../model/measure';
 import type { Markup, MarkupStyle, MarkupType, Scale, ToolPreset, ToolSet } from '../model/types';
@@ -142,6 +143,8 @@ function Thumbnails({ doc }: { doc: DocState }) {
     setMenu({ x: e.clientX, y: e.clientY, items: [
       { label: 'Insert Pages…', action: () => openPagesDialog('insert') },
       { label: 'Insert Blank Page…', action: () => openPagesDialog('insert-blank') },
+      { label: 'Number Pages…', action: () => usePageSetup.setState({ open: 'number' }) },
+      { label: 'Create Page Labels from Bookmarks…', action: () => usePageSetup.setState({ open: 'bookmarks' }) },
       { label: 'Extract Pages…', action: () => openPagesDialog('extract') },
       { label: 'Replace Pages…', action: () => openPagesDialog('replace') },
       { label: 'Delete Page', disabled: doc.loaded.pages.length < 2, action: () => s.transformDoc((lib) => deletePages(lib, [index]), 'Page deleted') },

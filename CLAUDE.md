@@ -101,7 +101,9 @@ Sequences (src/model/sequence.ts, src/ui/SequenceDialog.tsx); Quantity Link
 Footer, Bates, Watermark (src/pdf/stamps.ts, src/ui/HeaderFooter.tsx);
 password security (src/pdf/crypt.ts: R2-R6 decrypt, AES-256 encrypt;
 src/ui/Security.tsx), Reduce File Size (src/pdf/reduce.ts), XFDF
-(src/pdf/xfdf.ts); Review Text and Create Hyperlinks from URLs (src/ui/ReviewText.tsx,
+(src/pdf/xfdf.ts); Number Pages, Page Labels from Bookmarks, Page Setup (src/ui/PageSetup.tsx,
+src/model/pageLabels.ts, pageSetup in src/pdf/docTools.ts);
+Review Text and Create Hyperlinks from URLs (src/ui/ReviewText.tsx,
 src/model/urls.ts); Edit Text / Erase Content / Cut Content (src/pdf/editText.ts, using
 the redaction walker's text probe); touch and pen (pinch, pan, long press,
 Pen Mode; in Viewer.tsx); small Revu commands (src/ui/quickCommands.ts:

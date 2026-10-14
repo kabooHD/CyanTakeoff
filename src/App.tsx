@@ -44,6 +44,7 @@ import { StampManagerDialog } from './ui/Stamps';
 import { startOffset } from './ui/OffsetBar';
 import { MultiplyDialog } from './ui/Multiply';
 import { LinkUrlsDialog, ReviewTextDialog } from './ui/ReviewText';
+import { PageSetupDialogs } from './ui/PageSetup';
 import { CameraDialog, useCamera } from './ui/Camera';
 import { ManageStatusDialog } from './ui/StatusModels';
 import { DocToolsDialogs, emailDocument, publishCompressed, useDocTools } from './ui/DocTools';
@@ -284,6 +285,7 @@ export function App() {
       <MultiplyDialog />
       <ReviewTextDialog />
       <LinkUrlsDialog />
+      <PageSetupDialogs />
       <StyleManagerDialog />
       <SpellDialog />
       <SequenceDialog />

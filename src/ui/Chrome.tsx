@@ -4,6 +4,7 @@ import { formatLength } from '../model/measure';
 import type { Toggles, ToolId } from '../model/types';
 import { TOOLS, toolById } from '../tools/tools';
 import { useLinkUrls } from './ReviewText';
+import { usePageSetup } from './PageSetup';
 import { Icon } from './icons';
 import { MenuList, type MenuItem } from './ContextMenu';
 import { allColumns, exportSummaryCsv, exportSummaryPdf, exportSummaryXlsx, openFile, openSample, exportMarkupsXfdf, importMarkupsXfdf } from './actions';
@@ -156,6 +157,9 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { sep: true },
       { label: 'Slip Sheet…', disabled: noDoc, action: () => openPagesDialog('slip-sheet') },
       { label: 'Page Labels…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'labels' }) },
+      { label: 'Number Pages…', disabled: noDoc, action: () => usePageSetup.setState({ open: 'number' }) },
+      { label: 'Create Page Labels from Bookmarks…', disabled: noDoc, action: () => usePageSetup.setState({ open: 'bookmarks' }) },
+      { label: 'Page Setup…', disabled: noDoc, action: () => usePageSetup.setState({ open: 'setup' }) },
       { label: 'Batch Link…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'batch-link' }) },
       { sep: true },
       { label: 'Flatten Markups…', shortcut: 'Ctrl+Shift+M', disabled: noDoc, action: () => openPagesDialog('flatten') },

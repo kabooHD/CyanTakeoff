@@ -1987,6 +1987,29 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     assert(parseFloat(top) >= 72, `Fit to Margins keeps the page below the 1 in top margin (top=${top})`);
     await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
     await thumbs.nth(0).click();
+    // Number Pages: labels P-1, P-2… over all pages; Page Setup puts the current page on Letter.
+    await page.locator('.menubar-item > button', { hasText: /^Document$/ }).click();
+    await page.getByRole('menuitem', { name: 'Number Pages…' }).click();
+    const npd = page.locator('[role=dialog][aria-label="Number Pages"]');
+    await npd.locator('[aria-label="Prefix"]').fill('P-');
+    await npd.getByRole('button', { name: 'OK' }).click();
+    await page.getByText('Page labels updated').waitFor({ timeout: 20000 });
+    await page.waitForTimeout(500);
+    const labels = await page.locator('.thumbs .thumb-label').allInnerTexts();
+    assert(labels.length > 0 && labels.every((l, i) => l.startsWith(`P-${i + 1}`)), `Number Pages relabels the pages (${labels.join(', ')})`);
+    await page.locator('.menubar-item > button', { hasText: /^Document$/ }).click();
+    await page.getByRole('menuitem', { name: 'Page Setup…' }).click();
+    const psd = page.locator('[role=dialog][aria-label="Page Setup"]');
+    await psd.locator('[aria-label="Media size"]').selectOption('Letter (8.5×11)');
+    await psd.getByRole('button', { name: 'OK' }).click();
+    await page.getByText(/Page Setup: 1 page set to/).waitFor({ timeout: 20000 });
+    await page.waitForTimeout(500);
+    const sz = await page.locator('.sb-size').innerText();
+    assert(sz.includes('8.50 x 11.00 in') || sz.includes('11.00 x 8.50 in'), `Page Setup resizes the page to Letter (${sz})`);
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(800);
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(800);
     if (!hadThumbs) await page.keyboard.press('Alt+t');
   }
 }

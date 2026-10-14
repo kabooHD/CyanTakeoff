@@ -309,6 +309,18 @@ picture of the /AP dictionary Acrobat uses. Ours: new security is
 AES-256; files encrypted with RC4 or AES-128 keep their own settings when
 saved; certificate security is not supported (such files open read-only).
 
+## Number Pages, Create Page Labels, Page Setup
+Number Pages (Document menu or a thumbnail's right-click): a numeral style
+(1 2 3, I II III, i ii iii, A B C, a b c, or None for a prefix alone), a
+prefix, a start number and a page range (All, Current, Selected, Custom)
+set the page labels. Create Page Labels from Bookmarks gives each page the
+title of its first bookmark (page-region labels: Page Labels > Use Sheet
+Numbers / AutoMark). Page Setup gives pages a new media size (paper list
+or custom, portrait/landscape) with the drawing auto-scaled or at a
+percentage, aligned (nine positions) and offset; content, annotations,
+measurement scales and viewports follow. Not for signed files (Revu
+refuses too).
+
 ## Header & Footer, Bates, Watermark
 Header & Footer (Document menu, Batch for many files): left/centre/right
 text in the header and footer, with fields such as page number, page label,
