@@ -1,6 +1,6 @@
 // Helpers for tools that need the page's text, a rendered snapshot or files.
 import type { PDFPageProxy, PageViewport } from 'pdfjs-dist';
-import type { Pt } from '../model/types';
+import type { Markup, Pt } from '../model/types';
 
 export interface TextBox { x0: number; y0: number; x1: number; y1: number; str: string; /** Font family (pdf.js style). */ font?: string }
 
@@ -46,8 +46,12 @@ export function textRectsIn(boxes: TextBox[], a: Pt, b: Pt): Pt[] {
   return lines.flatMap((l) => [{ x: l.x0, y: l.y0 }, { x: l.x1, y: l.y1 }]);
 }
 
-/** Render a region of the page (page space) to a PNG data URL, at `scale` px per point. */
-export async function snapshot(page: PDFPageProxy, a: Pt, b: Pt, scale = 3): Promise<string> {
+/**
+ * Render a region of the page (page space) to a PNG data URL, at `scale` px
+ * per point, with `markups` drawn on top (Snapshot). `null`: the drawing's
+ * content only, without any annotations (Snapshot Content).
+ */
+export async function snapshot(page: PDFPageProxy, a: Pt, b: Pt, scale = 3, markups: Markup[] | null = []): Promise<string> {
   const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y), w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
   const k = Math.min(scale, Math.sqrt(16e6 / Math.max(1, w * h)));
   const vp = page.getViewport({ scale: k, offsetX: -x * k, offsetY: -y * k });
@@ -55,7 +59,8 @@ export async function snapshot(page: PDFPageProxy, a: Pt, b: Pt, scale = 3): Pro
   canvas.width = Math.max(1, Math.round(w * k)); canvas.height = Math.max(1, Math.round(h * k));
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  await page.render({ canvas, viewport: vp }).promise;
+  await page.render({ canvas, viewport: vp, annotationMode: markups ? 1 : 0 }).promise;
+  if (markups?.length) await (await import('./markupRaster')).drawMarkups(canvas, markups, x, y, w, h);
   return canvas.toDataURL('image/png');
 }
 

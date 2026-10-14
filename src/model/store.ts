@@ -189,6 +189,8 @@ interface AppState {
   splitRatio: number;
   /** Window > Presentation (Ctrl+Enter). */
   presentation: boolean;
+  /** Text picked with Select Text (Shift+T) or Select All Text (Ctrl+Shift+A). */
+  textSel: { docId: string; page: number; rects: [Pt, Pt][]; text: string } | null;
   activePane: 0 | 1;
   /** Revu View > Mode (Single Page Ctrl+4, Continuous Ctrl+5, Side by Side Ctrl+6, Continuous Side by Side Ctrl+7). */
   viewMode: ViewMode;
@@ -526,6 +528,7 @@ export const useApp = create<AppState>((set, get) => {
     split: null,
     splitRatio: 0.5,
     presentation: false,
+    textSel: null,
     activePane: 0,
     viewMode: 'single',
     viewRotation: 0,

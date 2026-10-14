@@ -23,6 +23,8 @@ import { toolById } from '../tools/tools';
 import { CURVABLE, arcSegment, bezierAt, closedType, flatPoints, hasCurves, insertHandle, removeHandle, segments, toggleCurve, type Handles } from '../model/curves';
 import { MarkupShape, handlePoints } from './renderMarkup';
 import { cutoutAt, hitTest, markupBounds, outline } from './hit';
+import { selectText } from '../model/textSelect';
+import { copyText, searchFor } from './textCommands';
 import { setCursor } from './cursor';
 import { ViewOverlays, recordView } from './Rulers';
 import { setVisualTemplate } from './VisualSearch';
@@ -80,6 +82,7 @@ function capture(e: { target: EventTarget; pointerId: number }) {
 
 export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const s = useApp();
+  const textSel = s.textSel;
   // Split view: pane 1 has its own page and zoom.
   const split = s.split;
   const pageIdx = pane === 1 && split ? split.page : doc.page;
@@ -639,10 +642,11 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     finish(type, rects);
     return true;
   };
-  const takeSnapshot = async (a: Pt, b: Pt) => {
+  const takeSnapshot = async (a: Pt, b: Pt, content = false) => {
     setDraft(null);
     if (!pdfPage) return;
-    const url = await snapshot(pdfPage, a, b);
+    // Snapshot includes the markups; Snapshot Content (Shift+G) only the drawing (Revu).
+    const url = await snapshot(pdfPage, a, b, 3, content ? null : markups);
     const r = bounds([a, b]);
     const t = new Date().toISOString();
     const m: Markup = {
@@ -979,7 +983,17 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       s.openScaleDialog({ ...back, page: back?.page ?? pageIdx, pagePts: dist(a, p) });
       return;
     }
-    if (draft.tool === 'snapshot') { takeSnapshot(a, p); return; }
+    if (draft.tool === 'snapshot' || draft.tool === 'snapshot-content') { takeSnapshot(a, p, draft.tool === 'snapshot-content'); return; }
+    if (draft.tool === 'select-text') {
+      setDraft(null);
+      if (!pdfPage) return;
+      pageText(pdfPage, page.viewport).then((runs) => {
+        const sel = selectText(runs, a, p);
+        useApp.setState({ textSel: sel.text ? { docId: doc.id, page: pageIdx, ...sel } : null });
+        if (!sel.text) s.setStatus('No text there. Drag across text on the drawing (scanned sheets need OCR first).');
+      });
+      return;
+    }
     if (draft.tool === 'erase-content') {
       setDraft(null);
       const [c0, c1] = [a, p].map((q) => page.viewport.convertToPdfPoint(q.x, q.y) as [number, number]);
@@ -1226,6 +1240,24 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
 
   const rightClick = (e: { clientX: number; clientY: number }, forceId?: string) => {
     if (draft) { finishPoly(); return; }
+    const ts = useApp.getState().textSel;
+    if (ts && ts.docId === doc.id && ts.page === pageIdx) {
+      const rectPts = ts.rects.flat();
+      const make = (type: MarkupType) => () => { finish(type, rectPts); useApp.setState({ textSel: null }); };
+      setMenu({ x: e.clientX, y: e.clientY, items: [
+        { label: 'Copy Text', shortcut: 'Ctrl+C', action: () => copyText() },
+        { sep: true },
+        { label: 'Highlight', action: make('highlight') },
+        { label: 'Strikethrough', action: make('strikeout') },
+        { label: 'Underline', action: make('underline') },
+        { label: 'Squiggly', action: make('squiggly') },
+        { label: 'Mark for Redaction', action: make('redaction') },
+        { sep: true },
+        { label: `Search for “${ts.text.length > 30 ? `${ts.text.slice(0, 30)}…` : ts.text}”`, action: () => searchFor(ts.text.split('\n')[0]) },
+        { label: 'Deselect Text', action: () => useApp.setState({ textSel: null }) },
+      ] });
+      return;
+    }
     // Right-click leaves a drawing tool, including Reuse mode (Revu).
     if (s.tool !== 'select') {
       if (countId.current) countId.current = null;
@@ -1339,7 +1371,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     };
   } else if (draft && draft.cursor) {
     const pts = def.interaction === 'freehand' || draft.curving !== undefined ? draft.points : [...draft.points, draft.cursor];
-    const boxed = draft.tool.startsWith('form-') || draft.tool === 'lasso' || draft.tool === 'redact-text' || draft.tool === 'viewport' || draft.tool === 'snapshot' || draft.tool === 'visual-pick' || draft.tool === 'region-pick' || draft.tool === 'erase-content' || draft.tool === 'link' || def.interaction === 'text';
+    const boxed = draft.tool.startsWith('form-') || draft.tool === 'lasso' || draft.tool === 'redact-text' || draft.tool === 'viewport' || draft.tool === 'snapshot' || draft.tool === 'snapshot-content' || draft.tool === 'select-text' || draft.tool === 'visual-pick' || draft.tool === 'region-pick' || draft.tool === 'erase-content' || draft.tool === 'link' || def.interaction === 'text';
     let type = (draft.tool === 'calibrate' ? 'length' : boxed ? 'rectangle' : draft.tool) as MarkupType;
     let P = pts;
     if (draft.tool === 'cloudplus' && pts.length >= 3) P = [pts[0], pts[1], pts[2], { x: pts[2].x + 144, y: pts[2].y + 40 }];
@@ -1425,6 +1457,9 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
                 width={Math.abs(h.rect[1].x - h.rect[0].x) + 2} height={Math.abs(h.rect[1].y - h.rect[0].y) + 2} />
             ))}
             {markups.map((m) => <MarkupShape key={m.id} m={m} />)}
+            {textSel?.docId === doc.id && textSel.page === pageIdx && textSel.rects.map(([q0, q1], i) => (
+              <rect key={`ts${i}`} className="text-sel" pointerEvents="none" x={q0.x} y={q0.y} width={q1.x - q0.x} height={q1.y - q0.y} />
+            ))}
             {preview && <g pointerEvents="none"><MarkupShape m={preview} ghost /></g>}
             {hover && !draft && (s.tool === 'cutout' || s.tool === 'ellipse-cutout') && (() => {
               const m = markups.find((x) => x.id === hover);

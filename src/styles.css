@@ -470,3 +470,4 @@ button.active { background: #d6e4fa; }
 .split-divider:hover { background: var(--accent); }
 .split-view > .split-pane { display: flex; min-width: 0; min-height: 0; overflow: hidden; }
 .split-view > .split-pane > .viewer-wrap { flex: 1; }
+.text-sel { fill: #1a73e8; fill-opacity: 0.25; }

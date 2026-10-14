@@ -11,7 +11,7 @@ const c = (group: string, label: string, combo: string): Command => ({ id: combo
 export const APP_COMMANDS: Command[] = [
   c('File', 'Open', 'Ctrl+O'), c('File', 'Save', 'Ctrl+S'), c('File', 'Save As', 'Ctrl+Shift+S'), c('File', 'Close', 'Ctrl+F4'), c('File', 'Print', 'Ctrl+P'), c('File', 'Close All', 'Ctrl+Shift+W'), c('File', 'Save All', 'Ctrl+F2'), c('File', 'Refresh', 'F5'),
   c('Edit', 'Undo', 'Ctrl+Z'), c('Edit', 'Redo', 'Ctrl+Y'), c('Edit', 'Copy', 'Ctrl+C'), c('Edit', 'Cut', 'Ctrl+X'), c('Edit', 'Paste', 'Ctrl+V'),
-  c('Edit', 'Paste in Place', 'Ctrl+Shift+V'), c('Edit', 'Select All', 'Ctrl+A'), c('Edit', 'Delete', 'Delete'), c('Edit', 'Format Painter', 'Ctrl+Shift+C'), c('Edit', 'Check Spelling', 'F7'),
+  c('Edit', 'Paste in Place', 'Ctrl+Shift+V'), c('Edit', 'Select All', 'Ctrl+A'), c('Edit', 'Delete', 'Delete'), c('Edit', 'Format Painter', 'Ctrl+Shift+C'), c('Edit', 'Select All Text', 'Ctrl+Shift+A'), c('Edit', 'Copy Page to Snapshot', 'Ctrl+Alt+C'), c('Edit', 'Check Spelling', 'F7'),
   c('Markup', 'Group', 'Ctrl+G'), c('Markup', 'Ungroup', 'Ctrl+Shift+G'), c('Markup', 'Bring Forward', 'Ctrl+J'), c('Markup', 'Bring to Front', 'Ctrl+Shift+J'),
   c('Markup', 'Send Backward', 'Ctrl+['), c('Markup', 'Send to Back', 'Ctrl+Shift+['), c('Markup', 'Lock', 'Ctrl+Shift+L'),
   c('Markup', 'Align Left', 'Ctrl+Alt+L'), c('Markup', 'Align Center', 'Ctrl+Alt+E'), c('Markup', 'Align Right', 'Ctrl+Alt+R'),

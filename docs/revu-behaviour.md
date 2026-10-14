@@ -407,6 +407,16 @@ pages, margins options, Dim Filtered Markups, Print Spaces.
   (double-click balances too).
 - Show Context Menu (Shift+F10) opens the right-click menu of the selection.
 
+## Select Text and snapshots
+- Select Text (Shift+T): drag over the drawing's text; it is highlighted in
+  blue. Ctrl+C copies it; right-click offers Copy, Highlight,
+  Strikethrough, Underline, Squiggly, Mark for Redaction and Search. Select
+  All Text (Ctrl+Shift+A) takes the whole page. Esc clears it.
+- Snapshot (G) copies the region with its markups; Snapshot Content
+  (Shift+G) copies only the drawing. Copy Page to Snapshot (Ctrl+Alt+C)
+  copies the whole page with markups. All paste as an image markup and go
+  on the system clipboard as PNG.
+
 ## Status bar
 - Left: help for the current tool and the toggles Show Grid, Snap to
   Grid, Snap to Content, Snap to Markup (points and guidelines from nearby

@@ -58,3 +58,24 @@ describe('PDF dates', () => {
     expect(parsePdfDate(undefined)).toBeNull();
   });
 });
+
+import { selectText } from '../src/model/textSelect';
+describe('Select Text', () => {
+  const runs = [
+    { x0: 60, y0: 10, x1: 90, y1: 20, str: 'WORLD' },
+    { x0: 10, y0: 10, x1: 50, y1: 20, str: 'HELLO' },
+    { x0: 10, y0: 30, x1: 40, y1: 40, str: 'NEXT' },
+    { x0: 300, y0: 30, x1: 340, y1: 40, str: 'FAR' },
+  ];
+  it('reads lines top to bottom, left to right, with spaces at gaps', () => {
+    expect(selectText(runs).text).toBe('HELLO WORLD\nNEXT FAR');
+  });
+  it('keeps only runs touching the rectangle', () => {
+    const r = selectText(runs, { x: 0, y: 0 }, { x: 55, y: 45 });
+    expect(r.text).toBe('HELLO\nNEXT');
+    expect(r.rects).toHaveLength(2);
+  });
+  it('splits a highlight across a wide gap', () => {
+    expect(selectText(runs).rects).toHaveLength(3);
+  });
+});

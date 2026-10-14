@@ -38,6 +38,7 @@ import { SignatureDialog } from './ui/Signature';
 import { runApplyRedactions } from './ui/redactUi';
 import { DocPropertiesDialog, useDocProps } from './ui/DocProperties';
 import { Presentation } from './ui/Presentation';
+import { copyPageToSnapshot, copyText, selectAllText } from './ui/textCommands';
 import { autosizeTextBoxes, balanceSplit, refreshDocument, removeSelectedFromGroup, saveAll, toggleFullScreen } from './ui/quickCommands';
 
 const isEditable = (t: EventTarget | null) =>
@@ -95,13 +96,15 @@ export function App() {
         // Edit
         case 'Ctrl+Z': return run(s.undo);
         case 'Ctrl+Y': case 'Ctrl+Shift+Z': return run(s.redo);
-        case 'Ctrl+C': return run(s.copy);
+        case 'Ctrl+C': return run(() => { if (s.textSel && !d?.selection.length) copyText(); else s.copy(); });
+        case 'Ctrl+Shift+A': return run(() => d && selectAllText());
+        case 'Ctrl+Alt+C': return run(() => d && copyPageToSnapshot());
         case 'Ctrl+X': return run(() => { if (d) { s.copy(); s.deleteMarkups(d.selection); } });
         case 'Ctrl+V': return run(() => s.paste());
         case 'Ctrl+Shift+V': return run(() => s.paste(true));
         case 'Ctrl+A': return run(() => d && s.select(d.markups.filter((m) => m.page === d.page).map((m) => m.id)));
         case 'Delete': case 'Backspace': return run(() => d && s.deleteMarkups(d.selection));
-        case 'Escape': return run(() => { useDigitalSign.setState({ pending: null }); s.setTool('select'); s.select([]); useApp.setState({ painter: null }); });
+        case 'Escape': return run(() => { useApp.setState({ textSel: null }); useDigitalSign.setState({ pending: null }); s.setTool('select'); s.select([]); useApp.setState({ painter: null }); });
         // Markup arrangement (Revu defaults)
         case 'Ctrl+G': return run(() => s.arrange(group));
         case 'Ctrl+Shift+G': return run(() => s.arrange(ungroup));

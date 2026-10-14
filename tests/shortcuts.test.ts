@@ -4,14 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { TOOLS } from '../src/tools/tools';
 
 const REVU: Record<string, string> = {
-  select: 'V', pan: 'Shift+V', zoom: 'Z', lasso: 'Shift+O',
+  select: 'V', pan: 'Shift+V', zoom: 'Z', lasso: 'Shift+O', 'select-text': 'Shift+T',
   textbox: 'T', callout: 'Q', note: 'N', pen: 'P', highlight: 'H', line: 'L', arrow: 'A',
   polyline: 'Shift+N', rectangle: 'R', ellipse: 'E', polygon: 'Shift+P', cloud: 'C',
   length: 'Shift+Alt+L', polylength: 'Shift+Alt+Q', area: 'Shift+Alt+A', perimeter: 'Shift+Alt+P',
   volume: 'Shift+Alt+V', diameter: 'Shift+Alt+D', radius: 'Shift+Alt+U', angle: 'Shift+Alt+G',
   count: 'Shift+Alt+C', 'dynamic-fill': 'J',
   cloudplus: 'K', typewriter: 'W', arc: 'Shift+C', dimension: 'Shift+L', stamp: 'S', flag: 'Shift+F',
-  strikeout: 'D', underline: 'U', squiggly: 'Shift+U', image: 'I', snapshot: 'G', link: 'Shift+H',
+  strikeout: 'D', underline: 'U', squiggly: 'Shift+U', image: 'I', snapshot: 'G', 'snapshot-content': 'Shift+G', link: 'Shift+H',
   attachment: 'F', eraser: 'Shift+E', redaction: 'Shift+R', 'redact-text': 'Shift+K', 'form-signature': 'X',
 };
 

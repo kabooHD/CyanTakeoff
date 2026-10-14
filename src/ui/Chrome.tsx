@@ -28,6 +28,7 @@ import { arrangeItems } from './arrangeMenu';
 import { useCursor } from './cursor';
 import { balanceSplit, refreshDocument, saveAll, toggleFullScreen } from './quickCommands';
 import { useDocProps } from './DocProperties';
+import { copyPageToSnapshot, copyText, selectAllText } from './textCommands';
 
 // ---------------- Menu bar ----------------
 
@@ -87,6 +88,10 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { sep: true },
       { label: 'Delete', shortcut: 'Del', disabled: !doc?.selection.length, action: () => doc && s.deleteMarkups(doc.selection) },
       { label: 'Select All', shortcut: 'Ctrl+A', disabled: noDoc, action: () => doc && s.select(doc.markups.filter((m) => m.page === doc.page).map((m) => m.id)) },
+      { label: 'Select Text', shortcut: 'Shift+T', checked: s.tool === 'select-text', disabled: noDoc, action: () => s.setTool('select-text') },
+      { label: 'Select All Text', shortcut: 'Ctrl+Shift+A', disabled: noDoc, action: selectAllText },
+      { label: 'Copy Text', disabled: !s.textSel, action: copyText },
+      { label: 'Copy Page to Snapshot', shortcut: 'Ctrl+Alt+C', disabled: noDoc, action: copyPageToSnapshot },
       { sep: true },
       ...arrangeItems(),
     ],

@@ -218,6 +218,10 @@ filling, image signatures, redaction and OCR.
   Selected from Group, Full Screen (F11), Presentation (Ctrl+Enter),
   Navigation Bar (F4), Show Context Menu (Shift+F10), resizable split view
   with Balance (Shift+F12), Zoom tool toggle (Shift+Z)
+- [x] Select Text (Shift+T) and Select All Text (Ctrl+Shift+A): copy,
+  right-click to highlight/strike/underline/redact or search the text;
+  Snapshot now includes markups, Snapshot Content (Shift+G) does not; Copy
+  Page to Snapshot (Ctrl+Alt+C)
 
 ### Next 2: public test build in local mode (days)
 - Host on a VPS (static site + HTTPS), with a feedback link

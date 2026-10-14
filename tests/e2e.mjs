@@ -1854,6 +1854,55 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   }
 }
 
+// Select Text (Shift+T), Select All Text (Ctrl+Shift+A), text menu; Snapshot
+// Content (Shift+G) and Copy Page to Snapshot (Ctrl+Alt+C) paste as images.
+{
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: URL });
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(600);
+  await page.keyboard.press('Shift+T');
+  const a = await toScreen(0, 40), b = await toScreen(24, 22);
+  await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 6 }); await page.mouse.up();
+  await page.locator('.text-sel').first().waitFor();
+  await page.keyboard.press('Control+c');
+  await page.waitForTimeout(200);
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  assert(copied.includes('OFFICE 101'), `Select Text copies the text in the rectangle (${JSON.stringify(copied)})`);
+  const rows0 = await page.locator('.ml-table tbody tr').count();
+  const r = await page.locator('.text-sel').first().boundingBox();
+  await page.mouse.click(r.x + r.width / 2, r.y + r.height / 2, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Highlight' }).click();
+  await page.waitForTimeout(200);
+  assert(await page.locator('.ml-table tbody tr').count() === rows0 + 1, 'right-click > Highlight marks the selected text');
+  assert(await page.locator('.text-sel').count() === 0, 'the text selection is cleared after marking it');
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+Shift+A');
+  await page.locator('.text-sel').first().waitFor();
+  const all = await page.locator('.text-sel').count();
+  assert(all > 10, `Select All Text selects the page's text (${all} lines)`);
+  await page.screenshot({ path: `${OUT}/select-all-text.png` });
+  await page.keyboard.press('Escape');
+
+  await page.keyboard.press('Shift+G');
+  await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 4 }); await page.mouse.up();
+  await page.waitForFunction(() => /Snapshot copied/.test(document.querySelector('.statusbar')?.textContent ?? ''));
+  const n1 = await page.locator('.ml-table tbody tr').count();
+  await page.keyboard.press('Control+v');
+  await page.waitForTimeout(200);
+  assert(await page.locator('.ml-table tbody tr').count() === n1 + 1, 'Snapshot Content pastes as an image markup');
+  await page.keyboard.press('Control+Alt+c');
+  await page.waitForFunction(() => /Page copied/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 20000 });
+  const png = await page.evaluate(async () => { const items = await navigator.clipboard.read(); return items[0]?.types.join(','); });
+  assert(png?.includes('image/png'), 'Copy Page to Snapshot puts a PNG on the clipboard');
+  await page.keyboard.press('Control+v');
+  await page.waitForTimeout(200);
+  assert(await page.locator('.ml-table tbody tr').count() === n1 + 2, 'the page snapshot pastes as an image markup');
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],
