@@ -451,6 +451,24 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.evaluate(() => (document.activeElement)?.blur?.());
   await page.locator('.side-right button[title="Properties"]').click(); // back to the panel that was open
   await page.keyboard.press('Escape');
+  // A callout: a second leader by right-click > Add Leader; End style Closed Arrow (Properties).
+  await page.keyboard.press('q'); await click(30, 20); await click(34, 22); await page.keyboard.type('Callout'); await page.keyboard.press('Escape');
+  {
+    const lines = () => page.locator('.markup-layer g[data-id] line').count();
+    const before = await lines();
+    const cb = await page.locator('.markup-text', { hasText: /^Callout$/ }).first().boundingBox();
+    await page.mouse.click(cb.x + cb.width / 2, cb.y + cb.height / 2, { button: 'right' });
+    await page.getByRole('menuitem', { name: 'Add Leader' }).click();
+    await page.waitForTimeout(200);
+    assert(await lines() === before + 1, 'Add Leader draws a second leader line');
+    await page.locator('.side-right button[title="Properties"]').click();
+    await page.getByLabel('Line end', { exact: true }).selectOption('closedArrow');
+    await page.waitForTimeout(200);
+    assert(await page.locator('.markup-layer g[data-id] polygon[fill="#000000"], .markup-layer g[data-id] polygon[fill="#ff0000"], .markup-layer g[data-id] polygon:not([fill="none"])').count() >= 2, 'Closed Arrow ends are filled on both leaders');
+    await page.evaluate(() => (document.activeElement)?.blur?.());
+    await page.locator('.side-right button[title="Properties"]').click();
+    await page.keyboard.press('Escape');
+  }
   await page.keyboard.press('s'); await click(52, 14);
   await page.keyboard.press('d'); await drag([47.5, 31.2], [56, 29.6]);
   await page.waitForFunction(() => document.querySelector('.ml-table tbody')?.textContent?.includes('Strikethrough'));
@@ -471,7 +489,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const list = await page.locator('.ml-table tbody').innerText();
   for (const subj of ['Dimension', 'Typewriter', 'Stamp', 'Strikethrough', 'Flag', 'Cloud+', 'Arc']) assert(list.includes(subj), `${subj} markup created ${list.includes(subj) ? '' : list}`);
   assert(list.includes(`10'-0"`), 'Dimension shows its length');
-  assert(await page.locator('.ml-table tbody tr').count() === rowsBefore + 8, 'eight markups added');
+  assert(await page.locator('.ml-table tbody tr').count() === rowsBefore + 9, 'nine markups added');
 
   const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
   const f = `${OUT}/saved-tools.pdf`;
@@ -481,7 +499,8 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const subs = pdfDoc.getPage(0).node.lookup(PDFName.of('Annots'), PDFArray).asArray().map((r) => pdfDoc.context.lookup(r, PDFDict).get(PDFName.of('Subtype')).toString());
   for (const t of ['/StrikeOut', '/Stamp', '/FreeText', '/Text', '/PolyLine', '/Polygon', '/Line']) assert(subs.includes(t), `saved as ${t}`);
   const after = await page.locator('.ml-table tbody').innerText();
-  for (const subj of ['Dimension', 'Typewriter', 'Stamp', 'Strikethrough', 'Flag', 'Cloud+', 'Arc']) assert(after.includes(subj), `${subj} survives save and reload`);
+  for (const subj of ['Dimension', 'Typewriter', 'Stamp', 'Strikethrough', 'Flag', 'Cloud+', 'Arc', 'Callout']) assert(after.includes(subj), `${subj} survives save and reload`);
+  assert(await page.locator('.markup-layer g[data-id] polygon:not([fill="none"])').count() >= 2, 'the callout keeps its second leader and closed arrows after reload');
   assert(after.includes('Hello typewriter') || (await page.locator('.markup-text.typewriter').allInnerTexts()).some((t) => t.includes('Hello typewriter')), 'typewriter text kept');
   {
     const styled = page.locator('.markup-text', { hasText: 'Styled box' }).first();

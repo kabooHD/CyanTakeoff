@@ -14,6 +14,21 @@ import { LEGEND_HEADERS, legendLayout, legendRows, type LegendRow } from '../mod
 import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import { fitFontSize, quadding, shapeOutline, textStyleOf, toDS, toRC } from '../model/textStyle';
 import { countRadius, countStyleName, countSymbolPolygon, countSymbolStrokes } from '../model/count';
+import { calloutTips, endsOf, leName, lineEndShape, type EndShape } from '../model/lineEnds';
+
+/** Paint a line end: filled shapes in the line colour, open ones stroked. */
+function drawEnd(o: Ops, e: EndShape, rgb: string) {
+  if (e.fill) { o.add(`${rgb} rg`); o.poly(e.fill, true); o.add('B'); }
+  for (const s of e.strokes) { o.poly(s, false); o.add('S'); }
+  if (e.circle) { o.add(`${rgb} rg`); o.ellipse({ x: e.circle.c.x - e.circle.r, y: e.circle.c.y - e.circle.r }, { x: e.circle.c.x + e.circle.r, y: e.circle.c.y + e.circle.r }); o.add('B'); }
+}
+/** The Start and End of a line or polyline (PDF space). */
+function lineEnds(o: Ops, m: Markup, P: Pt[], rgb: string) {
+  if (P.length < 2) return;
+  const { start, end, size } = endsOf(m.type, m.style);
+  drawEnd(o, lineEndShape(start, P[1], P[0], size), rgb);
+  drawEnd(o, lineEndShape(end, P[P.length - 2], P[P.length - 1], size), rgb);
+}
 import { refKey, removeAnnots, type CTData, type PageInfo } from './document';
 import { COLUMNS_KEY, isRulerViewport } from './importAnnots';
 import { writeFields, type FieldValue } from './forms';
@@ -387,7 +402,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
       break;
     case 'line': case 'arrow': case 'length':
       o.moveTo(P[0]); o.lineTo(P[1]); o.add(lineOp);
-      if (m.type === 'arrow') arrowHead(o, P[0], P[1], Math.max(8, st.width * 5));
+      if (m.type === 'arrow' || m.type === 'line') lineEnds(o, m, P, rgb);
       if (m.type === 'length') {
         // end ticks
         const ang = Math.atan2(P[1].y - P[0].y, P[1].x - P[0].x) + Math.PI / 2;
@@ -401,6 +416,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
     case 'polyline': case 'polylength': case 'perimeter': case 'pen': case 'angle':
       if (hasCurves(m.handles)) curvedPath(o, P, m.handles, false); else o.poly(P, false);
       o.add(m.type === 'angle' ? 'S' : lineOp);
+      if (m.type === 'polyline' || m.type === 'polylength') lineEnds(o, m, P, rgb);
       break;
     case 'radius':
       if (P.length > 2) {
@@ -461,10 +477,11 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
       const x0 = Math.min(a.x, c.x), x1 = Math.max(a.x, c.x);
       const y0 = Math.min(a.y, c.y), y1 = Math.max(a.y, c.y);
       if (m.type === 'callout') {
-        const tip = P[0];
-        const attach = calloutAttach(tip, a, c);
-        o.moveTo(tip); o.lineTo(attach); o.add('S');
-        arrowHead(o, attach, tip, Math.max(8, st.width * 5));
+        for (const tip of calloutTips(P)) {
+          const attach = calloutAttach(tip, a, c);
+          o.moveTo(tip); o.lineTo(attach); o.add('S');
+          drawEnd(o, lineEndShape(endsOf(m.type, st).end, attach, tip, endsOf(m.type, st).size), rgb);
+        }
       }
       boxShape(o, st, x0, y0, x1, y1, paint);
       formattedText(o, fonts, st, m.text ?? '', { x: x0, y: y0 }, { x: x1, y: y1 }, fr);
@@ -552,7 +569,7 @@ function ctData(m: Markup, P: Pt[]): CTData {
     valign: m.style.valign, margin: m.style.margin, autoSize: m.style.autoSize || undefined, shape: m.style.shape,
     countSymbol: m.style.countSymbol, countScale: m.style.countScale,
     lineDef: m.style.lineDef, hatch: m.style.hatch, hatchScale: m.style.hatch ? m.style.hatchScale : undefined,
-    points: m.type === 'count' || m.type === 'arc' || m.type === 'cloudplus' ? P.flatMap((p) => [p.x, p.y]) : undefined,
+    points: m.type === 'count' || m.type === 'arc' || m.type === 'cloudplus' || (m.type === 'callout' && P.length > 3) ? P.flatMap((p) => [p.x, p.y]) : undefined,
     comment: measure(m) || m.type === 'cloudplus' || m.type === 'stamp' ? m.comment || undefined : undefined,
     text: m.type === 'stamp' || m.type === 'cloudplus' ? m.text : undefined,
     subtitle: m.type === 'stamp' ? m.subtitle : undefined,
@@ -694,7 +711,7 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
   switch (SUBTYPE[m.type]) {
     case 'Line':
       entries.L = flat(P);
-      entries.LE = m.type === 'dimension' ? [N('OpenArrow'), N('OpenArrow')] : [N('None'), N(m.type === 'arrow' ? 'OpenArrow' : 'None')];
+      entries.LE = m.type === 'dimension' ? [N('OpenArrow'), N('OpenArrow')] : [N(leName(endsOf(m.type, st).start)), N(leName(endsOf(m.type, st).end))];
       break;
     case 'PolyLine':
       // An arc is written as its curve; the three picked points stay in CTData.
@@ -754,7 +771,7 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
       if (m.type === 'callout') {
         entries.IT = 'FreeTextCallout';
         entries.CL = flat([P[0], calloutAttach(P[0], P[1], P[2])]);
-        entries.LE = N('OpenArrow');
+        entries.LE = N(leName(endsOf(m.type, st).end));
       }
       const box = m.type === 'callout' ? [P[1], P[2]] : [P[0], P[1]];
       const bx = [Math.min(box[0].x, box[1].x), Math.min(box[0].y, box[1].y), Math.max(box[0].x, box[1].x), Math.max(box[0].y, box[1].y)];

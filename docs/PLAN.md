@@ -238,6 +238,8 @@ filling, image signatures, redaction and OCR.
   alignment, line space, margin, text colour, box shape (saved as DS/RC/Q)
 - [x] Count: Resume Count, Delete from Group, Split Counts / Split All /
   Merge Counts, symbols and scale, Create Count in the Tool Chest
+- [x] Callout leaders (Add / Delete Leader) and line end styles (Start/End,
+  size) for lines, arrows, polylines and callouts
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

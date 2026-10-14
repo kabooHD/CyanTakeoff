@@ -1381,6 +1381,20 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     } else if (hit) {
       if (!selected.has(hit.id)) s.select([hit.id]);
       const ids = selected.has(hit.id) ? doc.selection : [hit.id];
+      if (hit.type === 'callout' && !hit.locked && hit.points.length > 2) {
+        // Callout leaders (Revu): Add Leader at the clicked point; Delete Leader on a leader's tip.
+        const tips = [hit.points[0], ...hit.points.slice(3)];
+        const ti = tips.findIndex((q) => dist(q, raw) <= 8 / zoom);
+        items.push({ label: 'Add Leader', action: () => s.updateMarkups([hit.id], (x) => ({ points: [...x.points, raw] })) });
+        if (ti >= 0 && tips.length > 1) {
+          items.push({ label: 'Delete Leader', action: () => s.updateMarkups([hit.id], (x) => {
+            const extra = x.points.slice(3);
+            if (ti === 0) return { points: [extra[0], x.points[1], x.points[2], ...extra.slice(1)] }; // the next leader becomes the main one
+            return { points: [x.points[0], x.points[1], x.points[2], ...extra.filter((_, k) => k !== ti - 1)] };
+          }) });
+        }
+        items.push({ sep: true });
+      }
       if (hit.type === 'count' && !hit.locked) {
         // Count menu (Revu): Resume Count, Delete from Group, Split Counts, Split All, Merge Counts.
         const vi = nearestCountIndex(hit, raw, 8 / zoom);

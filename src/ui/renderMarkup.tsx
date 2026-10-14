@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import { openCapturePreview } from './Capture';
 import { cssFamily, fitFontSize, shapeOutline, textStyleOf } from '../model/textStyle';
 import { countRadius, countSymbolPolygon, countSymbolStrokes } from '../model/count';
+import { calloutTips, endsOf, lineEndShape, type LineEnd } from '../model/lineEnds';
 import { textWidth } from './quickCommands';
 import { useApp } from '../model/store';
 import { LEGEND_HEADERS, legendLayout, legendRows } from '../model/legend';
@@ -211,6 +212,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     case 'line': case 'length':
       if (P.length < 2) break;
       shape = <line {...cm} x1={P[0].x} y1={P[0].y} x2={P[1].x} y2={P[1].y} />;
+      if (m.type === 'line') shape = <>{shape}<EndCaps m={m} P={P} c={c} /></>;
       if (m.type === 'length') {
         const ang = Math.atan2(P[1].y - P[0].y, P[1].x - P[0].x) + Math.PI / 2;
         const t = (p: Pt) => <line key={`${p.x},${p.y}`} {...c} x1={p.x + Math.cos(ang) * 5} y1={p.y + Math.sin(ang) * 5} x2={p.x - Math.cos(ang) * 5} y2={p.y - Math.sin(ang) * 5} />;
@@ -220,12 +222,13 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     case 'arrow':
       if (P.length < 2) break;
       shape = <><line {...cm} x1={P[0].x} y1={P[0].y} x2={P[1].x} y2={P[1].y} />
-        <polyline {...c} fill="none" points={arrowHead(P[0], P[1], Math.max(8, st.width * 5))} /></>;
+        <EndCaps m={m} P={P} c={c} /></>;
       break;
     case 'polyline': case 'polylength': case 'perimeter': case 'pen':
-      shape = hasCurves(m.handles) && m.type !== 'pen'
+      shape = <>{hasCurves(m.handles) && m.type !== 'pen'
         ? <path {...cm} fill="none" d={svgPath(P, m.handles, false)} />
-        : <polyline {...cm} fill="none" points={pts(P)} />;
+        : <polyline {...cm} fill="none" points={pts(P)} />}
+        {(m.type === 'polyline' || m.type === 'polylength') && <EndCaps m={m} P={P} c={c} />}</>;
       break;
     case 'polygon': case 'area': case 'volume':
       shape = m.cutouts?.length || hasCurves(m.handles)
@@ -291,12 +294,12 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
       const box = m.type === 'callout' ? [P[1], P[2]] : [P[0], P[1]];
       if (!box[1]) break;
       const b = bounds(box);
+      // Every leader (the first point and any extra ones) runs from its tip to the box, with the End style.
       const leader = m.type === 'callout'
-        ? (() => {
-          const at = calloutAttach(P[0], box[0], box[1]);
-          return <><line {...c} x1={P[0].x} y1={P[0].y} x2={at.x} y2={at.y} />
-            <polyline {...c} fill="none" points={arrowHead(at, P[0], Math.max(8, st.width * 5))} /></>;
-        })()
+        ? calloutTips(P).map((tip, i) => {
+          const at = calloutAttach(tip, box[0], box[1]);
+          return <g key={`ld${i}`}><line {...c} x1={tip.x} y1={tip.y} x2={at.x} y2={at.y} /><EndCap m={m} from={at} to={tip} kind={endsOf(m.type, st).end} c={c} /></g>;
+        })
         : null;
       shape = <>
         {leader}
@@ -459,4 +462,24 @@ export function textCss(m: Markup, boxW: number, boxH: number): React.CSSPropert
     textAlign: t.align, lineHeight: t.lineHeight, padding: `${Math.max(0, t.margin - 1)}px ${t.margin}px`,
     display: 'flex', flexDirection: 'column', justifyContent: t.valign === 'middle' ? 'center' : t.valign === 'bottom' ? 'flex-end' : 'flex-start',
   };
+}
+
+/** One line end drawn at `to`, pointing away from `from`. */
+function EndCap({ m, from, to, kind, c }: { m: Markup; from: Pt; to: Pt; kind: LineEnd; c: { stroke: string; strokeWidth: number } }) {
+  if (kind === 'none') return null;
+  const e = lineEndShape(kind, from, to, endsOf(m.type, m.style).size);
+  return (
+    <g>
+      {e.fill && <polygon {...c} fill={m.style.color} points={pts(e.fill)} />}
+      {e.strokes.map((s, i) => <polyline key={i} {...c} fill="none" points={pts(s)} />)}
+      {e.circle && <circle {...c} fill={m.style.color} cx={e.circle.c.x} cy={e.circle.c.y} r={e.circle.r} />}
+    </g>
+  );
+}
+
+/** The Start and End of a line or polyline. */
+function EndCaps({ m, P, c }: { m: Markup; P: Pt[]; c: { stroke: string; strokeWidth: number } }) {
+  if (P.length < 2) return null;
+  const { start, end } = endsOf(m.type, m.style);
+  return <><EndCap m={m} from={P[1]} to={P[0]} kind={start} c={c} /><EndCap m={m} from={P[P.length - 2]} to={P[P.length - 1]} kind={end} c={c} /></>;
 }

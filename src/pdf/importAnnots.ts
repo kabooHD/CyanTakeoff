@@ -20,6 +20,19 @@ import { DEFAULT_STYLES, toolById } from '../tools/tools';
 import { MEASURE_TYPES } from '../model/measure';
 import { DEFAULT_LINE_HEIGHT, alignOfQuadding, parseDS } from '../model/textStyle';
 import { symbolOfCountStyle } from '../model/count';
+import { LINE_END_TYPES, defaultEnds, lineEndOfName } from '../model/lineEnds';
+
+/** /LE (an array for lines, a name for callouts) as lineStart/lineEnd, only when they differ from the type's defaults. */
+function readLineEnds(doc: PDFDocument, dict: PDFDict, type: MarkupType): Pick<MarkupStyle, 'lineStart' | 'lineEnd'> {
+  if (!LINE_END_TYPES.has(type)) return {};
+  const le = dict.get(PDFName.of('LE'));
+  const arr = getArray(doc, dict, 'LE');
+  const names = arr ? [0, 1].map((i) => String(lookup(doc, arr.get(i)) ?? '')) : le instanceof PDFName ? ['None', le.toString()] : [];
+  if (!names.length) return {};
+  const d = defaultEnds(type);
+  const start = lineEndOfName(names[0]), end = lineEndOfName(names[1]);
+  return { ...(start && start !== d.start ? { lineStart: start } : {}), ...(end && end !== d.end ? { lineEnd: end } : {}) };
+}
 import {
   N, colorToHex, getArray, getDict, getName, getNumber, getText, lookup, numbers,
   parsePdfDate, readMeasure,
@@ -169,6 +182,7 @@ function readStyle(doc: PDFDocument, dict: PDFDict, type: MarkupType, ct?: CTDat
     ...(ct?.lineDef ? { lineDef: ct.lineDef } : {}),
     ...(ct?.hatch ? { hatch: ct.hatch, hatchScale: ct.hatchScale } : {}),
     fontSize,
+    ...readLineEnds(doc, dict, type),
     ...(type === 'count' ? { countSymbol: ct?.countSymbol ?? symbolOfCountStyle(getName(doc, dict, 'CountStyle')), countScale: ct?.countScale } : {}),
     ...text,
     ...(textTypes && (ds.textColor ?? (textColor ? colorToHex(textColor.slice(1, 4).map(Number)) : undefined)) ? { textColor: ds.textColor ?? colorToHex(textColor!.slice(1, 4).map(Number))! } : {}),

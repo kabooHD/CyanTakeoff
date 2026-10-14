@@ -162,6 +162,10 @@ export interface MarkupStyle {
   /** Count: the symbol placed at each counted item and its size (1 = default). */
   countSymbol?: 'circle' | 'square' | 'triangle' | 'diamond' | 'cross' | 'x' | 'check' | 'star';
   countScale?: number;
+  /** Line ends (lines, arrows, polylines, callout leaders): Revu's Start / End and their size (1 = default). */
+  lineStart?: 'none' | 'openArrow' | 'closedArrow' | 'circle' | 'square' | 'diamond' | 'slash' | 'butt' | 'rOpenArrow' | 'rClosedArrow';
+  lineEnd?: 'none' | 'openArrow' | 'closedArrow' | 'circle' | 'square' | 'diamond' | 'slash' | 'butt' | 'rOpenArrow' | 'rClosedArrow';
+  lineEndSize?: number;
 }
 
 export interface Markup {

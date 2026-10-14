@@ -22,6 +22,7 @@ import { layoutOf, withLayout } from '../model/layoutProps';
 import { addCapture, openCapturePreview } from './Capture';
 import { DEFAULT_LINE_HEIGHT, DEFAULT_MARGIN, TEXT_FONTS, textStyleOf } from '../model/textStyle';
 import { COUNT_SYMBOLS, symbolForType } from '../model/count';
+import { LINE_ENDS, LINE_END_TYPES, defaultEnds, endsOf } from '../model/lineEnds';
 import { usePageSetup } from './PageSetup';
 import { useApp, useActiveDoc, type DocState } from '../model/store';
 import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, formatNumber, measure, precisionOf, unitLabel, withPrecision } from '../model/measure';
@@ -299,6 +300,23 @@ function StyleEditor({ style, type, onChange }: { style: MarkupStyle; type: Mark
       {style.fill && <Row label="Fill Opacity"><span className="inline"><input type="range" min={0} max={100} value={Math.round(style.fillOpacity * 100)} onChange={(e) => onChange({ fillOpacity: +e.target.value / 100 })} />{Math.round(style.fillOpacity * 100)}</span></Row>}
       <Row label="Line Width"><input type="number" min={0} max={50} step={0.25} value={style.width} onChange={(e) => onChange({ width: Math.max(0, +e.target.value) })} /></Row>
       <Row label="Line Style"><LineStyleSelect style={style} onChange={onChange} /></Row>
+      {LINE_END_TYPES.has(type) && (
+        <>
+          {type !== 'callout' && <Row label="Start">
+            <select aria-label="Line start" value={endsOf(type, style).start} onChange={(e) => onChange({ lineStart: e.target.value === defaultEnds(type).start ? undefined : e.target.value as MarkupStyle['lineStart'] })}>
+              {LINE_ENDS.map((le) => <option key={le.id} value={le.id}>{le.name}</option>)}
+            </select>
+          </Row>}
+          <Row label="End">
+            <span className="inline">
+              <select aria-label="Line end" value={endsOf(type, style).end} onChange={(e) => onChange({ lineEnd: e.target.value === defaultEnds(type).end ? undefined : e.target.value as MarkupStyle['lineEnd'] })}>
+                {LINE_ENDS.map((le) => <option key={le.id} value={le.id}>{le.name}</option>)}
+              </select>
+              <input aria-label="Line end size" type="number" min={0.25} max={10} step={0.25} value={style.lineEndSize ?? 1} title="Size" onChange={(e) => onChange({ lineEndSize: +e.target.value === 1 ? undefined : Math.max(0.25, +e.target.value) })} style={{ width: 52 }} />
+            </span>
+          </Row>
+        </>
+      )}
       <HatchSelect style={style} type={type} onChange={onChange} />
       {(textual || ['length', 'polylength', 'area', 'perimeter', 'volume', 'angle', 'radius', 'diameter'].includes(type)) && !textTypes && (
         <Row label="Font Size"><input type="number" min={4} max={144} value={style.fontSize} onChange={(e) => onChange({ fontSize: Math.max(4, +e.target.value) })} /></Row>

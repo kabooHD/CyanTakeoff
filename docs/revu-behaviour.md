@@ -568,6 +568,13 @@ Print Spaces.
 - Save All (Ctrl+F2) saves every changed file; Refresh (F5) reloads the
   file from disk (we need it opened with file access).
 - Autosize Text Box (Alt+Z) fits a text box or callout box to its text.
+- Callout leaders: right-click inside the box > Add Leader puts another
+  leader from the clicked point to the box; each leader's tip has a
+  handle; right-click a tip > Delete Leader. Leaders run straight to the
+  nearest side (ours: no shared knee). Lines, arrows, polylines and
+  callouts have Start / End line ends (None, Open Arrow, Closed Arrow,
+  Circle, Square, Diamond, Slash, Butt, Reverse arrows) and a size,
+  saved as /LE; arrows and callouts default to an open arrow.
 - Text properties (Text Box, Callout, Typewriter, Cloud+; Properties >
   Text): Font (Helvetica, Times, Courier: the standard PDF fonts), Font
   Size or Auto (the largest size that fits the box), Font Style (bold,
