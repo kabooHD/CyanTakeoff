@@ -49,6 +49,7 @@ import { ApplyStampDialog } from './ui/ApplyStamp';
 import { ColorProcessDialogs } from './ui/ColorProcess';
 import { ExportImageDialog } from './ui/FileExports';
 import { UndoHistoryDialog } from './ui/UndoHistory';
+import { TemplateDialog } from './ui/Templates';
 import { CameraDialog, useCamera } from './ui/Camera';
 import { ManageStatusDialog } from './ui/StatusModels';
 import { DocToolsDialogs, emailDocument, publishCompressed, useDocTools } from './ui/DocTools';
@@ -296,6 +297,7 @@ export function App() {
       <ColorProcessDialogs />
       <ExportImageDialog />
       <UndoHistoryDialog />
+      <TemplateDialog />
       <StyleManagerDialog />
       <SpellDialog />
       <SequenceDialog />

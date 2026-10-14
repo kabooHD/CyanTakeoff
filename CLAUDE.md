@@ -101,7 +101,8 @@ Sequences (src/model/sequence.ts, src/ui/SequenceDialog.tsx); Quantity Link
 Footer, Bates, Watermark (src/pdf/stamps.ts, src/ui/HeaderFooter.tsx);
 password security (src/pdf/crypt.ts: R2-R6 decrypt, AES-256 encrypt;
 src/ui/Security.tsx), Reduce File Size (src/pdf/reduce.ts), XFDF
-(src/pdf/xfdf.ts); Export as Image / Text, Publish as Flattened / Uncompressed (src/ui/FileExports.tsx),
+(src/pdf/xfdf.ts); New PDF from Template (src/model/templates.ts, src/ui/Templates.tsx);
+Export as Image / Text, Publish as Flattened / Uncompressed (src/ui/FileExports.tsx),
 Undo History (src/ui/UndoHistory.tsx), Crop Image (src/model/cropImage.ts), Certify
 Document and Validate Signatures (DocMDP in src/pdf/sign.ts);
 Color Processing, Archive as PDF/A, Repair PDF (src/ui/ColorProcess.tsx,

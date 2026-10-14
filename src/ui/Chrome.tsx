@@ -10,6 +10,7 @@ import { useApplyStamp } from './ApplyStamp';
 import { archiveAsPdfA, useColorProcess } from './ColorProcess';
 import { exportText, publishFlattened, publishUncompressed, useExportImage } from './FileExports';
 import { useUndoHistory } from './UndoHistory';
+import { useTemplateDialog } from './Templates';
 import { validateSignatures } from './DigitalSignature';
 import { exportFormData, importFormData, mergeFormData, migrateTypewrittenText, resetForm } from './FormData';
 import { Icon } from './icons';
@@ -72,6 +73,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
     ],
     File: [
       { label: 'New PDF…', shortcut: 'Ctrl+N', action: () => useDocTools.setState({ open: 'new' }) },
+      { label: 'New PDF from Template…', action: () => useTemplateDialog.setState({ open: true }) },
       { label: 'Open…', shortcut: 'Ctrl+O', action: openFile },
       { label: 'Open Sample Drawing', action: openSample },
       { label: 'Combine Files…', action: combineFiles },

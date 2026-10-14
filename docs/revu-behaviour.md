@@ -359,6 +359,11 @@ problems; ours rebuilds the file structure, drops broken annotation and
 content entries and closes open graphics states (Revu's AutoCAD wipeout,
 striped-image and clipping fixes: not yet).
 
+## New PDF from Template
+Revu creates a PDF from a template file and manages templates. Ours keeps
+templates in the browser: add a PDF file or the current document, rename,
+delete; Create opens an Untitled copy.
+
 ## File exports, Undo History, Crop Image, Certify
 File > Export: ours exports PNG or JPEG (one file per page, resolution,
 with or without markups) and plain text (reading order, pages separated);

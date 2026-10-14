@@ -218,6 +218,7 @@ filling, image signatures, redaction and OCR.
 - [x] XFDF export/import of markups (standard XFDF plus our measurement data
   in a namespaced element; Revu measurements round-trip; stamp artwork in
   <appearance>)
+- [x] File: New PDF from Template (templates kept in the browser)
 - [x] File: Export as Image (PNG/JPEG), Export Text, Publish as Flattened /
   Uncompressed; Edit > Undo History; Markup > Crop Image; Certify Document
   (DocMDP) and Validate Signatures

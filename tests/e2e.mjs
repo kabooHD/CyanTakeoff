@@ -1700,6 +1700,23 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.getByText('Watermark removed').waitFor({ timeout: 20000 });
   await page.waitForTimeout(800);
   assert(await find('DRAFT') === 0 && await find('CT0001') === 1, 'Remove Watermark removes only the watermark');
+  // New PDF from Template: the current document becomes a template; a new document is created from it.
+  {
+    const tabs0 = await page.locator('.doc-tab').count();
+    await menu('File', 'New PDF from Template…');
+    const tpl = page.locator('[role=dialog][aria-label="New PDF from Template"]');
+    await tpl.getByRole('button', { name: 'Add Current Document' }).click();
+    await tpl.locator('[role=option]').first().waitFor({ timeout: 10000 });
+    await tpl.getByRole('button', { name: 'Create' }).click();
+    await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs0, { timeout: 20000 });
+    assert((await page.locator('.doc-tab.active').innerText()).startsWith('Untitled'), 'New PDF from Template opens an Untitled copy');
+    await page.keyboard.press('Control+F4');
+    await page.waitForTimeout(300);
+    if (await page.locator('[role=dialog]').count()) { await page.getByRole('button', { name: /Don.t Save|Discard|No/ }).first().click().catch(() => {}); }
+    await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n, tabs0, { timeout: 10000 });
+    await page.locator('.doc-tab').first().click();
+    await page.waitForTimeout(300);
+  }
   // File exports: Export Text, Publish as Uncompressed; Edit > Undo History.
   {
     const [td] = await Promise.all([page.waitForEvent('download'), menu('File', 'Export Text')]);
@@ -2307,7 +2324,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
 {
   await page.keyboard.press('Escape');
   await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
-  await page.getByRole('menuitem', { name: /^New PDF/ }).click();
+  await page.getByRole('menuitem', { name: /^New PDF…/ }).click();
   let dlg = page.locator('[role=dialog][aria-label="New PDF"]');
   await dlg.locator('[aria-label="Paper size"]').selectOption('Tabloid (11×17)');
   await dlg.locator('[aria-label="Orientation"]').selectOption('p');
