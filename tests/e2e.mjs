@@ -313,6 +313,13 @@ assert(parseInt(await page.locator('.statusbar').innerText().then((t) => t.match
   await page.getByRole('button', { name: 'Add Boundary' }).click();
   for (const [x, y] of [[0, 22], [24, 22]]) { const q = await toScreen(x, y); await page.mouse.click(q.x, q.y); }
   { const q = await toScreen(24, 40); await page.mouse.dblclick(q.x, q.y); }
+  // Settings: boundary colour recolours the boundary drawn above; the Tool Chest tool list offers the sample Area tool.
+  await page.getByRole('button', { name: 'Dynamic Fill Settings' }).click();
+  await page.getByLabel('Boundary Color').fill('#00aa00');
+  await page.getByLabel('Fill size').fill('6');
+  await page.getByRole('button', { name: 'Dynamic Fill Settings' }).click();
+  assert(await page.locator('.fill-overlay polyline[stroke="#00aa00"], svg polyline[stroke="#00aa00"]').count() >= 1, 'Boundary Color recolours the temporary boundaries');
+  assert(await page.getByLabel('Tool Chest tool').locator('option', { hasText: 'Flooring' }).count() === 1, 'the created markups can take a Tool Chest tool\'s properties');
   await page.getByRole('button', { name: 'Fill', exact: true }).click();
   const p = await toScreen(12, 31);
   await page.mouse.move(p.x, p.y); await page.mouse.down();
@@ -328,6 +335,14 @@ assert(parseInt(await page.locator('.statusbar').innerText().then((t) => t.match
   assert(sf.length === 1 && Math.abs(sf[0] - 396.3) < 2, `filled office interior is 396.3 sf within 2 sf (${sf.join(', ')})`);
   await page.keyboard.press('Control+Z');
   await page.keyboard.press('Escape');
+  // Preferences > Measure holds the Dynamic Fill defaults.
+  await page.keyboard.press('Control+k');
+  {
+    const pd = page.getByRole('dialog', { name: 'Preferences' });
+    await pd.getByRole('tab', { name: 'Measure' }).click();
+    assert(await pd.getByLabel('Fill size').inputValue() === '2', 'Preferences > Measure shows the Dynamic Fill defaults');
+    await pd.getByRole('button', { name: 'Close' }).click();
+  }
 }
 
 // Apply Scale to Pages: prompt on an unscaled page, then calibrate (site plan, sheet 2).

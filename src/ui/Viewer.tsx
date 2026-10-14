@@ -24,7 +24,7 @@ import { attachCapture, captureMenuItems, shrinkPhoto } from './Capture';
 import { openCameraFor } from './Camera';
 import { arrangeItems } from './arrangeMenu';
 import { legendKey, legendLayout, legendRows, type LegendDef } from '../model/legend';
-import { DynamicFillBar, FillOverlay, buildMask, fillDown, fillMove, fillUp, finishBoundary, resetFill, useFill } from './DynamicFill';
+import { DynamicFillBar, FillOverlay, applyFillPrefs, buildMask, fillDown, fillMove, fillUp, finishBoundary, resetFill, useFill } from './DynamicFill';
 import type { Markup, MarkupType, Pt, ToolId, Viewport } from '../model/types';
 import { toolById } from '../tools/tools';
 import { CURVABLE, arcSegment, bezierAt, closedType, flatPoints, hasCurves, insertHandle, removeHandle, segments, toggleCurve, type Handles } from '../model/curves';
@@ -157,7 +157,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   /** Page pixels (unrotated, relative to the page) to scroll-area pixels, and back. */
   const outPt = (u: number, v: number) => { const q = rotateOut(u, v, pw, ph, rot); return { x: left + q.x, y: top + q.y }; };
   // Markups on hidden layers are not shown (nor hit or snapped to).
-  const markups = doc.markups.filter((m) => m.page === pageIdx && markupShown(doc, m, zoom));
+  const fillHides = useFill((f) => f.hideMarkups) && s.tool === 'dynamic-fill';
+  const markups = doc.markups.filter((m) => m.page === pageIdx && markupShown(doc, m, zoom) && !fillHides);
   const visKey = visibilityKey(doc, zoom);
   const viewports = doc.viewports[pageIdx] ?? [];
   /** Scale a measurement starting at `p` would use (viewport, else page). */
@@ -509,7 +510,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     useApp.setState({ offsetOp: offsetSet.replace ? null : { id: offsetSrc.id } });
   };
   useEffect(() => {
-    if (s.tool === 'dynamic-fill' && pdfPage) buildMask(pdfPage, `${doc.id}:${pageIdx}`);
+    if (s.tool === 'dynamic-fill' && pdfPage) { applyFillPrefs(); buildMask(pdfPage, `${doc.id}:${pageIdx}`); }
     if (s.tool !== 'dynamic-fill') resetFill();
   }, [s.tool, pdfPage, doc.id, pageIdx, fillKey]);
 

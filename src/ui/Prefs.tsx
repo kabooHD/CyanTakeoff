@@ -156,7 +156,7 @@ function ProfilesDialog() {
 
 // ---------- Preferences (Ctrl+K) ----------
 
-const SECTIONS = ['General', 'Navigation', 'Markup', 'Sketch', 'Forms', 'Signature'] as const;
+const SECTIONS = ['General', 'Navigation', 'Markup', 'Measure', 'Sketch', 'Forms', 'Signature'] as const;
 type Section = typeof SECTIONS[number];
 
 function PreferencesDialog() {
@@ -206,6 +206,18 @@ function PreferencesDialog() {
         {check('copyHighlightedText', 'Copy highlighted text into markup comment')}
         {select('snapshotDpi', 'Snapshot resolution', [[72 as never, '72 dpi'], [144 as never, '144 dpi'], [216 as never, '216 dpi'], [300 as never, '300 dpi']])}
         {check('includeMarkupsInSnapshots', 'Include markups in snapshots')}
+      </>
+    ),
+    Measure: (
+      <>
+        <p className="muted small">Dynamic Fill defaults (the tool's Settings change them for the session).</p>
+        <label className="pref-row"><span>Fill size</span><input aria-label="Fill size" type="number" min={1} max={40} value={p.fillSize} onChange={(e) => set({ fillSize: Math.max(1, Number(e.target.value)) })} /> pt</label>
+        <label className="pref-row"><span>Fill colour</span><input aria-label="Fill colour" type="color" value={p.fillColor} onChange={(e) => set({ fillColor: e.target.value })} /></label>
+        <label className="pref-row"><span>Boundary size</span><input aria-label="Boundary size" type="number" min={1} max={40} value={p.fillBoundarySize} onChange={(e) => set({ fillBoundarySize: Math.max(1, Number(e.target.value)) })} /> pt</label>
+        <label className="pref-row"><span>Boundary colour</span><input aria-label="Boundary colour" type="color" value={p.fillBoundaryColor} onChange={(e) => set({ fillBoundaryColor: e.target.value })} /></label>
+        {select('fillSpeed', 'Fill speed', [['Slow', 'Slow'], ['Medium', 'Medium'], ['Fast', 'Fast']])}
+        {select('fillSensitivity', 'Edge sensitivity', [['Low', 'Low'], ['Medium', 'Medium'], ['High', 'High']])}
+        {check('fillHideMarkups', 'Momentarily hide markups while filling')}
       </>
     ),
     Sketch: (

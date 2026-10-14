@@ -35,6 +35,14 @@ export interface Prefs {
   fieldHighlightOpacity: number;
   // Signature
   hashAlgorithm: 'sha256' | 'sha384' | 'sha512';
+  // Measure > Dynamic Fill defaults
+  fillSize: number;
+  fillBoundarySize: number;
+  fillColor: string;
+  fillBoundaryColor: string;
+  fillSpeed: 'Slow' | 'Medium' | 'Fast';
+  fillSensitivity: 'Low' | 'Medium' | 'High';
+  fillHideMarkups: boolean;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -44,6 +52,7 @@ export const DEFAULT_PREFS: Prefs = {
   sketchRotation: 'page', ellipseMode: 'size',
   fieldHighlightColor: '#cce0ff', fieldHighlightOpacity: 55,
   hashAlgorithm: 'sha256',
+  fillSize: 2, fillBoundarySize: 2, fillColor: '#00a0ff', fillBoundaryColor: '#ff4d00', fillSpeed: 'Medium', fillSensitivity: 'Medium', fillHideMarkups: false,
 };
 
 /** Fill in defaults for a saved (possibly older) preferences object. */

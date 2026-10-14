@@ -596,3 +596,8 @@ label.button, a.button { display: inline-block; padding: 2px 8px; border: 1px so
 
 .summary-dialog { width: min(640px, 94vw); }
 .summary-columns, .summary-filters { max-height: 40vh; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 4px 0; }
+
+.fill-settings-wrap { position: relative; }
+.fill-settings { position: absolute; top: 100%; right: 0; z-index: 30; background: var(--panel-bg, #fff); border: 1px solid var(--border, #ccc); box-shadow: 0 4px 12px rgba(0,0,0,0.2); padding: 8px; display: flex; flex-direction: column; gap: 6px; min-width: 220px; }
+.fill-settings label { display: flex; align-items: center; gap: 6px; }
+.fill-settings input[type=number] { width: 56px; }

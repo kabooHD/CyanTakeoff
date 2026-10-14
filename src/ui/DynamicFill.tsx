@@ -4,7 +4,7 @@
 import { useEffect, useRef } from 'react';
 import { create } from 'zustand';
 import type { PDFPageProxy } from 'pdfjs-dist';
-import { Flood, dilate, drawWall, simplifyClosed, traceRegion, type Grid } from '../model/fill';
+import { Flood, dilate, drawWall, seedDisc, simplifyClosed, traceRegion, type Grid } from '../model/fill';
 import { pointInPolygon, polygonArea, signedArea } from '../model/measure';
 import { useApp } from '../model/store';
 import type { MarkupType, Pt } from '../model/types';
@@ -34,7 +34,15 @@ interface FillState {
   sensitivity: keyof typeof SENSITIVITY;
   speed: keyof typeof SPEEDS;
   boundarySize: number; // page points
+  /** Fill Size: cursor radius in page points. */
+  fillSize: number;
   color: string;
+  boundaryColor: string;
+  /** Momentarily Hide Markups while the tool is active. */
+  hideMarkups: boolean;
+  /** Tool Chest tool whose properties the created markups take ('' = defaults). */
+  tool: string;
+  settingsOpen: boolean;
   spaceName: string;
   tick: number; // bumps to repaint
   loading: boolean;
@@ -43,8 +51,14 @@ interface FillState {
 export const useFill = create<FillState>(() => ({
   mode: 'fill', key: '', k: 1, base: null, mask: null, flood: null, boundaries: [], draftBoundary: [],
   create: { space: false, polygon: false, area: true, polylength: false, perimeter: false, volume: false },
-  sensitivity: 'Medium', speed: 'Medium', boundarySize: 2, color: '#00a0ff', spaceName: 'Space', tick: 0, loading: false,
+  sensitivity: 'Medium', speed: 'Medium', boundarySize: 2, fillSize: 2, color: '#00a0ff', boundaryColor: '#ff4d00', hideMarkups: false, tool: '', settingsOpen: false, spaceName: 'Space', tick: 0, loading: false,
 }));
+
+/** Preferences > Measure: the defaults the tool starts with. */
+export function applyFillPrefs() {
+  const p = useApp.getState().prefs;
+  useFill.setState({ fillSize: p.fillSize, boundarySize: p.fillBoundarySize, color: p.fillColor, boundaryColor: p.fillBoundaryColor, speed: p.fillSpeed, sensitivity: p.fillSensitivity, hideMarkups: p.fillHideMarkups, settingsOpen: false });
+}
 
 const bump = () => useFill.setState((s) => ({ tick: s.tick + 1 }));
 
@@ -113,7 +127,7 @@ export function fillDown(p: Pt) {
   if (!st.flood) useFill.setState({ flood });
   holding = true;
   path = [p];
-  flood.seed(p.x * st.k, p.y * st.k);
+  seedDisc(flood, p.x * st.k, p.y * st.k, (st.fillSize * st.k) / 2);
   if (!raf) raf = requestAnimationFrame(grow);
 }
 
@@ -123,7 +137,7 @@ export function fillMove(p: Pt) {
   if (!holding || !st.flood) return;
   // Dragging spreads the fill from the cursor too.
   path.push(p);
-  st.flood.seed(p.x * st.k, p.y * st.k);
+  seedDisc(st.flood, p.x * st.k, p.y * st.k, (st.fillSize * st.k) / 2);
 }
 
 export function fillUp() {
@@ -196,7 +210,9 @@ export function applyFill(): number {
         continue;
       }
       const type = kind as MarkupType;
-      const preset = app.preset?.type === type ? app.preset : null;
+      // The chosen Tool Chest tool (when its type matches), else the active preset, else the defaults.
+      const chosen = st.tool ? app.toolSets.flatMap((t) => t.tools).find((t) => t.id === st.tool) : undefined;
+      const preset = chosen?.type === type ? chosen : app.preset?.type === type ? app.preset : null;
       const points = type === 'perimeter' || type === 'polylength' ? [...outer, outer[0]] : outer;
       app.addMarkup({
         type, page: doc.page, points,
@@ -241,9 +257,9 @@ export function FillOverlay({ width, height, pageW, pageH, cursor }: { width: nu
     <>
       <canvas ref={ref} className="fill-overlay" style={{ width: width, height: height }} />
       <svg className="fill-boundaries" width={width} height={height} viewBox={`0 0 ${pageW} ${pageH}`}>
-        {st.boundaries.map((b, i) => <polyline key={i} points={line(b)} fill="none" stroke="#ff4d00" strokeWidth={st.boundarySize} />)}
+        {st.boundaries.map((b, i) => <polyline key={i} points={line(b)} fill="none" stroke={st.boundaryColor} strokeWidth={st.boundarySize} />)}
         {st.draftBoundary.length > 0 && (
-          <polyline points={line(cursor ? [...st.draftBoundary, cursor] : st.draftBoundary)} fill="none" stroke="#ff4d00" strokeWidth={st.boundarySize} strokeDasharray="4 3" />
+          <polyline points={line(cursor ? [...st.draftBoundary, cursor] : st.draftBoundary)} fill="none" stroke={st.boundaryColor} strokeWidth={st.boundarySize} strokeDasharray="4 3" />
         )}
       </svg>
     </>
@@ -268,6 +284,10 @@ export function DynamicFillBar() {
         <label key={c.id}><input type="checkbox" checked={st.create[c.id]} onChange={(e) => set({ create: { ...st.create, [c.id]: e.target.checked } })} /> {c.label}</label>
       ))}
       {st.create.space && <input aria-label="Space name" value={st.spaceName} onChange={(e) => set({ spaceName: e.target.value })} style={{ width: 90 }} />}
+      <select aria-label="Tool Chest tool" title="Create the markups with a Tool Chest tool's properties" value={st.tool} onChange={(e) => set({ tool: e.target.value })}>
+        <option value="">Default properties</option>
+        {app.toolSets.flatMap((t) => t.tools.filter((x) => CREATE_KINDS.some((c) => c.id === x.type)).map((x) => <option key={x.id} value={x.id}>{t.name}: {x.name}</option>))}
+      </select>
       <button className="primary" disabled={!filled} onClick={applyFill}>Apply</button>
       <span className="sep" />
       <select aria-label="Clear Dynamic Fill" value="" onChange={(e) => { if (e.target.value) clearFill(e.target.value as 'all'); }}>
@@ -283,7 +303,18 @@ export function DynamicFillBar() {
       <select aria-label="Fill Speed" title="Fill Speed" value={st.speed} onChange={(e) => set({ speed: e.target.value as FillState['speed'] })}>
         {Object.keys(SPEEDS).map((k) => <option key={k} value={k}>Speed: {k}</option>)}
       </select>
-      <input type="color" aria-label="Fill Color" title="Fill Color" value={st.color} onChange={(e) => set({ color: e.target.value })} />
+      <span className="fill-settings-wrap">
+        <button aria-label="Dynamic Fill Settings" title="Dynamic Fill Settings (this session; defaults in Preferences > Measure)" onClick={() => set({ settingsOpen: !st.settingsOpen })}>Settings ▾</button>
+        {st.settingsOpen && (
+          <div className="fill-settings">
+            <label>Fill size <input aria-label="Fill size" type="number" min={1} max={40} value={st.fillSize} onChange={(e) => set({ fillSize: Math.max(1, +e.target.value) })} /> pt</label>
+            <label>Fill color <input type="color" aria-label="Fill Color" value={st.color} onChange={(e) => set({ color: e.target.value })} /></label>
+            <label>Boundary size <input aria-label="Boundary size" type="number" min={1} max={40} value={st.boundarySize} onChange={(e) => { set({ boundarySize: Math.max(1, +e.target.value) }); clearFill('fill'); }} /> pt</label>
+            <label>Boundary color <input type="color" aria-label="Boundary Color" value={st.boundaryColor} onChange={(e) => set({ boundaryColor: e.target.value })} /></label>
+            <label><input type="checkbox" aria-label="Momentarily hide markups" checked={st.hideMarkups} onChange={(e) => set({ hideMarkups: e.target.checked })} /> Momentarily hide markups</label>
+          </div>
+        )}
+      </span>
       <button title="Close Dynamic Fill (Esc)" onClick={() => app.setTool('select')}>✕</button>
     </div>
   );

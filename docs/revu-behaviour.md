@@ -87,8 +87,13 @@ displayed value (in the markup's own unit when set), as Revu writes it.
   dragging spreads it faster; encircling fills everything inside the loop).
 - Create: Space, Polygon, Area, Polylength, Perimeter, Volume (default
   properties or the Tool Chest tool), then Apply.
-- Clear menu: Clear All / Clear Fill / Clear Boundaries. Settings: boundary
-  and fill size/colour, fill speed, edge sensitivity.
+- Create with a Tool Chest tool: the created markups take the chosen
+  tool's properties (its type must match), else the defaults.
+- Clear menu: Clear All / Clear Fill / Clear Boundaries. Settings ▾ (this
+  session): Fill size (the cursor's radius; a bigger one crosses small
+  gaps), fill colour, boundary size and colour, Momentarily hide markups.
+  Edge sensitivity and fill speed on the toolbar. Defaults in
+  Preferences > Measure.
 - CyanTakeoff: holes larger than ~0.5% of the room (columns, shafts) become
   cutouts on Area/Volume; small pockets (room labels) are ignored.
 
