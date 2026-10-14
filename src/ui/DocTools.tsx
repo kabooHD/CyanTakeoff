@@ -2,9 +2,11 @@
 // (Shift+Alt+O), Deskew (Ctrl+Alt+D), File > Email (Ctrl+E) and Publish as
 // Compressed (Ctrl+Shift+P).
 import { useState } from 'react';
+import { pickFile } from './toolActions';
 import { FilesRow, batchHint, targets } from './filesRow';
+import { addLayerFromPage, readLayers, refId, writeLayers } from '../pdf/layers';
 import { create } from 'zustand';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, type PDFRef } from 'pdf-lib';
 import { activeDoc, serialize, useApp, type DocState } from '../model/store';
 import { parsePageRange } from '../model/measure';
 import { estimateSkew } from '../model/deskew';
@@ -114,6 +116,33 @@ function NewPdfDialog() {
       <div className="modal-actions"><span className="spacer" /><button className="primary" disabled={!files.length} onClick={() => create_(true)}>Create from {files.length || ''} Image{files.length === 1 ? '' : 's'}</button><button onClick={close}>Cancel</button></div>
     </Frame>
   );
+}
+
+// ---------- Insert Layered Pages ----------
+
+/** Document > Insert > Layered Pages: each page of a chosen PDF becomes a layer on the matching page here. */
+export async function insertLayeredPages() {
+  const s = useApp.getState();
+  const d = activeDoc();
+  if (!d) return;
+  const f = await pickFile('.pdf,application/pdf');
+  if (!f) return;
+  let src: PDFDocument;
+  try { src = await PDFDocument.load(new Uint8Array(await f.arrayBuffer()), { ignoreEncryption: true, updateMetadata: false }); }
+  catch { s.setStatus(`${f.name} could not be read as a PDF.`); return; }
+  const name = f.name.replace(/\.pdf$/i, '');
+  const n = Math.min(src.getPageCount(), d.loaded.pages.length);
+  await s.transformDoc(async (lib) => {
+    let ref: PDFRef | undefined;
+    for (let i = 0; i < n; i++) ref = await addLayerFromPage(lib, i, src, i, name, null, ref);
+    if (!ref) return;
+    const set = readLayers(lib) ?? { layers: {}, order: [], configs: [] };
+    const id = refId(ref);
+    set.layers[id] = { id, name, on: true, locked: false, print: true };
+    set.order.push({ id, kids: [] });
+    writeLayers(lib, set);
+  }, `Layered Pages: "${name}" added as a layer on ${n} page${n === 1 ? '' : 's'}`);
+  s.setPanels({ left: 'layers' });
 }
 
 // ---------- Crop Pages ----------

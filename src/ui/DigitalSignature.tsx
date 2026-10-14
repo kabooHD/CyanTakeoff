@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { useApp, type DocState } from '../model/store';
 import { certificateInfo, signPdf, verifySignatures, type SignatureInfo, type Signer } from '../pdf/sign';
 import { pickFile } from './toolActions';
+import { FilesRow, batchHint, targets } from './filesRow';
 import { readCertificates } from '../pdf/sign';
 import { saveTrust, toTrusted, trustBytes, useTrust } from '../model/trust';
 
@@ -44,6 +45,21 @@ export async function signActive(p: Pending, place: { page?: number; rect?: [num
   if (ok) useDigitalSign.setState((x) => ({ tick: x.tick + 1 }));
 }
 
+/** Batch > Sign & Seal: an invisible signature on every open document. */
+async function signAll(p: Pending, active: DocState) {
+  const app = useApp.getState();
+  let n = 0;
+  for (const d of targets(active, true)) {
+    const ok = await app.transformDoc(
+      (_lib, bytes) => signPdf(bytes, { p12: p.p12, password: p.password, reason: p.reason || undefined, location: p.location || undefined, tsa: p.tsa || undefined, certify: p.certify }),
+      `Signed by ${p.signer.name}`, undefined, undefined, d.id,
+    );
+    if (ok) n++;
+  }
+  useDigitalSign.setState((x) => ({ tick: x.tick + 1 }));
+  app.setStatus(`Sign & Seal: ${n} document${n === 1 ? '' : 's'} signed by ${p.signer.name}. Save All (Ctrl+F2) to write them.`);
+}
+
 /** The visible signature's box was dragged (page space) on `page`. */
 export function placeSignatureBox(doc: DocState, page: number, a: { x: number; y: number }, b: { x: number; y: number }) {
   const p = useDigitalSign.getState().pending;
@@ -73,6 +89,7 @@ function SignForm({ doc }: { doc: DocState }) {
   const [tsa, setTsa] = useState(() => { try { return localStorage.getItem('cyantakeoff:tsa') ?? ''; } catch { return ''; } });
   const empty = doc.loaded.fields.filter((f) => f.type === 'signature' && !f.value);
   const [where, setWhere] = useState<string>(field0 ? `field:${field0}` : empty.length ? `field:${empty[0].name}` : 'box');
+  const [all, setAll] = useState(() => batchHint.take());
   const close = () => useDigitalSign.setState({ open: false });
   const check = async () => {
     setError(''); setSigner(null);
@@ -84,6 +101,7 @@ function SignForm({ doc }: { doc: DocState }) {
     const p: Pending = { p12: file.bytes, password, reason, location, signer, tsa: tsa.trim(), certify: certify || undefined };
     try { localStorage.setItem('cyantakeoff:tsa', tsa.trim()); } catch { /* ignore */ }
     close();
+    if (all) { await signAll(p, doc); return; }
     if (where === 'box') {
       useDigitalSign.setState({ pending: p });
       useApp.getState().setTool('form-signature');
@@ -121,6 +139,8 @@ function SignForm({ doc }: { doc: DocState }) {
               <option value={3}>Certified: form filling, signing and markups allowed</option>
             </select>
           </div>
+          <FilesRow all={all} setAll={setAll} />
+          {all && <p className="muted small">Sign &amp; Seal: every open document gets an invisible signature (place a seal stamp first with Batch &gt; Apply Stamp).</p>}
           <div className="form-row"><span>Appearance</span>
             <select aria-label="Signature placement" value={where} onChange={(e) => setWhere(e.target.value)}>
               {empty.map((f) => <option key={f.name} value={`field:${f.name}`}>In field "{f.name}"</option>)}

@@ -622,6 +622,19 @@ Print Spaces.
 - Search > Replace Checked: replaces the checked results in the drawing's
   text (as Edit Text does).
 
+## Capture, Sign & Seal, Layered Pages
+- Capture: a markup can carry photos (Properties > Capture: Add Photo or
+  the camera; thumbnails, remove). The Markups List has a Capture column
+  (count); double-click previews the photos (arrow keys page through
+  them). Photos are shrunk to 1600 px and kept inside the PDF with the
+  markup (ours: in CTData), so they travel with the file.
+- Batch > Sign & Seal: one digital ID signs every open document with an
+  invisible signature (the seal is placed first with Batch > Apply Stamp).
+  Save All writes the signed files.
+- Document > Insert > Layered Pages: pick a PDF; its page N becomes a
+  layer named after the file on page N of the open document (as Add Layer
+  from Page does, one page at a time).
+
 ## Signature trust and timestamps
 - Trusted Certificates (Signatures panel): import .cer/.crt/.pem files. A
   signer is trusted when its certificate is in the list or chains up to

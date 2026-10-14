@@ -9,6 +9,7 @@ import { ManageColumns } from './ManageColumns';
 import { Icon } from './icons';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { markupMenuItems } from './markupMenu';
+import { openCapturePreview } from './Capture';
 
 /** Saved filter sets (Revu's Saved Filters), kept in the browser. */
 interface SavedFilter { name: string; filters: Record<string, string>; search: string }
@@ -243,7 +244,8 @@ export function MarkupsList() {
                 }}>
                 {columns.map((c) => (
                   <td key={c.key} className={c.numeric ? 'num' : ''}>
-                    {c.key === 'color' ? <span className="color-chip" style={{ background: m.style.color }} />
+                    {c.key === 'capture' && m.capture?.length ? <button className="capture-cell" title="Double-click to preview" onDoubleClick={(e) => { e.stopPropagation(); openCapturePreview(m.capture!); }}>📷 {m.capture.length}</button>
+                      : c.key === 'color' ? <span className="color-chip" style={{ background: m.style.color }} />
                       : c.key === 'checkmark' ? <input type="checkbox" aria-label="Checkmark" checked={!!m.checked} onClick={(e) => e.stopPropagation()}
                         onChange={(e) => s.updateMarkups([m.id], () => ({ checked: e.target.checked || undefined }))} />
                       : c.key === 'lock' ? <input type="checkbox" aria-label="Lock" checked={!!m.locked} onClick={(e) => e.stopPropagation()}

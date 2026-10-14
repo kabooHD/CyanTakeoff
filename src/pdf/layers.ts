@@ -257,10 +257,11 @@ export function stripLayerContent(doc: PDFDocument, ids: Set<string>, deleteCont
  * page's PDF space onto the target page's (alignment points), if given.
  */
 export async function addLayerFromPage(doc: PDFDocument, pageIdx: number, src: PDFDocument, srcPage: number, name: string,
-  m?: [number, number, number, number, number, number] | null): Promise<PDFRef> {
+  m?: [number, number, number, number, number, number] | null, reuse?: PDFRef): Promise<PDFRef> {
   const ctx = doc.context;
   const [emb] = await doc.embedPdf(src, [srcPage]);
-  const ocg = ctx.register(ctx.obj({ Type: 'OCG', Name: encode(name) }));
+  // `reuse`: an existing layer (Layered Pages puts every page of a file on one layer).
+  const ocg = reuse ?? ctx.register(ctx.obj({ Type: 'OCG', Name: encode(name) }));
   const page = doc.getPage(pageIdx);
   (page.node as unknown as { autoNormalizeCTM: boolean }).autoNormalizeCTM = false;
   const res = page.node.Resources() ?? (ctx.obj({}) as PDFDict);

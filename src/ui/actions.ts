@@ -98,6 +98,7 @@ export const SUMMARY_COLUMNS: SummaryColumn[] = [
   { key: 'depth', label: 'Depth', value: (m) => m.depth ?? '', numeric: true },
   { key: 'slope', label: 'Slope', value: (m) => (m.slope ? `${m.slope.value}${m.slope.unit === 'pitch' ? '/12' : m.slope.unit === 'degree' ? '°' : '%'}` : '') },
   { key: 'units', label: 'Units', value: (m) => unitsOf(m) },
+  { key: 'capture', label: 'Capture', value: (m) => (m.capture?.length ? `📷 ${m.capture.length}` : '') },
   { key: 'x', label: 'X', value: (m, d) => place(m, d).x, numeric: true, noTotal: true },
   { key: 'y', label: 'Y', value: (m, d) => place(m, d).y, numeric: true, noTotal: true },
   { key: 'xCenter', label: 'X Center', value: (m, d) => place(m, d).xCenter, numeric: true, noTotal: true },

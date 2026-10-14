@@ -636,6 +636,20 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.getByRole('dialog', { name: 'Insert Blank Page' }).getByRole('button', { name: 'OK' }).click();
   await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n + 1})`), n0);
   assert(await pagesOf() === n0 + 1, 'Insert Blank Page adds a page');
+  // Document > Insert Layered Pages: each page of the chosen PDF becomes a layer here.
+  {
+    await page.locator('.menubar-item > button', { hasText: /^Document$/ }).click();
+    const [lfc] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('menuitem', { name: 'Insert Layered Pages…' }).click()]);
+    await lfc.setFiles('tests/fixtures/form.pdf');
+    await page.getByText(/Layered Pages: "form" added as a layer on \d+ page/).waitFor({ timeout: 20000 });
+    const lpanel = page.getByRole('tree', { name: 'Layers' });
+    await lpanel.getByRole('treeitem', { name: 'Layer form' }).waitFor({ timeout: 10000 });
+    assert(true, 'Insert Layered Pages adds the file as a layer');
+    await page.keyboard.press('Alt+Y');
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(500);
+    assert(await pagesOf() === n0 + 1, 'undo removes the layered pages, the blank page stays');
+  }
   const markupsBefore = await page.locator('.ml-table tbody tr:not(.reply-row)').count();
   assert(markupsBefore > 0, 'markups kept through the page operation');
   await page.keyboard.press('Control+Shift+D');
@@ -1470,6 +1484,36 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.locator('select[aria-label="Hatch"]').selectOption('ansi31');
 }
 
+// Capture: a photo attached to a markup (Properties > Capture), shown in the Capture column, previewed on double-click.
+{
+  await page.locator('.ml-table tbody tr').first().click();
+  await page.waitForTimeout(300);
+  if (!(await page.locator('.props textarea').count())) await page.keyboard.press('Alt+P');
+  await page.locator('[aria-label="Add photo"]').setInputFiles(`${OUT}/01-start.png`);
+  await page.locator('.capture-thumb img').waitFor({ timeout: 10000 });
+  assert(await page.locator('.capture-thumb').count() === 1, 'Add Photo puts the picture in the markup\'s Capture section');
+  await page.getByRole('button', { name: 'Columns ▾' }).click();
+  await page.locator('.ml-columns-menu label', { hasText: 'Capture' }).locator('input').check();
+  await page.mouse.move(5, 5);
+  const cell = page.locator('.ml-table tbody tr').first().locator('.capture-cell');
+  assert((await cell.innerText()).includes('📷 1'), 'the Capture column counts the photos');
+  await cell.dblclick();
+  const cp = page.locator('[role=dialog][aria-label="Capture"]');
+  await cp.waitFor();
+  assert(await cp.locator('img').count() === 1, 'double-clicking the Capture cell previews the photo');
+  await page.screenshot({ path: `${OUT}/capture.png` });
+  await page.keyboard.press('Escape');
+  await cp.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: 'Remove 01-start.png' }).click();
+  await page.waitForTimeout(200);
+  assert(await page.locator('.capture-thumb').count() === 0, 'a photo can be removed again');
+  await page.evaluate(() => document.activeElement?.blur?.());
+  await page.getByRole('button', { name: 'Columns ▾' }).click();
+  if (!(await page.locator('.ml-columns-menu').count())) await page.getByRole('button', { name: 'Columns ▾' }).click();
+  await page.locator('.ml-columns-menu label', { hasText: 'Capture' }).locator('input').uncheck();
+  await page.mouse.move(5, 5);
+}
+
 // Spell check (F7) through markup comments; Markup Spelling Mistakes on the PDF text.
 {
   // Give a markup a misspelt comment.
@@ -1911,6 +1955,31 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.waitForTimeout(400);
     await page.keyboard.press('Control+z');
     await page.waitForTimeout(300);
+  }
+  // Batch: Sign & Seal puts an invisible signature on every open document.
+  if (await page.locator('.doc-tab').count() >= 2) {
+    const tabs = await page.locator('.doc-tab').count();
+    const activeTab = await page.locator('.doc-tab.active').innerText();
+    await menu('Batch', 'Sign & Seal…');
+    const sg = page.getByRole('dialog', { name: 'Sign Document' });
+    const [cfc] = await Promise.all([page.waitForEvent('filechooser'), sg.getByRole('button', { name: 'Choose .pfx / .p12…' }).click()]);
+    await cfc.setFiles('tests/fixtures/test-cert.p12');
+    await sg.getByLabel('Certificate password').fill('test');
+    await sg.getByRole('button', { name: 'Open' }).click();
+    await sg.getByText('Signing as').waitFor();
+    assert(await sg.locator('[aria-label="Files"]').inputValue() === 'all', 'the Batch menu opens Sign Document for all open documents');
+    await sg.getByRole('button', { name: 'Sign', exact: true }).click();
+    await page.getByText(new RegExp(`Sign & Seal: ${tabs} documents signed by Test Signer`)).waitFor({ timeout: 60000 });
+    assert(true, 'Sign & Seal signs every open document');
+    // Undo the signature on each document so later checks see the files as before.
+    for (let i = 0; i < tabs; i++) {
+      await page.locator('.doc-tab').nth(i).click();
+      await page.waitForTimeout(300);
+      await page.keyboard.press('Control+z');
+      await page.waitForTimeout(300);
+    }
+    await page.locator('.doc-tab', { hasText: activeTab }).first().click();
+    await page.waitForTimeout(400);
   }
   // Batch: Header & Footer over all open documents.
   if (await page.locator('.doc-tab').count() >= 2) {

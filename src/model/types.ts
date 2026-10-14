@@ -199,6 +199,8 @@ export interface Markup {
   seq?: { id: string; run: number; n: number };
   /** How a measurement shows: caption, segment values, centroid, own units. */
   display?: import('./measureDisplay').MeasureDisplay;
+  /** Capture (Revu): photos embedded in the markup, as JPEG data URLs. */
+  capture?: { name: string; data: string }[];
   /** The Tool Chest tool this markup was made with (Update Tool Set Item on Reuse); not saved. */
   toolId?: string;
   /** Markups List Checkmark column. */

@@ -527,3 +527,11 @@ button.active { background: #d6e4fa; }
 .measure-tools { display: flex; flex-wrap: wrap; gap: 2px; padding: 2px 6px; }
 .measure-tools button { padding: 3px; }
 .measure-tools button.on { background: var(--accent-soft); border-color: var(--accent); }
+
+/* Capture photos in Properties and the Markups List */
+.capture-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 8px; align-items: center; }
+.capture-thumb { position: relative; display: inline-block; }
+.capture-thumb img { width: 56px; height: 56px; object-fit: cover; border: 1px solid var(--border); border-radius: 3px; }
+.capture-thumb .tool-remove { position: absolute; top: -4px; right: -4px; }
+.capture-cell { background: none; border: none; padding: 0; cursor: zoom-in; }
+label.button, a.button { display: inline-block; padding: 2px 8px; border: 1px solid var(--border); border-radius: 3px; background: var(--chrome-2); cursor: pointer; color: inherit; text-decoration: none; }

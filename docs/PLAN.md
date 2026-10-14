@@ -220,6 +220,10 @@ filling, image signatures, redaction and OCR.
   <appearance>)
 - [x] Measurements panel menu: Show Measurement Tools, Snap Orthogonal,
   Snap to Content, Highlight Viewports
+- [x] Capture: photos attached to a markup (Properties > Capture, Capture
+  column, preview), kept in CTData
+- [x] Batch > Sign & Seal (invisible signature on every open document);
+  Document > Insert Layered Pages (a PDF's pages become layers here)
 - [x] Properties: Layout section (X, Y, Width, Height, editable) and Set
   as Default
 - [x] Measurement display: Show Caption, Show Segment Values (aligned),

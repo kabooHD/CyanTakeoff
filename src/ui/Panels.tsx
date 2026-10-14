@@ -16,6 +16,7 @@ import { scaleAt, areaLabel, volumeLabel } from '../model/measure';
 import { LENGTH_UNITS, SEGMENT_TYPES, displayText } from '../model/measureDisplay';
 import { placeColumns } from '../model/listColumns';
 import { layoutOf, withLayout } from '../model/layoutProps';
+import { addCapture, openCapturePreview } from './Capture';
 import { usePageSetup } from './PageSetup';
 import { useApp, useActiveDoc, type DocState } from '../model/store';
 import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, formatNumber, measure, precisionOf, unitLabel, withPrecision } from '../model/measure';
@@ -343,6 +344,20 @@ function Properties() {
           </>
         );
       })()}
+      {sel.length === 1 && (
+        <>
+          <div className="prop-section">Capture</div>
+          <div className="capture-list">
+            {(m.capture ?? []).map((c, i) => (
+              <span key={i} className="capture-thumb">
+                <img src={c.data} alt={c.name} title={`${c.name} (double-click to preview)`} onDoubleClick={() => openCapturePreview(m.capture!, i)} />
+                <button className="tool-remove" title="Remove photo" aria-label={`Remove ${c.name}`} onClick={() => upd((x) => ({ capture: x.capture?.filter((_, k) => k !== i) }))}>×</button>
+              </span>
+            ))}
+            <label className="button">Add Photo…<input type="file" accept="image/*" aria-label="Add photo" style={{ display: 'none' }} onChange={async (e) => { const f = e.target.files?.[0]; if (f && doc) { try { await addCapture(doc, m, f); } catch { s.setStatus('That image could not be read.'); } } e.target.value = ''; }} /></label>
+          </div>
+        </>
+      )}
       <div className="prop-actions">
         <button onClick={() => s.addToToolChest(m)}>Add to My Tools</button>
         <button title="Make this markup's appearance the tool's default" onClick={() => { s.setToolDefault(m.type, m.style); s.setStatus(`${toolById(m.type).name}: this appearance is now the default`); }}>Set as Default</button>

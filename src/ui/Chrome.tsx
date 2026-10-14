@@ -41,7 +41,7 @@ import { useDocProps } from './DocProperties';
 import { useCamera } from './Camera';
 import { useStampManager } from './Stamps';
 import { useManageStatus } from './StatusModels';
-import { emailDocument, publishCompressed, useDocTools } from './DocTools';
+import { emailDocument, insertLayeredPages, publishCompressed, useDocTools } from './DocTools';
 import { copyPageToSnapshot, copyText, selectAllText } from './textCommands';
 
 // ---------------- Menu bar ----------------
@@ -166,6 +166,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { sep: true },
       { label: 'Insert Pages…', shortcut: 'Ctrl+Shift+I', disabled: noDoc, action: () => openPagesDialog('insert') },
       { label: 'Insert Blank Page…', shortcut: 'Ctrl+Shift+N', disabled: noDoc, action: () => openPagesDialog('insert-blank') },
+      { label: 'Insert Layered Pages…', disabled: noDoc, action: insertLayeredPages },
       { label: 'Delete Pages…', shortcut: 'Ctrl+Shift+D', disabled: noDoc, action: () => openPagesDialog('delete') },
       { label: 'Extract Pages…', shortcut: 'Ctrl+Shift+X', disabled: noDoc, action: () => openPagesDialog('extract') },
       { label: 'Replace Pages…', shortcut: 'Ctrl+Shift+Y', disabled: noDoc, action: () => openPagesDialog('replace') },
@@ -244,6 +245,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
     Batch: [
       { label: 'Batch Link…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'batch-link' }) },
       { label: 'Apply Stamp…', disabled: noDoc, action: () => { batchHint.set(); useApplyStamp.setState({ open: true }); } },
+      { label: 'Sign & Seal…', disabled: noDoc, action: () => { batchHint.set(); openSignDialog(); } },
       { label: 'Rotate Pages…', disabled: noDoc, action: () => { batchHint.set(); openPagesDialog('rotate'); } },
       { label: 'Crop Pages…', disabled: noDoc, action: () => { batchHint.set(); useDocTools.setState({ open: 'crop' }); } },
       { label: 'Page Setup…', disabled: noDoc, action: () => { batchHint.set(); usePageSetup.setState({ open: 'setup' }); } },
