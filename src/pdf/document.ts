@@ -1,4 +1,5 @@
 // The legacy build includes polyfills, so older (e.g. managed corporate) browsers work.
+import { readPlaces, type Place } from './places';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { PDFDocument } from 'pdf-lib';
@@ -45,6 +46,8 @@ export interface LoadedDoc {
   pageLayers: string[][];
   /** Bookmarks (PDF outline). */
   bookmarks: Bookmark[];
+  /** Named destinations (Revu Places). */
+  places: Place[];
 }
 
 export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
@@ -126,6 +129,7 @@ export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
     layers: lib ? readLayers(lib) : null,
     pageLayers: lib ? layersOnPages(lib) : [],
     bookmarks: lib ? readBookmarks(lib) : [],
+    places: lib ? readPlaces(lib) : [],
   };
 }
 

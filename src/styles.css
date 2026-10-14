@@ -471,3 +471,15 @@ button.active { background: #d6e4fa; }
 .split-view > .split-pane { display: flex; min-width: 0; min-height: 0; overflow: hidden; }
 .split-view > .split-pane > .viewer-wrap { flex: 1; }
 .text-sel { fill: #1a73e8; fill-opacity: 0.25; }
+.links-head { font-weight: 600; margin: 8px 0 4px; }
+.links-head:first-child { margin-top: 0; }
+.links-search { width: 100%; margin: 4px 0; box-sizing: border-box; }
+.link-row .link-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-row .link-go { border: 0; background: none; padding: 0 2px; cursor: pointer; opacity: 0; }
+.link-row:hover .link-go { opacity: 1; }
+.recent-row .recent-name { flex: 1; min-width: 0; text-align: left; border: 0; background: none; padding: 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
+.recent-row .recent-name:hover { text-decoration: underline; }
+.recent-row .recent-pin, .recent-row .recent-x { border: 0; background: none; padding: 0 2px; cursor: pointer; opacity: 0; }
+.recent-row .recent-pin.on { opacity: 1; }
+.recent-row:hover .recent-pin, .recent-row:hover .recent-x { opacity: 0.8; }
+.start-recent { margin-top: 14px; text-align: left; }

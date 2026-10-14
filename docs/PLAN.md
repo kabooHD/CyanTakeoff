@@ -222,6 +222,12 @@ filling, image signatures, redaction and OCR.
   right-click to highlight/strike/underline/redact or search the text;
   Snapshot now includes markups, Snapshot Content (Shift+G) does not; Copy
   Page to Snapshot (Ctrl+Alt+C)
+- [x] Links panel (Alt+N): Places (PDF named destinations: add from a
+  page, the current view or a rectangle; edit, delete, search, hyperlink to
+  a Place) and every hyperlink (search, Ctrl multi-select, Edit Action,
+  delete); links to Places round-trip. File Access (Alt+A): recent files
+  in the browser (pin, remove, reopen in place with file access; dropped
+  files keep their handle in Chrome/Edge), also on the start page
 
 ### Next 2: public test build in local mode (days)
 - Host on a VPS (static site + HTTPS), with a feedback link

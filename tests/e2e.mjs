@@ -1903,6 +1903,47 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Control+z');
 }
 
+// Links panel (Alt+N): add a Place on sheet 2, hyperlink to it from sheet 1,
+// follow it; Edit Action shows the Place. File Access (Alt+A) lists recent files.
+{
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Control+ArrowRight');
+  await page.waitForTimeout(400);
+  await page.keyboard.press('Alt+n');
+  await page.waitForTimeout(500);
+  await page.getByRole('button', { name: 'Add Place' }).click();
+  const dlg = page.locator('[role=dialog][aria-label="Place"]');
+  await dlg.locator('[aria-label="Place name"]').fill('Door Detail');
+  await dlg.getByRole('button', { name: 'OK' }).click();
+  const row = page.locator('.links-panel .link-row', { hasText: 'Door Detail' });
+  await row.waitFor({ timeout: 15000 });
+  await page.keyboard.press('Home');
+  await page.waitForTimeout(400);
+  await row.hover();
+  await row.locator('.link-go').click();
+  const a = await toScreen(30, 30), b = await toScreen(40, 35);
+  await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 4 }); await page.mouse.up();
+  const linkRow = page.locator('.links-panel .link-row', { hasText: 'Place: Door Detail' });
+  await linkRow.waitFor();
+  assert(await page.locator('[role=dialog][aria-label="Hyperlink"]').count() === 0, 'a hyperlink to a Place needs no dialog');
+  await page.mouse.dblclick((a.x + b.x) / 2, (a.y + b.y) / 2);
+  await page.waitForFunction(() => /\(2 of/.test(document.querySelector('.sb-nav')?.textContent ?? ''));
+  assert(true, 'the hyperlink jumps to the Place on sheet 2');
+  await page.keyboard.press('Home');
+  await linkRow.click();
+  await page.getByRole('button', { name: 'Edit Action' }).click();
+  const act = page.locator('[role=dialog][aria-label="Action"]');
+  await act.waitFor();
+  assert(await act.locator('[aria-label="Place"]').inputValue() === 'Door Detail', 'Edit Action shows the link\'s Place');
+  await page.screenshot({ path: `${OUT}/links-panel.png` });
+  await act.getByRole('button', { name: 'Cancel' }).click();
+  await page.keyboard.press('Alt+a');
+  await page.locator('.recent-row', { hasText: 'Sample Floor Plan.pdf' }).waitFor();
+  assert(await page.locator('.recent-row').count() >= 2, 'File Access lists the recently opened files');
+  await page.keyboard.press('Alt+a');
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],

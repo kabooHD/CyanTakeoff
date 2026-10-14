@@ -417,6 +417,19 @@ pages, margins options, Dim Filtered Markups, Print Spaces.
   copies the whole page with markups. All paste as an image markup and go
   on the system clipboard as PNG.
 
+## Links panel (Alt+N) and File Access (Alt+A)
+- Places are named anchors (PDF named destinations). Add Place: a name and
+  a location: a page, the current view (page and zoom) or a snapshot
+  rectangle (Get Rectangle). Clicking a Place jumps to it; Ctrl+click
+  multi-selects. Links name the Place, so moving a Place keeps links
+  working; Revu breaks links when a Place is renamed, we re-point them.
+  The link icon on a Place row draws a hyperlink to it without a dialog.
+- Hyperlinks section: every link with its action; click to select and
+  jump, Ctrl+click for several, Edit Action changes all selected, Search
+  filters. PDFs from elsewhere show their named destinations as Places.
+- File Access lists recent files (kept in this browser); pinned files stay
+  on top. A file opened with file access reopens and saves in place.
+
 ## Status bar
 - Left: help for the current tool and the toggles Show Grid, Snap to
   Grid, Snap to Content, Snap to Markup (points and guidelines from nearby

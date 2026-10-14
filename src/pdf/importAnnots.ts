@@ -14,7 +14,7 @@
 //   /Name; viewports (regions with their own scale) carry a /Name and BBox.
 import { CURVABLE, closedType, fromPdfPath } from '../model/curves';
 import { refId } from './layers';
-import { PDFArray, PDFDict, PDFName, PDFNumber, PDFRawStream, PDFRef, decodePDFRawStream, type PDFDocument } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFHexString, PDFName, PDFString, PDFNumber, PDFRawStream, PDFRef, decodePDFRawStream, type PDFDocument } from 'pdf-lib';
 import type { CustomColumn, Markup, MarkupStatus, MarkupStyle, MarkupType, Pt, Reply, Scale } from '../model/types';
 import { DEFAULT_STYLES, toolById } from '../tools/tools';
 import { MEASURE_TYPES } from '../model/measure';
@@ -258,7 +258,15 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
         extra = { link: { file, page: typeof (pg as { asNumber?: () => number })?.asNumber === 'function' ? (pg as unknown as { asNumber: () => number }).asNumber() : 0 } };
         break;
       }
-      const dest = lookup(doc, dict.get(N('Dest')) ?? (a && getName(doc, a, 'S') === 'GoTo' ? a.get(N('D')) : undefined));
+      const rawDest = dict.get(N('Dest')) ?? (a && getName(doc, a, 'S') === 'GoTo' ? a.get(N('D')) : undefined);
+      const dest = lookup(doc, rawDest);
+      // A jump to a Place (named destination) keeps the name, so the link follows the Place if it moves.
+      if (dest instanceof PDFName || dest instanceof PDFString || dest instanceof PDFHexString) {
+        pts = rectPts(rect);
+        type = 'link';
+        extra = { link: { dest: dest.decodeText() } };
+        break;
+      }
       const pageRef = dest instanceof PDFArray ? dest.get(0) : undefined;
       const target = pageRef instanceof PDFRef ? doc.getPages().findIndex((pg) => pg.ref === pageRef) : -1;
       if (!uri && target < 0) return null; // named destinations, JavaScript, etc. stay as-is

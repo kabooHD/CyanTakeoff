@@ -33,8 +33,8 @@ export async function openFile() {
   input.click();
 }
 
-export async function openFileObject(f: File) {
-  await useApp.getState().openBytes(new Uint8Array(await f.arrayBuffer()), f.name);
+export async function openFileObject(f: File, handle?: FileSystemFileHandle) {
+  await useApp.getState().openBytes(new Uint8Array(await f.arrayBuffer()), f.name, handle);
 }
 
 export async function openSample() {

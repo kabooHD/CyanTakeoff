@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { rememberFile } from './recent';
 import { PDFDocument } from 'pdf-lib';
 import type { LoadedDoc } from '../pdf/document';
 import { openPdf } from '../pdf/document';
@@ -21,7 +22,7 @@ import type {
   CustomColumn, Markup, MarkupStyle, MarkupType, Pt, Scale, Space, ToolId, ToolPreset, ToolSet, Toggles, Viewport,
 } from './types';
 
-export type LeftPanel = 'thumbnails' | 'bookmarks' | 'spaces' | 'search' | 'sets' | 'signatures' | 'layers' | null;
+export type LeftPanel = 'thumbnails' | 'bookmarks' | 'spaces' | 'search' | 'sets' | 'signatures' | 'layers' | 'links' | 'files' | null;
 export type RightPanel = 'properties' | 'toolchest' | 'measurements' | null;
 
 /** Page scales and viewports, for undoing scale changes. */
@@ -162,7 +163,8 @@ interface AppState {
   /** Stamp placed by the Stamp tool. */
   stampName: string;
   /** Hyperlink dialog for a new (or existing, by id) link rectangle. */
-  linkDialog: { page: number; rect: [Pt, Pt]; id?: string } | null;
+  /** Hyperlink dialog: a new link over `rect`, or the action of existing links (`ids`); `place` preselects a Place. */
+  linkDialog: { page: number; rect: [Pt, Pt]; ids?: string[]; place?: string } | null;
   /** Shift+Alt+U picks the radius tool used last (Revu). */
   radiusTool: 'radius' | 'radius-3pt';
   /** Viewport highlighted from the Measurements panel. */
@@ -189,6 +191,8 @@ interface AppState {
   splitRatio: number;
   /** Window > Presentation (Ctrl+Enter). */
   presentation: boolean;
+  /** The next hyperlink drawn jumps to this Place (Links panel > hyperlink to a Place). */
+  linkPlace: string | null;
   /** Text picked with Select Text (Shift+T) or Select All Text (Ctrl+Shift+A). */
   textSel: { docId: string; page: number; rects: [Pt, Pt][]; text: string } | null;
   activePane: 0 | 1;
@@ -479,6 +483,7 @@ export const useApp = create<AppState>((set, get) => {
           security, securityChange: null,
         };
         const why = security && loaded.readOnly ? 'the file\'s permissions do not allow markups' : 'file could not be parsed for editing';
+        rememberFile(name, bytes.length, handle).catch(() => {});
         set((s) => ({ docs: [...s.docs, doc], activeId: doc.id, status: loaded.readOnly ? `${name} opened read-only (${why})` : `Opened ${name}${security ? ' (password protected)' : ''}` }));
       } catch (e) {
         console.error(e);
@@ -528,6 +533,7 @@ export const useApp = create<AppState>((set, get) => {
     split: null,
     splitRatio: 0.5,
     presentation: false,
+    linkPlace: null,
     textSel: null,
     activePane: 0,
     viewMode: 'single',

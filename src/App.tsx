@@ -38,6 +38,8 @@ import { SignatureDialog } from './ui/Signature';
 import { runApplyRedactions } from './ui/redactUi';
 import { DocPropertiesDialog, useDocProps } from './ui/DocProperties';
 import { Presentation } from './ui/Presentation';
+import { PlaceDialog } from './ui/LinksPanel';
+import { RecentList } from './ui/FileAccess';
 import { copyPageToSnapshot, copyText, selectAllText } from './ui/textCommands';
 import { autosizeTextBoxes, balanceSplit, refreshDocument, removeSelectedFromGroup, saveAll, toggleFullScreen } from './ui/quickCommands';
 
@@ -71,7 +73,7 @@ export function App() {
       // Revu 20/21 default shortcuts (support.bluebeam.com, "Keyboard shortcuts
       // and mouse navigation"). Browser-reserved keys (Ctrl+F4, Ctrl+Tab, Ctrl+N,
       // Ctrl+T) cannot be intercepted on the web; Ctrl+W/PgUp/PgDn are kept as extras.
-      const left = (p: 'thumbnails' | 'bookmarks' | 'spaces' | 'search' | 'sets' | 'signatures' | 'layers') => run(() => s.setPanels({ left: s.left === p ? null : p }));
+      const left = (p: 'thumbnails' | 'bookmarks' | 'spaces' | 'search' | 'sets' | 'signatures' | 'layers' | 'links' | 'files') => run(() => s.setPanels({ left: s.left === p ? null : p }));
       const right = (p: 'properties' | 'toolchest' | 'measurements') => run(() => s.setPanels({ right: s.right === p ? null : p }));
       switch (combo) {
         // File
@@ -159,6 +161,8 @@ export function App() {
         case 'Alt+B': return left('bookmarks');
         case 'Alt+S': return left('spaces');
         case 'Alt+Y': return left('layers');
+        case 'Alt+N': return left('links');
+        case 'Alt+A': return left('files');
         case 'Alt+1': return left('search');
         case 'Alt+2': return left('sets');
         case 'Alt+4': return left('signatures');
@@ -217,7 +221,16 @@ export function App() {
       onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false); }}
       onDrop={async (e) => {
         e.preventDefault(); setDragOver(false);
-        for (const f of Array.from(e.dataTransfer.files)) if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') await openFileObject(f);
+        // Chrome and Edge give dropped files a handle too, so they save in place and reopen from File Access.
+        const items = Array.from(e.dataTransfer.items).filter((it) => it.kind === 'file');
+        const handles = items.map((it) => (it as DataTransferItem & { getAsFileSystemHandle?: () => Promise<FileSystemHandle | null> }).getAsFileSystemHandle?.().catch(() => null));
+        const files = Array.from(e.dataTransfer.files);
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i];
+          if (!(/\.pdf$/i.test(f.name) || f.type === 'application/pdf')) continue;
+          const h = await handles[i];
+          await openFileObject(f, h && h.kind === 'file' ? h as FileSystemFileHandle : undefined);
+        }
       }}>
       {busy && <div className="busy-overlay" aria-busy="true" onPointerDownCapture={(e) => { e.preventDefault(); e.stopPropagation(); }} />}
       <MenuBar onShortcuts={() => setDialog('shortcuts')} onAbout={() => setDialog('about')} />
@@ -270,6 +283,7 @@ export function App() {
       <LayerDialogs />
       <DocPropertiesDialog />
       <Presentation />
+      <PlaceDialog />
       {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
       {dialog === 'about' && <AboutDialog onClose={() => setDialog(null)} />}
     </div>
@@ -307,6 +321,7 @@ function StartPage() {
           <button onClick={openSample}>Open sample drawing</button>
         </div>
         <p className="muted small">or drag and drop PDF files anywhere</p>
+        <div className="start-recent"><div className="links-head">Recent Files</div><RecentList limit={8} /></div>
       </div>
     </div>
   );

@@ -29,7 +29,7 @@ export const APP_COMMANDS: Command[] = [
   c('Document', 'Document Properties', 'Ctrl+D'), c('Document', 'Add Bookmark', 'Ctrl+B'), c('Document', 'Security', 'Ctrl+L'), c('Document', 'Insert Pages', 'Ctrl+Shift+I'), c('Document', 'Insert Blank Page', 'Ctrl+Shift+N'), c('Document', 'Delete Pages', 'Ctrl+Shift+D'),
   c('Document', 'Extract Pages', 'Ctrl+Shift+X'), c('Document', 'Replace Pages', 'Ctrl+Shift+Y'), c('Document', 'Rotate Pages', 'Ctrl+Shift+R'),
   c('Document', 'Apply Redactions', 'Shift+A'), c('Document', 'OCR', 'Ctrl+Shift+O'), c('Document', 'Rotate Clockwise', 'Shift+Alt++'), c('Document', 'Rotate Counterclockwise', 'Shift+Alt+-'), c('Document', 'Flatten', 'Ctrl+Shift+M'),
-  c('Window', 'Markups', 'Alt+L'), c('Window', 'Thumbnails', 'Alt+T'), c('Window', 'Bookmarks', 'Alt+B'), c('Window', 'Spaces', 'Alt+S'), c('Window', 'Layers', 'Alt+Y'),
+  c('Window', 'Markups', 'Alt+L'), c('Window', 'Thumbnails', 'Alt+T'), c('Window', 'Bookmarks', 'Alt+B'), c('Window', 'Spaces', 'Alt+S'), c('Window', 'Layers', 'Alt+Y'), c('Window', 'Links', 'Alt+N'), c('Window', 'File Access', 'Alt+A'),
   c('Window', 'Search', 'Alt+1'), c('Window', 'Sets', 'Alt+2'), c('Window', 'Signatures', 'Alt+4'), c('Window', 'Properties', 'Alt+P'), c('Window', 'Tool Chest', 'Alt+X'),
   c('Window', 'Measurements', 'Alt+U'), c('Window', 'Hide Panel', 'Shift+F4'),
   c('Window', 'Full Screen', 'F11'), c('Window', 'Presentation', 'Ctrl+Enter'), c('Window', 'Navigation Bar', 'F4'), c('Window', 'Balance', 'Shift+F12'),

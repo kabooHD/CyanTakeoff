@@ -257,30 +257,47 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** Revu's Hyperlink dialog: a web address or a page in this document. */
+/**
+ * Revu's Hyperlink / Action dialog: open a web address, jump to a page, or
+ * jump to a Place. With `ids` it edits the action of existing links (Links
+ * panel > Edit Action, several at once).
+ */
 export function LinkDialog() {
-  const s = useApp();
+  const dlg = useApp((s) => s.linkDialog);
   const doc = useActiveDoc();
-  const dlg = s.linkDialog;
-  const [kind, setKind] = useState<'uri' | 'page'>('uri');
-  const [uri, setUri] = useState('https://');
-  const [pageNo, setPageNo] = useState('1');
   if (!dlg || !doc) return null;
+  return <LinkForm key={JSON.stringify(dlg)} />;
+}
+
+function LinkForm() {
+  const s = useApp();
+  const doc = useActiveDoc()!;
+  const dlg = s.linkDialog!;
+  const first = dlg.ids?.length ? doc.markups.find((m) => m.id === dlg.ids![0])?.link : dlg.place ? { dest: dlg.place } : undefined;
+  const places = doc.loaded.places;
+  const [kind, setKind] = useState<'uri' | 'page' | 'place' | 'file'>(first?.dest ? 'place' : first?.file ? 'file' : first?.page !== undefined ? 'page' : 'uri');
+  const [uri, setUri] = useState(first?.uri ?? 'https://');
+  const [pageNo, setPageNo] = useState(String((first?.page ?? 0) + 1));
+  const [place, setPlace] = useState(first?.dest ?? places[0]?.name ?? '');
   const close = () => useApp.setState({ linkDialog: null });
   const n = doc.loaded.pages.length;
   const target = kind === 'uri' ? (/^[a-z]+:\/\/./i.test(uri) || /^mailto:/i.test(uri) ? { uri } : null)
+    : kind === 'place' ? (place ? { dest: place } : null)
+    : kind === 'file' ? first ?? null
     : Number(pageNo) >= 1 && Number(pageNo) <= n ? { page: Number(pageNo) - 1 } : null;
+  const comment = (t: NonNullable<typeof target>) => t.uri ?? (t.dest ? `Place: ${t.dest}` : t.file ? `${t.file}: page ${(t.page ?? 0) + 1}` : `Page ${(t.page ?? 0) + 1}`);
   const apply = () => {
     if (!target) return;
-    const m = s.addMarkup({
-      type: 'link', page: dlg.page, points: dlg.rect, style: s.toolDefaults.link, subject: 'Hyperlink', link: target,
-      comment: target.uri ?? `Page ${(target.page ?? 0) + 1}`,
-    });
-    s.select([m.id]);
+    if (dlg.ids?.length) {
+      s.updateMarkups(dlg.ids, () => ({ link: target, comment: comment(target) }));
+    } else {
+      const m = s.addMarkup({ type: 'link', page: dlg.page, points: dlg.rect, style: s.toolDefaults.link, subject: 'Hyperlink', link: target, comment: comment(target) });
+      s.select([m.id]);
+    }
     close();
   };
   return (
-    <Modal title="Hyperlink" onClose={close}>
+    <Modal title={dlg.ids?.length ? `Action${dlg.ids.length > 1 ? ` (${dlg.ids.length} links)` : ''}` : 'Hyperlink'} onClose={close}>
       <div className="scale-dialog" onKeyDown={(e) => e.key === 'Enter' && apply()}>
         <div className="form-row">
           <label><input type="radio" checked={kind === 'uri'} onChange={() => setKind('uri')} /> Open web address</label>
@@ -290,6 +307,18 @@ export function LinkDialog() {
           <label><input type="radio" checked={kind === 'page'} onChange={() => setKind('page')} /> Jump to page</label>
           <input aria-label="Page number" type="number" min={1} max={n} value={pageNo} onChange={(e) => setPageNo(e.target.value)} onFocus={() => setKind('page')} style={{ width: 70 }} /> of {n}
         </div>
+        <div className="form-row">
+          <label><input type="radio" checked={kind === 'place'} disabled={!places.length} onChange={() => setKind('place')} /> Jump to Place</label>
+          <select aria-label="Place" value={place} disabled={!places.length} onChange={(e) => { setPlace(e.target.value); setKind('place'); }}>
+            {!places.length && <option value="">(no Places: add one in the Links panel)</option>}
+            {places.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
+          </select>
+        </div>
+        {first?.file && (
+          <div className="form-row">
+            <label><input type="radio" checked={kind === 'file'} onChange={() => setKind('file')} /> Keep: {first.file}, page {(first.page ?? 0) + 1}</label>
+          </div>
+        )}
         <div className="modal-actions">
           <span className="spacer" />
           <button className="primary" disabled={!target} onClick={apply}>OK</button>

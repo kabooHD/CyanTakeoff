@@ -25,6 +25,7 @@ import { MarkupShape, handlePoints } from './renderMarkup';
 import { cutoutAt, hitTest, markupBounds, outline } from './hit';
 import { selectText } from '../model/textSelect';
 import { copyText, searchFor } from './textCommands';
+import { followPlace } from './LinksPanel';
 import { setCursor } from './cursor';
 import { ViewOverlays, recordView } from './Rulers';
 import { setVisualTemplate } from './VisualSearch';
@@ -57,6 +58,8 @@ export const viewerApi = {
   topLeft: (): Pt => ({ x: 0, y: 0 }),
   /** Show the context menu for the selection (or the page), as Shift+F10 does. */
   contextMenu: () => {},
+  /** Size of the visible view in screen pixels. */
+  viewSize: () => ({ w: 800, h: 600 }),
 };
 
 type Draft = { tool: ToolId; points: Pt[]; cursor: Pt | null; dragFrom?: { x: number; y: number }; target?: string;
@@ -236,6 +239,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       el.scrollLeft = q.x;
       el.scrollTop = q.y;
     };
+    viewerApi.viewSize = () => ({ w: scrollRef.current?.clientWidth ?? 800, h: scrollRef.current?.clientHeight ?? 600 });
     viewerApi.topLeft = () => {
       const el = scrollRef.current;
       if (!el) return { x: 0, y: 0 };
@@ -1014,6 +1018,13 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     if (draft.tool === 'link') {
       setDraft(null);
       s.setTool('select');
+      const place = useApp.getState().linkPlace;
+      if (place) {
+        // Hyperlink to a Place straight from the Links panel (Revu): no dialog.
+        useApp.setState({ linkPlace: null });
+        finish('link', [a, p], { link: { dest: place }, comment: `Place: ${place}` });
+        return;
+      }
       useApp.setState({ linkDialog: { page: pageIdx, rect: [a, p] } });
       return;
     }
@@ -1217,7 +1228,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       if (!target) { s.setStatus(`Open ${m.link.file} (or its Set) to follow this link`); return; }
       s.setActive(target.id);
       s.setPage(m.link.page ?? 0);
-    } else if (m.link?.page !== undefined) s.setViewPage(pane, m.link.page);
+    } else if (m.link?.dest) followPlace(doc, m.link.dest);
+    else if (m.link?.page !== undefined) s.setViewPage(pane, m.link.page);
   };
 
   // The browser's own menu is suppressed; the right button is handled on pointer-up.
