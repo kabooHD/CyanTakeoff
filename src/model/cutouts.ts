@@ -4,6 +4,7 @@
 // (ellipse) cutouts may not overlap other cutouts or the edge.
 import polygonClipping, { type Polygon, type Ring } from 'polygon-clipping';
 import { polygonArea } from './measure';
+import { flattenPath, hasCurves } from './curves';
 import type { Cutout, Markup, Pt } from './types';
 
 const ring = (pts: Pt[]): Ring => pts.map((p) => [p.x, p.y] as [number, number]);
@@ -19,7 +20,7 @@ export function ellipsePolygon(a: Pt, b: Pt, n = 128): Pt[] {
   return Array.from({ length: n }, (_, i) => ({ x: cx + rx * Math.cos((2 * Math.PI * i) / n), y: cy + ry * Math.sin((2 * Math.PI * i) / n) }));
 }
 
-const cutoutPolygon = (c: Cutout): Polygon => [ring(c.kind === 'ellipse' ? ellipsePolygon(c.points[0], c.points[1]) : c.points)];
+const cutoutPolygon = (c: Cutout): Polygon => [ring(c.kind === 'ellipse' ? ellipsePolygon(c.points[0], c.points[1]) : hasCurves(c.handles) ? flattenPath(c.points, c.handles, true) : c.points)];
 const multiArea = (mp: Polygon[]) => mp.reduce((t, p) => t + polygonArea(fromRing(p[0])) - p.slice(1).reduce((h, r) => h + polygonArea(fromRing(r)), 0), 0);
 const overlap = (a: Polygon, b: Polygon) => multiArea(polygonClipping.intersection(a, b));
 

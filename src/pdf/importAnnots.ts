@@ -42,7 +42,7 @@ export interface CTData {
   hatchScale?: number;
   points?: number[]; // PDF-space points for types whose geometry is not standard (count)
   comment?: string; // measurement comments (/Contents holds the value, as in Revu)
-  cutouts?: { kind: 'polygon' | 'ellipse'; points: number[] }[]; // PDF-space holes in an area/volume
+  cutouts?: { kind: 'polygon' | 'ellipse'; points: number[]; handles?: (number[] | null)[] }[]; // PDF-space holes in an area/volume
   text?: string; // stamp label, Cloud+ text
   slope?: Markup['slope'];
   rise?: number;
@@ -410,7 +410,7 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
   if (handles && handles.length !== pts.length) handles = undefined;
   const markup = {
     ...baseMarkup(doc, dict, ref, page, type, ct), text, ...extra,
-    cutouts: ct?.cutouts?.map((c) => ({ kind: c.kind, points: pairs(c.points) })),
+    cutouts: ct?.cutouts?.map((c) => ({ kind: c.kind, points: pairs(c.points), handles: c.handles?.map((h) => (h && h.length === 4 ? { in: { x: h[0], y: h[1] }, out: { x: h[2], y: h[3] } } : null)) })),
     handles,
   };
   if (type === 'volume' && markup.depth === undefined) markup.depth = 0;

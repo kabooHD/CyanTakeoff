@@ -173,7 +173,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
   if (hatchArea) {
     o.add('q /Pattern cs /HP0 scn');
     o.poly(hatchArea, true);
-    for (const c of cutouts ?? []) { if (c.kind === 'polygon') o.poly(c.points, true); else o.ellipse(c.points[0], c.points[1]); }
+    for (const c of cutouts ?? []) { if (c.kind === 'polygon') { if (hasCurves(c.handles)) curvedPath(o, c.points, c.handles, true); else o.poly(c.points, true); } else o.ellipse(c.points[0], c.points[1]); }
     o.add('f* Q');
   }
   const fills = !!fillRgb && !hatchArea, strokes = st.width > 0 && !styled;
@@ -352,7 +352,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
       if (cutouts?.length) {
         // Holes: extra subpaths painted with the even-odd rule.
         for (const c of cutouts) {
-          if (c.kind === 'polygon') o.poly(c.points, true);
+          if (c.kind === 'polygon') { if (hasCurves(c.handles)) curvedPath(o, c.points, c.handles, true); else o.poly(c.points, true); }
           else o.ellipse(c.points[0], c.points[1]);
         }
         o.add(paint === 'S' || paint === 'n' ? paint : paint + '*');
@@ -581,9 +581,9 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
   const handles = pdfHandles(m, page);
   if (handles) m = { ...m, handles };
   const ct = ctData(m, P);
-  const cutouts = m.cutouts?.map((c) => ({ ...c, points: c.points.map((q) => toPdfPt(q, page)) }));
+  const cutouts = m.cutouts?.map((c) => ({ ...c, points: c.points.map((q) => toPdfPt(q, page)), handles: hasCurves(c.handles) ? pdfHandles({ ...m, points: c.points, handles: c.handles }, page) : undefined }));
   const { ops, bbox, hatch } = buildAppearance(m, P, font, cutouts, (page.viewport as { rotation?: number }).rotation ?? 0, rows);
-  if (cutouts?.length) ct.cutouts = cutouts.map((c) => ({ kind: c.kind, points: c.points.flatMap((q) => [q.x, q.y]) }));
+  if (cutouts?.length) ct.cutouts = cutouts.map((c) => ({ kind: c.kind, points: c.points.flatMap((q) => [q.x, q.y]), handles: c.handles?.map((h) => (h ? [h.in.x, h.in.y, h.out.x, h.out.y] : null)) }));
   const st = m.style;
   const gs = ctx.obj({
     CA: st.opacity,

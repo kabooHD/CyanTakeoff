@@ -1317,6 +1317,25 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     if (holeOwner) {
       const i = cutoutAt(holeOwner, raw);
       items.push({ label: 'Delete Cutout', action: () => s.updateMarkups([holeOwner.id], (m) => ({ cutouts: m.cutouts!.filter((_, k) => k !== i) })) });
+      const c = holeOwner.cutouts![i];
+      if (c.kind === 'polygon' && !holeOwner.locked) {
+        // Curved polygon cutouts: curve the nearest edge out of or into the hole, or a point.
+        const setC = (h: Handles | undefined) => s.updateMarkups([holeOwner.id], (m) => ({ cutouts: m.cutouts!.map((x, k) => (k === i ? { ...x, handles: h && hasCurves(h) ? h : undefined } : x)) }));
+        const n = c.points.length;
+        let si = 0, best = Infinity;
+        for (let k = 0; k < n; k++) { const d = distToSegment(raw, c.points[k], c.points[(k + 1) % n]); if (d < best) { best = d; si = k; } }
+        const vi = c.points.findIndex((q) => dist(q, raw) <= 8 / zoom);
+        const cx = c.points.reduce((t, q) => t + q.x, 0) / n, cy = c.points.reduce((t, q) => t + q.y, 0) / n;
+        const a = c.points[si], b = c.points[(si + 1) % n];
+        // arcSegment bulges to the left of a→b; outward is away from the hole's centre.
+        const leftIsOut = -(b.y - a.y) * (cx - a.x) + (b.x - a.x) * (cy - a.y) < 0;
+        items.push(
+          { label: 'Cutout Edge: Arc Outward', action: () => setC(arcSegment(c.points, c.handles, si, true, leftIsOut ? 0.5 : -0.5)) },
+          { label: 'Cutout Edge: Arc Inward', action: () => setC(arcSegment(c.points, c.handles, si, true, leftIsOut ? -0.5 : 0.5)) },
+          ...(vi >= 0 ? [{ label: c.handles?.[vi] ? 'Cutout Point: Straight' : 'Cutout Point: Curve', action: () => setC(toggleCurve(c.points, c.handles, vi, true)) }] : []),
+          ...(hasCurves(c.handles) ? [{ label: 'Straighten Cutout', action: () => setC(undefined) }] : []),
+        );
+      }
     } else if (hit) {
       if (!selected.has(hit.id)) s.select([hit.id]);
       const ids = selected.has(hit.id) ? doc.selection : [hit.id];

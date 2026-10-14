@@ -27,7 +27,7 @@ const polyPath = (P: Pt[], closed = true) => P.map((p, i) => `${i ? 'L' : 'M'}${
 
 /** SVG subpath for a cutout (polygon or ellipse). */
 export function cutoutPath(c: Cutout): string {
-  if (c.kind === 'polygon') return polyPath(c.points);
+  if (c.kind === 'polygon') return hasCurves(c.handles) ? svgPath(c.points, c.handles, true) : polyPath(c.points);
   const [a, b] = c.points;
   const rx = Math.abs(b.x - a.x) / 2, ry = Math.abs(b.y - a.y) / 2;
   const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;

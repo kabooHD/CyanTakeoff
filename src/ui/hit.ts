@@ -1,6 +1,6 @@
 import { arcPoints, arcThrough, bounds, distToSegment, pointInPolygon, rectCorners, rectPairs } from '../model/measure';
 import type { Markup, Pt } from '../model/types';
-import { CURVABLE, flatPoints } from '../model/curves';
+import { CURVABLE, flatPoints, flattenPath, hasCurves } from '../model/curves';
 
 /** Outline used for hit-testing and rubber-band selection. */
 export function outline(m: Markup): { pts: Pt[]; closed: boolean } {
@@ -47,7 +47,7 @@ export function outline(m: Markup): { pts: Pt[]; closed: boolean } {
 /** Index of the cutout of `m` containing `p`, or -1. */
 export function cutoutAt(m: Markup, p: Pt): number {
   return (m.cutouts ?? []).findIndex((c) => {
-    if (c.kind === 'polygon') return pointInPolygon(p, c.points);
+    if (c.kind === 'polygon') return pointInPolygon(p, hasCurves(c.handles) ? flattenPath(c.points, c.handles, true) : c.points);
     const [a, b] = c.points;
     const rx = Math.abs(b.x - a.x) / 2, ry = Math.abs(b.y - a.y) / 2;
     if (!rx || !ry) return false;

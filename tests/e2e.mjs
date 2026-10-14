@@ -228,6 +228,16 @@ await page.keyboard.press('Escape');
 list = await page.locator('.ml-table tbody').innerText();
 assert(list.includes('12.57 sf') && list.includes('403.43 sf'), 'clicking a cutout with the Area tool converts it (12.57 sf)');
 await page.keyboard.press('Control+Z');
+// A polygon cutout's edge can be curved: arcing it outward makes the hole bigger.
+{ const p = await toScreen(4, 27); await page.mouse.click(p.x, p.y, { button: 'right' }); }
+await page.getByRole('menuitem', { name: 'Cutout Edge: Arc Outward' }).click();
+{
+  const txt = await page.locator('.ml-table tbody').innerText();
+  const v = Math.max(...[...txt.matchAll(/(\d+(?:\.\d+)?) sf/g)].map((m) => Number(m[1])).filter((x) => x > 300));
+  assert(v > 398 && v < 403.4, `curving a cutout edge outward enlarges the hole (${v} sf)`);
+}
+await page.screenshot({ path: `${OUT}/07b-curved-cutout.png` });
+await page.keyboard.press('Control+Z');
 { const p = await toScreen(4, 27); await page.mouse.click(p.x, p.y, { button: 'right' }); }
 await page.getByRole('menuitem', { name: 'Delete Cutout' }).click();
 list = await page.locator('.ml-table tbody').innerText();

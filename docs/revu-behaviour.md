@@ -259,6 +259,10 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - With the Area or Volume tool, clicking a cutout converts it into its own
   measurement (Shift: all cutouts of that markup); the cutout stays.
 
+- Ours: a polygon cutout's edge can be curved (right-click in the hole:
+  Cutout Edge: Arc Outward/Inward, Cutout Point: Curve, Straighten
+  Cutout); the area subtracts the curved outline.
+
 ## Touch and pen
 Revu on tablets: pinch to zoom, two fingers to pan, the pen draws, and a
 press-and-hold acts as a right-click. Ours: the same; a finger also pans in

@@ -1,4 +1,4 @@
-import { flatPoints, hasCurves } from './curves';
+import { flatPoints, flattenPath, hasCurves } from './curves';
 import type { Cutout, LengthUnit, Markup, Pt, Scale, ScaleFormat, Viewport } from './types';
 
 // ---------- geometry ----------
@@ -380,7 +380,7 @@ export function resolveFormat(s: Scale): Required<ScaleFormat> {
 }
 
 export function cutoutArea(c: Cutout): number {
-  if (c.kind === 'polygon') return polygonArea(c.points);
+  if (c.kind === 'polygon') return polygonArea(hasCurves(c.handles) ? flattenPath(c.points, c.handles, true) : c.points);
   const b = bounds(c.points);
   return (Math.PI * b.w * b.h) / 4;
 }
@@ -404,7 +404,7 @@ export function measure(m: Pick<Markup, 'type' | 'points' | 'scale' | 'depth' | 
   const s = m.scale ?? DEFAULT_SCALE;
   if (s.yFactor) {
     // Separate X/Y scales: stretch the geometry, then measure with the X factor.
-    m = { ...m, points: stretchY(m.points, s), cutouts: m.cutouts?.map((c) => ({ ...c, points: stretchY(c.points, s) })), scale: { ...s, yFactor: undefined } };
+    m = { ...m, points: stretchY(m.points, s), cutouts: m.cutouts?.map((c) => ({ kind: c.kind, points: stretchY(hasCurves(c.handles) ? flattenPath(c.points, c.handles, true) : c.points, s) })), scale: { ...s, yFactor: undefined } };
   }
   const f = s.factor;
   const fmt = resolveFormat(s);

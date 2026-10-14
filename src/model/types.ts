@@ -47,7 +47,8 @@ export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cut
   | 'form-text' | 'form-checkbox' | 'form-radio' | 'form-dropdown' | 'form-list' | 'form-signature';
 
 /** A hole subtracted from an Area or Volume measurement. Ellipse: two opposite corners. */
-export interface Cutout { kind: 'polygon' | 'ellipse'; points: Pt[] }
+/** Polygon cutouts may have curved edges (`handles`, as on markups). */
+export interface Cutout { kind: 'polygon' | 'ellipse'; points: Pt[]; handles?: import('./curves').Handles }
 
 export type LengthUnit = 'in' | 'ft' | 'ft-in' | 'yd' | 'mm' | 'cm' | 'm';
 

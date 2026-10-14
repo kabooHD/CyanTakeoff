@@ -85,3 +85,36 @@ describe('curved markups in the PDF', () => {
     expect(Math.abs(Number(String(r.displayed).replace(/[^0-9.]/g, '')) / (Math.PI * 10000) - 1)).toBeLessThan(0.01);
   });
 });
+
+describe('curved polygon cutouts', () => {
+  // A 400×400 area with a square hole whose right edge bulges into a circle-ish arc.
+  const sq = [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 400 }, { x: 0, y: 400 }];
+  const hole = [{ x: 100, y: 100 }, { x: 200, y: 100 }, { x: 200, y: 200 }, { x: 100, y: 200 }];
+  const curved = arcSegment(hole, undefined, 1, true, 0.5);
+  it('subtracts the curved outline, not the straight one', () => {
+    const straight = measure({ type: 'area', points: sq, scale, cutouts: [{ kind: 'polygon', points: hole }] })!.area!;
+    const bent = measure({ type: 'area', points: sq, scale, cutouts: [{ kind: 'polygon', points: hole, handles: curved }] })!.area!;
+    expect(straight).toBeCloseTo(160000 - 10000);
+    expect(Math.abs(bent - straight)).toBeGreaterThan(500); // the arc adds or removes a sliver of a few thousand pt²
+  });
+  it('saves the cutout curves and reads them back', async () => {
+    const { PDFDocument } = await import('pdf-lib');
+    const { savePdf } = await import('../src/pdf/save');
+    const { importAnnotations } = await import('../src/pdf/importAnnots');
+    const doc = await PDFDocument.create();
+    doc.addPage([600, 600]);
+    const identity = { convertToPdfPoint: (x: number, y: number) => [x, y] };
+    const pages = [{ index: 0, label: '1', width: 600, height: 600, viewport: identity }] as never;
+    const m = {
+      id: 'c2', type: 'area', page: 0, points: sq, scale, cutouts: [{ kind: 'polygon', points: hole, handles: curved }],
+      style: { color: '#ff0000', fill: '#ffcc00', width: 1, opacity: 1, fillOpacity: 0.3, lineStyle: 'solid', fontSize: 10 },
+      subject: 'Area Measurement', label: '', comment: '', author: 'A', created: new Date().toISOString(), modified: new Date().toISOString(), status: 'None',
+    };
+    const out = await savePdf({ original: await doc.save(), pages, markups: [m as never], importedRefs: new Set(), calibrations: [null], dirtyCalibrations: new Set() });
+    const r = importAnnotations(await PDFDocument.load(out)).raws[0];
+    const c = r.markup.cutouts![0];
+    expect(c.handles?.[1]?.out.x).toBeCloseTo(curved[1]!.out.x);
+    expect(c.handles?.[1]?.out.y).toBeCloseTo(curved[1]!.out.y);
+    expect(c.handles?.[0]).toBeNull();
+  });
+});
