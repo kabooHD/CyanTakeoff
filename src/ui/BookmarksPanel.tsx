@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp, type DocState } from '../model/store';
 import type { Bookmark } from '../pdf/bookmarks';
+import { buildBookmarksPdf, type BookmarkReportSection } from '../pdf/bookmarksReport';
 import { findBookmark, flatten, insertBookmarks, moveBookmarks, removeBookmarks, updateBookmark, type Where } from '../model/bookmarkTree';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { viewerApi } from './Viewer';
@@ -65,6 +66,21 @@ export function addBookmark(where: Where = 'after', target?: string | null): str
 export const bookmarkUi: { selected: string[]; rename?: (id: string) => void } = { selected: [] };
 
 function csvCell(v: string) { return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; }
+
+/** The bookmark trees of the open documents (those that have any) as report sections. */
+function reportSections(docs: DocState[]): BookmarkReportSection[] {
+  return docs.filter((d) => d.bookmarks.length).map((d) => ({
+    name: d.name, rows: flatten(d.bookmarks).map(({ b, depth }) => ({ depth, title: b.title, page: b.page === null ? '' : d.loaded.pages[b.page]?.label ?? '' })),
+  }));
+}
+
+/** Export Bookmarks (PDF): one section per open document. */
+async function exportPdf(d: DocState, docs: DocState[]) {
+  const bytes = await buildBookmarksPdf(reportSections(docs));
+  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }));
+  Object.assign(document.createElement('a'), { href: url, download: d.name.replace(/\.pdf$/i, '') + ' - Bookmarks.pdf' }).click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
 
 function exportCsv(d: DocState) {
   const rows = flatten(d.bookmarks).map(({ b, depth }) => [String(depth + 1), b.title, b.page === null ? '' : d.loaded.pages[b.page]?.label ?? ''].map(csvCell).join(','));
@@ -145,10 +161,13 @@ export function BookmarksPanel({ doc }: { doc: DocState }) {
         <button onClick={(e) => setMenu({ x: e.clientX, y: e.clientY, items: [
           { label: 'Expand All', action: () => setAll(true) },
           { label: 'Collapse All', action: () => setAll(false) },
+          // Save Collapse State (Revu): the open/closed layout becomes the file's default (kept when the file is saved).
+          { label: 'Save Collapse State', disabled: !list.length, action: () => { s.setBookmarks(list, true); s.setStatus('Bookmark collapse state saved: save the file to keep it.'); } },
           { sep: true },
           { label: 'Create Bookmarks…', action: openAutoMark },
           { label: 'Audit Bookmarks', disabled: !list.length, action: audit },
           { label: 'Export Bookmarks (CSV)', disabled: !list.length, action: () => exportCsv(doc) },
+          { label: 'Export Bookmarks (PDF)', disabled: !s.docs.some((d) => d.bookmarks.length), action: () => void exportPdf(doc, s.docs) },
         ] })}>Bookmarks ▾</button>
         <button title="Add Bookmark (Ctrl+B)" onClick={() => add('after')}>+ Bookmark</button>
         <button aria-label="Add bookmark options" onClick={(e) => setMenu({ x: e.clientX, y: e.clientY, items: [

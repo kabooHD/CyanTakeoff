@@ -1792,6 +1792,17 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await adlg.locator('[aria-label="Web address"]').fill('https://example.com/detail');
   await adlg.getByRole('button', { name: 'OK' }).click();
   await page.screenshot({ path: `${OUT}/bookmarks.png` });
+  // Save Collapse State: the collapsed parent is written closed (/Count < 0); Export Bookmarks (PDF) lists the tree.
+  await row('Site Plan').locator('.bm-toggle').click();
+  assert(await row('Site Plan').getAttribute('aria-expanded') === 'false', 'the toggle collapses a parent bookmark');
+  await page.getByRole('button', { name: 'Bookmarks ▾' }).click();
+  await page.getByRole('menuitem', { name: 'Save Collapse State' }).click();
+  await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('collapse state saved'));
+  await page.getByRole('button', { name: 'Bookmarks ▾' }).click();
+  const [bx] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: 'Export Bookmarks (PDF)' }).click()]);
+  assert(bx.suggestedFilename().endsWith(' - Bookmarks.pdf'), `Export Bookmarks (PDF) downloads a report (${bx.suggestedFilename()})`);
+  await bx.saveAs(`${OUT}/bookmarks-report.pdf`);
+  assert((await PDFDocument.load(readFileSync(`${OUT}/bookmarks-report.pdf`))).getPageCount() === 1, 'the bookmarks report is a one-page PDF');
   await page.locator('.viewer').first().click({ position: { x: 5, y: 5 } }).catch(() => {});
   const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
   const file = `${OUT}/bookmarks.pdf`;
@@ -1805,6 +1816,8 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     names.push('-'.repeat(depth) + it.lookup(PDFName.of('Title')).decodeText()); const f = it.get(PDFName.of('First')); if (f) walk(f, depth + 1); } };
   walk(outline.get(PDFName.of('First')), 0);
   assert(names.join('|') === 'Floor Plan|Site Plan|-Detail', `saved outline (${names.join('|')})`);
+  const siteCount = look(look(outline.get(PDFName.of('First'))).get(PDFName.of('Next'))).lookup(PDFName.of('Count'));
+  assert(siteCount && siteCount.asNumber() === -1, `Save Collapse State writes the collapsed parent closed (/Count ${siteCount && siteCount.asNumber()})`);
   const dest = look(outline.get(PDFName.of('First'))).lookup(PDFName.of('Dest'), PDFArray);
   assert(dest.get(0).toString() === out.getPage(0).ref.toString() && dest.get(1).toString() === '/XYZ', 'bookmark goes to the view on page 1');
   const detail = look(look(look(outline.get(PDFName.of('First'))).get(PDFName.of('Next'))).get(PDFName.of('First')));

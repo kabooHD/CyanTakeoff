@@ -258,6 +258,8 @@ filling, image signatures, redaction and OCR.
   Source Pages custom range, symbol size, margin, alignment, text colour;
   right-click Legend › Create New Legend / add to a Legend, Apply to All
   Pages, Copy Legend to Snapshot
+- [x] Bookmarks: Save Collapse State (outline /Count sign), Export Bookmarks
+  (PDF) over the open files
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

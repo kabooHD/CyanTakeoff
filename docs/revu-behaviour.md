@@ -550,9 +550,14 @@ the page label, ready to type over; it goes below the selected bookmark
 (or at the end), or Add Before / After / Child. Rename by double-click, F2
 or right-click; delete with Delete. Drag to reorder, drag inward to nest,
 Ctrl+drag to copy. Right-click: Set to Current View, Properties (title,
-colour, bold, italic; several at once). Bookmarks menu: Create Bookmarks
-(page labels, or AutoMark from a page region), Audit Bookmarks (flags ones
-pointing at pages no longer in the file), Export Bookmarks (CSV or PDF).
+colour, bold, italic; several at once). Bookmarks menu: Save Collapse
+State (the current expanded/collapsed layout becomes the file's default;
+save the file to keep it), Create Bookmarks (page labels, or AutoMark from
+a page region), Audit Bookmarks (flags ones pointing at pages no longer in
+the file), Export Bookmarks (CSV, or a PDF listing the bookmarks of every
+open file). Ours: toggling a bookmark open or closed does not change the
+file by itself; Save Collapse State does (written as the outline /Count
+sign).
 Create Bookmarks: Page Labels, or Page Region (AutoMark): Select drags a
 region whose text names the bookmark (Add for more regions, e.g. number and
 title), over All/Current/Custom pages. Ours keeps regions as fractions of
