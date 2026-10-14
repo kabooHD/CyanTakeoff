@@ -92,7 +92,8 @@ the Thumbnails selection in src/ui/Panels.tsx, margins); Rulers, crosshair,
 Dimmer, Previous/Next View (src/ui/Rulers.tsx, src/model/rulers.ts);
 Bookmarks editing incl. Action dialog (src/ui/BookmarksPanel.tsx, src/pdf/bookmarks.ts) and
 AutoMark (src/ui/AutoMark.tsx); line
-styles and hatch patterns (src/model/lineStyles.ts, src/ui/LineStyles.tsx);
+styles and hatch patterns (src/model/lineStyles.ts, src/ui/LineStyles.tsx;
+AutoCAD .pat import in src/model/pat.ts);
 spell check (F7, src/ui/Spell.tsx, nspell + dictionary-en served from /dict/);
 VisualSearch (src/model/visualSearch.ts matcher, src/ui/VisualSearch.tsx);
 Sequences (src/model/sequence.ts, src/ui/SequenceDialog.tsx); Quantity Link

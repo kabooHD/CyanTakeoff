@@ -1,5 +1,5 @@
 import { hasCurves, svgPath } from '../model/curves';
-import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTile, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type LineStyleDef } from '../model/lineStyles';
+import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTileWH, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type LineStyleDef } from '../model/lineStyles';
 import { calloutAttach } from '../pdf/save';
 import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import type { Cutout, Markup, MarkupStyle, MarkupType, Pt } from '../model/types';
@@ -285,16 +285,16 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     }
   }
   const hatchId = `hatch-${m.id}`;
-  const tile = st.hatch ? hatchTile(st.hatch, st.hatchScale) : 0;
+  const [tile, tileH] = st.hatch ? hatchTileWH(st.hatch, st.hatchScale) : [0, 0];
   const hatchColor = st.fill ?? st.color;
   return (
     <g data-id={m.id}>
       {hatchArea && st.hatch && (
         <>
           <defs>
-            <pattern id={hatchId} patternUnits="userSpaceOnUse" width={tile} height={tile}>
-              {st.hatch.lines.map(([x1, y1, x2, y2], i) => <line key={i} x1={x1 * tile} y1={y1 * tile} x2={x2 * tile} y2={y2 * tile} stroke={hatchColor} strokeWidth={hatchLineWidth(tile)} strokeLinecap="square" />)}
-              {st.hatch.dots.map(([x, y, r], i) => <circle key={`d${i}`} cx={x * tile} cy={y * tile} r={Math.max(0.3, r * tile)} fill={hatchColor} />)}
+            <pattern id={hatchId} patternUnits="userSpaceOnUse" width={tile} height={tileH}>
+              {st.hatch.lines.map(([x1, y1, x2, y2], i) => <line key={i} x1={x1 * tile} y1={y1 * tileH} x2={x2 * tile} y2={y2 * tileH} stroke={hatchColor} strokeWidth={hatchLineWidth(tile)} strokeLinecap="square" />)}
+              {st.hatch.dots.map(([x, y, r], i) => <circle key={`d${i}`} cx={x * tile} cy={y * tileH} r={Math.max(0.3, r * tile)} fill={hatchColor} />)}
             </pattern>
           </defs>
           <path d={polyPath(hatchArea) + (m.cutouts ?? []).map(cutoutPath).join('')} fill={`url(#${hatchId})`} fillOpacity={st.fillOpacity} fillRule="evenodd" stroke="none" opacity={ghost ? 0.7 : 1} />

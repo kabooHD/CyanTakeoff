@@ -6,6 +6,7 @@
 import { useRef, useState } from 'react';
 import { create } from 'zustand';
 import { useApp } from '../model/store';
+import { guessPatUnits, parsePat, patToHatch } from '../model/pat';
 import type { MarkupStyle } from '../model/types';
 import {
   HATCH_TYPES, STANDARD_HATCHES, STANDARD_LINE_STYLES, hatchLineWidth, styledStroke,
@@ -90,13 +91,13 @@ export function LinePreview({ def, width = 1.5, w = 220, h = 36 }: { def: LineSt
 }
 
 export function HatchPreview({ h, size = 96, scale = 1.5 }: { h: HatchDef; size?: number; scale?: number }) {
-  const t = h.size * scale, id = `hp-${h.id}-${Math.round(t * 10)}`;
+  const t = h.size * scale, th = t * (h.aspect || 1), id = `hp-${h.id}-${Math.round(t * 10)}`;
   return (
     <svg width={size} height={size} className="style-preview" aria-label={`${h.name} preview`}>
       <defs>
-        <pattern id={id} patternUnits="userSpaceOnUse" width={t} height={t}>
-          {h.lines.map(([a, b, c, d], i) => <line key={i} x1={a * t} y1={b * t} x2={c * t} y2={d * t} stroke="#000" strokeWidth={hatchLineWidth(t)} strokeLinecap="square" />)}
-          {h.dots.map(([x, y, r], i) => <circle key={`d${i}`} cx={x * t} cy={y * t} r={Math.max(0.3, r * t)} />)}
+        <pattern id={id} patternUnits="userSpaceOnUse" width={t} height={th}>
+          {h.lines.map(([a, b, c, d], i) => <line key={i} x1={a * t} y1={b * th} x2={c * t} y2={d * th} stroke="#000" strokeWidth={hatchLineWidth(t)} strokeLinecap="square" />)}
+          {h.dots.map(([x, y, r], i) => <circle key={`d${i}`} cx={x * t} cy={y * th} r={Math.max(0.3, r * t)} />)}
         </pattern>
       </defs>
       <rect width={size} height={size} fill={`url(#${id})`} stroke="#888" />
@@ -111,14 +112,26 @@ function download(name: string, data: unknown) {
   Object.assign(document.createElement('a'), { href: url, download: name }).click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
-function pickJson(onLoad: (data: unknown) => void) {
-  const input = Object.assign(document.createElement('input'), { type: 'file', accept: '.json,application/json' });
+function pickJson(onLoad: (data: unknown) => void, onPat?: (text: string, name: string) => void) {
+  const input = Object.assign(document.createElement('input'), { type: 'file', accept: onPat ? '.json,.pat,application/json' : '.json,application/json' });
   input.onchange = async () => {
     const f = input.files?.[0];
     if (!f) return;
-    try { onLoad(JSON.parse(await f.text())); } catch { useApp.getState().setStatus('Not a CyanTakeoff style file'); }
+    const text = await f.text();
+    if (onPat && (/\.pat$/i.test(f.name) || /^\s*\*/.test(text))) { onPat(text, f.name); return; }
+    try { onLoad(JSON.parse(text)); } catch { useApp.getState().setStatus('Not a CyanTakeoff style file'); }
   };
   input.click();
+}
+
+/** Import every pattern of an AutoCAD .pat file as custom hatches (metric files are spaced in mm, others in inches). */
+export function importPat(text: string, custom: HatchDef[]): HatchDef[] {
+  const pats = parsePat(text);
+  if (!pats.length) { useApp.getState().setStatus('No hatch patterns in that .pat file'); return custom; }
+  const mm = pats.filter((p) => guessPatUnits(p) === 'mm').length > pats.length / 2;
+  const list = pats.map((p) => patToHatch(p, mm ? 72 / 25.4 : 72));
+  useApp.getState().setStatus(`Imported ${list.length} hatch pattern${list.length === 1 ? '' : 's'} (${mm ? 'millimetre' : 'inch'} units; adjust with Hatch Scale)`);
+  return [...custom.filter((c) => !list.some((x) => x.id === c.id)), ...list];
 }
 
 // ---------- dialogs ----------
@@ -268,7 +281,7 @@ function HatchManager() {
           const list = (data as { hatches?: HatchDef[] }).hatches;
           if (!Array.isArray(list)) { useApp.getState().setStatus('No hatch patterns in that file'); return; }
           save([...custom.filter((c) => !list.some((x) => x.id === c.id)), ...list]);
-        })}>Import…</button>
+        }, (text) => save(importPat(text, custom)))}>Import…</button>
         <button disabled={!custom.length} onClick={() => download('Hatch Patterns.json', { type: 'cyantakeoff-hatches', hatches: custom })}>Export…</button>
         <span className="spacer" />
         <button className="primary" onClick={close}>Close</button>

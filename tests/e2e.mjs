@@ -1432,6 +1432,24 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     .map((a) => { const st = a.lookup(PDFName.of('AP'), PDFDict).lookup(PDFName.of('N')); const raw = st.getContents(); try { return inflateSync(raw).toString('latin1'); } catch { return Buffer.from(raw).toString('latin1'); } });
   assert(aps.some((t) => t.includes('/Pattern cs /HP0 scn')), 'saved: the hatch is a tiling pattern in the appearance');
   assert(aps.some((t) => (t.match(/ Tj ET/g) ?? []).length >= 3 && t.includes(' Tm ')), 'saved: the line style text is in the appearance');
+  // Import an AutoCAD .pat file into the Hatch list.
+  const patFile = `${OUT}/sample.pat`;
+  writeFileSync(patFile, '*ANSI33, ANSI Bronze, Brass, Copper\n45, 0,0, 0,.25, .5,-.25\n*STEEL, Steel\n45, 0,0, 0,.09375\n45, 0,.0625, 0,.09375\n');
+  await page.keyboard.press('Escape');
+  await page.mouse.click(lb.x + lb.width * 0.095, lb.y + lb.height * 0.375);
+  await page.locator('select[aria-label="Hatch"]').waitFor({ timeout: 5000 });
+  await page.locator('select[aria-label="Hatch"]').selectOption('__manage__');
+  const hm = page.locator('[role=dialog][aria-label="Manage Hatch Patterns"]');
+  await hm.waitFor();
+  const [hfc] = await Promise.all([page.waitForEvent('filechooser'), hm.getByRole('button', { name: 'Import…' }).click()]);
+  await hfc.setFiles(patFile);
+  await page.waitForTimeout(400);
+  assert(await hm.locator('.hatch-item', { hasText: 'STEEL' }).count() === 1, '.pat import adds its patterns to the Hatch list');
+  await hm.getByRole('button', { name: 'Close' }).click();
+  await page.locator('select[aria-label="Hatch"]').selectOption('pat-steel');
+  await page.waitForTimeout(200);
+  assert(await layer.locator('pattern line').count() >= 2, 'the imported STEEL hatch draws two line families');
+  await page.locator('select[aria-label="Hatch"]').selectOption('ansi31');
 }
 
 // Spell check (F7) through markup comments; Markup Spelling Mistakes on the PDF text.

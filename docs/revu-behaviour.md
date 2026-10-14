@@ -356,7 +356,9 @@ sets (the Standard set is read only); sets are imported/exported (Revu
 .blx; ours JSON, since .blx is undocumented). Changing a style does not
 change markups already drawn. Hatch patterns fill closed markups and area/
 volume measurements; the editor draws lines and small/large dots on a grid
-tile; sets import/export (Revu also imports AutoCAD .pat: not yet).
+tile; sets import/export, and AutoCAD .pat files import every pattern
+they hold (line families with dashes become a tile sized so the spacing
+repeats; inch or mm units guessed from the spacing, Hatch Scale adjusts).
 Ours: the markup keeps a copy of a custom style so the file is
 self-contained; hatches are drawn in the fill colour and saved as PDF
 tiling patterns so any viewer shows them.

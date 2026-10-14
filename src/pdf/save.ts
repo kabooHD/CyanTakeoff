@@ -1,6 +1,6 @@
 import { writeLayers, type LayerSet } from './layers';
 import { writeBookmarks, type Bookmark } from './bookmarks';
-import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTile, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type HatchDef } from '../model/lineStyles';
+import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTileWH, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type HatchDef } from '../model/lineStyles';
 import { flattenPath, hasCurves, pdfPath, segments } from '../model/curves';
 import { hasSignatures, incrementalUpdate, loadForUpdate } from './incremental';
 import {
@@ -550,17 +550,17 @@ function buildCount(doc: PDFDocument, m: Markup, page: PageInfo): PDFRef[] {
 
 /** A hatch as a PDF tiling pattern (tile drawn y-up, so it matches the screen). */
 function hatchPattern(doc: PDFDocument, h: HatchDef, scale: number | undefined, color: string): PDFRef {
-  const t = hatchTile(h, scale);
+  const [t, th] = hatchTileWH(h, scale);
   const rgb = hexToRgb(color).map(f).join(' ');
   const ops = [`${rgb} RG ${rgb} rg ${f(hatchLineWidth(t))} w 2 J`];
-  for (const [x1, y1, x2, y2] of h.lines) ops.push(`${f(x1 * t)} ${f((1 - y1) * t)} m ${f(x2 * t)} ${f((1 - y2) * t)} l S`);
+  for (const [x1, y1, x2, y2] of h.lines) ops.push(`${f(x1 * t)} ${f((1 - y1) * th)} m ${f(x2 * t)} ${f((1 - y2) * th)} l S`);
   for (const [x, y, r0] of h.dots) {
-    const r = Math.max(0.3, r0 * t), cx = x * t, cy = (1 - y) * t, k = r * 0.5523;
+    const r = Math.max(0.3, r0 * t), cx = x * t, cy = (1 - y) * th, k = r * 0.5523;
     ops.push(`${f(cx + r)} ${f(cy)} m ${f(cx + r)} ${f(cy + k)} ${f(cx + k)} ${f(cy + r)} ${f(cx)} ${f(cy + r)} c ${f(cx - k)} ${f(cy + r)} ${f(cx - r)} ${f(cy + k)} ${f(cx - r)} ${f(cy)} c `
       + `${f(cx - r)} ${f(cy - k)} ${f(cx - k)} ${f(cy - r)} ${f(cx)} ${f(cy - r)} c ${f(cx + k)} ${f(cy - r)} ${f(cx + r)} ${f(cy - k)} ${f(cx + r)} ${f(cy)} c f`);
   }
   return doc.context.register(doc.context.stream(ops.join('\n'), {
-    Type: 'Pattern', PatternType: 1, PaintType: 1, TilingType: 1, BBox: [0, 0, t, t], XStep: t, YStep: t, Resources: {},
+    Type: 'Pattern', PatternType: 1, PaintType: 1, TilingType: 1, BBox: [0, 0, t, th], XStep: t, YStep: th, Resources: {},
   }));
 }
 
