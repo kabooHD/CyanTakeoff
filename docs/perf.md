@@ -18,6 +18,14 @@ memory. Re-run it after changes that touch rendering or the store.
 | JavaScript heap after browsing | 87 MB | 27 MB |
 | Undo a page operation | — | 0.5 s |
 
+First load on a slow connection (10 Mbit/s, 60 ms, CPU 4× slower, empty
+cache), after splitting the script (below):
+
+| Step | One 1.7 MB script | Split |
+|---|---|---|
+| Something on screen | 1.5 s | 0.45 s |
+| App usable | 1.55 s | 1.26 s |
+
 The JavaScript heap does not include canvases or pdf.js worker memory; the
 changes below target those too.
 
@@ -38,13 +46,17 @@ changes below target those too.
   pages that only fly past are not rendered, pdf.js drops its parsed data
   for pages already drawn, and content-snap geometry is computed only for a
   page that stays current for a moment (this was most of the memory).
+- **Split script.** The entry is a 1.6 KB shell that paints a loading
+  screen with React (220 KB); the app (630 KB), pdf.js (490 KB) and
+  pdf-lib (425 KB) are separate files fetched in parallel and cached
+  independently across app updates (`vite.config.ts` codeSplitting groups).
 - **Shortcut lookups** no longer rebuild the command table on every render.
 
 ## Not done (ideas)
 
-- Load pdf.js and pdf-lib (about 900 KB of the 1.7 MB main script) only when
-  a file is opened, so the empty app appears faster on slow connections.
-  This needs the dialogs that use pdf-lib split out first.
+- Load pdf.js and pdf-lib only when a file is opened (today they load in
+  parallel right after the first paint; the empty app needs them because
+  the store imports them). This needs the store's PDF calls made dynamic.
 - Move content-snap geometry into a Web Worker.
 - Measure on real hardware (a 4 GB Windows laptop with integrated graphics)
   with testers' drawing sets; raster-heavy (scanned) sets behave differently

@@ -151,8 +151,8 @@ Next (from `docs/PLAN.md`):
 3. Compare versions, Sets, slip sheets, Spaces, Legends, Dynamic Fill, XLSX
 
 Known gaps: low-end performance measured only with CPU throttling (docs/perf.md,
-`npm run perf`); the main script is 1.7 MB (pdf.js and pdf-lib not yet
-loaded on demand); need Revu-made samples (none public; wanted list in
+`npm run perf`); pdf.js and pdf-lib load right after the
+first paint, not only when a file is opened (split chunks, docs/perf.md); need Revu-made samples (none public; wanted list in
 tests/fixtures/revu/README.md): cutout storage (ours in CTData), custom
 column values (/BSIColumnData kept on edit but not read), .btx tool sets;
 signatures are not checked against a

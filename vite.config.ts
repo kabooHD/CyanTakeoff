@@ -41,5 +41,21 @@ function ocrAssets(): Plugin {
 
 export default defineConfig({
   plugins: [react(), ocrAssets()],
+  build: {
+    rolldownOptions: {
+      output: {
+        // Big libraries in their own files: downloaded in parallel and cached across app updates.
+        codeSplitting: {
+          groups: [
+            // Vite's module preload helper is used by the small entry: keep it out of the big chunks.
+            { name: 'preload', test: /preload-helper|modulepreload-polyfill/, priority: 10 },
+            { name: 'pdfjs', test: /node_modules[\\/]pdfjs-dist/ },
+            { name: 'pdf-lib', test: /node_modules[\\/](pdf-lib|@pdf-lib|pako)/ },
+            { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
+          ],
+        },
+      },
+    },
+  },
   test: { environment: 'node', include: ['tests/**/*.test.ts'] },
 } as never);

@@ -259,9 +259,10 @@ filling, image signatures, redaction and OCR.
   - [x] Low-end machines (docs/perf.md, `npm run perf`): measured a
     100-sheet set with 4x CPU throttling and 4 GB memory; undo capped by a
     memory budget with cold snapshots; lower canvas limits on small
-    machines; cheaper scrolling; heap after browsing 87 -> 27 MB. Still to
-    do: load pdf.js/pdf-lib on first open (lighter first load), and a test
-    on real 4 GB hardware with testers' sets.
+    machines; cheaper scrolling; heap after browsing 87 -> 27 MB. The script is split
+    (first paint on a slow line 1.5 -> 0.45 s). Still to do: load pdf.js/
+    pdf-lib only on first open, and a test on real 4 GB hardware with
+    testers' sets.
   - Speed on large drawing sets as a stated goal (competitors sell on it).
 - Tester outreach (do later, with Claude's help):
   1. Have Claude compile a list of companies publicly known to use

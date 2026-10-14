@@ -48,6 +48,22 @@ await cdp.send('Performance.enable');
 const heap = async () => { await cdp.send('HeapProfiler.collectGarbage').catch(() => {}); const m = (await cdp.send('Performance.getMetrics')).metrics; return Math.round(m.find((x) => x.name === 'JSHeapUsedSize').value / 2 ** 20); };
 const rendered = (n) => page.waitForFunction((k) => document.querySelector('.page')?.getAttribute('data-rendered') === String(k), n, { timeout: 120000 });
 const results = {};
+// First load on a slow connection (10 Mbit/s, 60 ms): when something appears, and when the app is usable.
+{
+  const p2 = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+  const c2 = await p2.context().newCDPSession(p2);
+  await c2.send('Network.enable');
+  await c2.send('Network.setCacheDisabled', { cacheDisabled: true });
+  await c2.send('Network.emulateNetworkConditions', { offline: false, latency: 60, downloadThroughput: 10e6 / 8, uploadThroughput: 2e6 / 8 });
+  await c2.send('Emulation.setCPUThrottlingRate', { rate: THROTTLE });
+  const t0 = Date.now();
+  await p2.goto(URL);
+  await p2.locator('.app-loading, .menubar, .start-page').first().waitFor();
+  results.slowNetFirstPaintMs = Date.now() - t0;
+  await p2.locator('.menubar').waitFor({ timeout: 120000 });
+  results.slowNetReadyMs = Date.now() - t0;
+  await p2.close();
+}
 let t = Date.now();
 await page.goto(URL);
 await page.locator('.menubar').waitFor();

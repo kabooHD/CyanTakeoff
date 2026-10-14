@@ -492,3 +492,4 @@ button.active { background: #d6e4fa; }
 .status-list { border: 1px solid var(--border); height: 140px; overflow: auto; margin-bottom: 4px; }
 .status-props { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 6px; }
 .camera-video { width: 480px; max-width: 80vw; background: #000; display: block; }
+.app-loading { height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--canvas, #808080); }
