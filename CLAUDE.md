@@ -117,7 +117,8 @@ src/pdf/docTools.ts, src/model/deskew.ts); Unflatten (flattenPage recovery,
 unflattenPage in src/pdf/pages.ts); custom stamps (src/model/stamps.ts,
 src/ui/Stamps.tsx), status models (src/model/statusModels.ts,
 src/ui/StatusModels.tsx), Edit Action on any markup, Offset
-(src/model/offset.ts, src/ui/OffsetBar.tsx), Camera (src/ui/Camera.tsx),
+(src/model/offset.ts, src/ui/OffsetBar.tsx), Multiply (src/model/multiply.ts,
+src/ui/Multiply.tsx), Hide/Show markups, Camera (src/ui/Camera.tsx),
 Replace Checked (src/ui/Search.tsx); low-end machine pass (src/model/device.ts: undo
 memory budget, cold undo snapshots, canvas limits; docs/perf.md); CyanTakeoff (=Revu)
 and Batch menus; form filling (AcroForm inputs saved into the form) and

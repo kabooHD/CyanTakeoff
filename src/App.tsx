@@ -42,6 +42,7 @@ import { PlaceDialog } from './ui/LinksPanel';
 import { RecentList } from './ui/FileAccess';
 import { StampManagerDialog } from './ui/Stamps';
 import { startOffset } from './ui/OffsetBar';
+import { MultiplyDialog } from './ui/Multiply';
 import { CameraDialog, useCamera } from './ui/Camera';
 import { ManageStatusDialog } from './ui/StatusModels';
 import { DocToolsDialogs, emailDocument, publishCompressed, useDocTools } from './ui/DocTools';
@@ -279,6 +280,7 @@ export function App() {
       <PagesDialog />
       <CompareDialog />
       <PrintDialog />
+      <MultiplyDialog />
       <StyleManagerDialog />
       <SpellDialog />
       <SequenceDialog />

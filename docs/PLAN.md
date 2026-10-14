@@ -248,7 +248,8 @@ filling, image signatures, redaction and OCR.
   image stamps; export/import), status models (Manage Status: custom
   models and states with colour and text, default for new markups,
   who/when recorded), Edit Action on any markup (Ctrl+Shift+E), Offset (O:
-  distance, Replace Markup, miter limit, Offset as), Camera (Ctrl+Alt+I),
+  distance, Replace Markup, miter limit, Offset as), Multiply (parallel
+  copies), Hide / Show Hidden Markups, Cut, Camera (Ctrl+Alt+I),
   Search > Replace Checked (rewrites the page text)
 - [x] Signatures: trust list with certificate chain checks, RFC 3161
   timestamps (request when signing, check when verifying)

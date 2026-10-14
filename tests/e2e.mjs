@@ -2225,6 +2225,30 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForTimeout(200);
   assert(await rows() === n0 + 1, 'Offset places a parallel copy where clicked');
   await page.keyboard.press('Escape');
+  // Multiply: two copies of the offset line, 0.25 in apart, below it.
+  await page.mouse.click(box.x + 250, box.y + 340);
+  await page.waitForTimeout(200);
+  await page.locator('.menubar-item > button', { hasText: /^Edit$/ }).click();
+  await page.getByRole('menuitem', { name: 'Multiply…' }).click();
+  const md = page.locator('[role=dialog][aria-label="Multiply"]');
+  await md.waitFor();
+  await md.locator('[aria-label="Direction"]').selectOption('down');
+  await md.locator('[aria-label="Distance"]').fill('0.25');
+  await md.locator('[aria-label="Copies"]').fill('2');
+  await md.getByRole('button', { name: 'OK' }).click();
+  await page.waitForTimeout(300);
+  assert(await rows() === n0 + 3, 'Multiply places two parallel copies');
+  // Hide: the copies leave the drawing but stay (greyed) in the list; Show Hidden Markups brings them back.
+  const drawn = await svg.locator('[data-id]').count();
+  await page.locator('.menubar-item > button', { hasText: /^Edit$/ }).click();
+  await page.getByRole('menuitem', { name: 'Hide', exact: true }).click();
+  await page.waitForTimeout(200);
+  assert(await svg.locator('[data-id]').count() === drawn - 2 && await page.locator('.ml-table tr.hidden-markup').count() === 2, 'Hide removes the markups from the drawing, not the list');
+  await page.locator('.menubar-item > button', { hasText: /^Edit$/ }).click();
+  await page.getByRole('menuitem', { name: 'Show Hidden Markups' }).click();
+  await page.waitForTimeout(200);
+  assert(await svg.locator('[data-id]').count() === drawn, 'Show Hidden Markups draws them again');
+  await page.keyboard.press('Escape');
   // Edit Action: the rectangle drawn earlier jumps to page 1... use the new line instead.
   await page.mouse.click(box.x + 250, box.y + 300);
   await page.keyboard.press('Control+Shift+E');

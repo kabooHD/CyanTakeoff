@@ -188,6 +188,8 @@ export interface Markup {
   groupId?: string;
   /** Locked markups cannot be moved, resized or deleted (Revu Lock). */
   locked?: boolean;
+  /** Hidden markups (Edit > Hide) are not drawn; PDF /F Hidden flag. */
+  hidden?: boolean;
   /** Legend settings (Legend markups). */
   legend?: import('./legend').LegendDef;
   /** Replies to this markup (PDF: /Text annotations with /IRT to it). */

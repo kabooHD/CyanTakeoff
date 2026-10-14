@@ -188,7 +188,7 @@ export function MarkupsList() {
           <tbody>
             {rows.map(({ m, v }) => (
               <Fragment key={m.id}>
-              <tr className={sel.has(m.id) ? 'selected' : ''}
+              <tr className={`${sel.has(m.id) ? 'selected' : ''} ${m.hidden ? 'hidden-markup' : ''}`} title={m.hidden ? 'Hidden (Edit > Show)' : undefined}
                 onClick={(e) => goTo(m, e.ctrlKey || e.metaKey)}>
                 {columns.map((c) => (
                   <td key={c.key} className={c.numeric ? 'num' : ''}>

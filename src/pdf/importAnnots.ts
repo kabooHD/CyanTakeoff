@@ -183,6 +183,7 @@ function baseMarkup(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number, 
     checked: ct?.checked,
     seq: ct?.seq,
     locked: ((getNumber(doc, dict, 'F') ?? 0) & 128) !== 0 || undefined,
+    hidden: ((getNumber(doc, dict, 'F') ?? 0) & 2) !== 0 || undefined,
     layer: dict.get(PDFName.of('OC')) instanceof PDFRef ? refId(dict.get(PDFName.of('OC')) as PDFRef) : undefined,
     link: type === 'link' ? undefined : readAction(doc, dict),
   } satisfies Omit<Markup, 'points'>;

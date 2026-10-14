@@ -492,6 +492,12 @@ Print Spaces.
 - Offset (O with one markup selected): Distance (in the page's scale
   units, else inches), Replace Markup, Angle Miter Limit, Offset as
   another type; the click picks the side (inside/outside for shapes).
+- Multiply (right-click or Edit): parallel copies of the selection up,
+  down, left or right, a distance apart (scale units, else inches), as
+  many as fit on the sheet; copies are independent markups.
+- Hide (Edit or right-click) takes markups off the drawing (PDF Hidden
+  flag) but keeps them greyed in the Markups List; Show / Show Hidden
+  Markups bring them back. Cut (Ctrl+X) = Copy + Delete.
 - Camera (Ctrl+Alt+I): take a photo and click to place it.
 - Search > Replace Checked: replaces the checked results in the drawing's
   text (as Edit Text does).

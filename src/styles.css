@@ -68,6 +68,7 @@ input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); bo
 .menu-shortcut { color: var(--muted); font-size: 11px; padding-left: 24px; }
 .menu-sep { height: 1px; background: var(--chrome-2); margin: 3px 0; }
 .context-menu { position: fixed; z-index: 60; }
+.context-menu .menu-list { max-height: calc(100vh - 8px); overflow-y: auto; }
 
 /* ---------- toolbar ---------- */
 .toolbar {
@@ -498,3 +499,6 @@ button.active { background: #d6e4fa; }
 .status-props { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 6px; }
 .camera-video { width: 480px; max-width: 80vw; background: #000; display: block; }
 .app-loading { height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--canvas, #808080); }
+
+/* Hidden markups (Edit > Hide) stay listed, greyed. */
+.ml-table tr.hidden-markup td { opacity: 0.45; font-style: italic; }

@@ -613,7 +613,7 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
     FillOpacity: st.fillOpacity,
     M: PDFString.of(now),
     CreationDate: PDFString.of(pdfDate(new Date(m.created))),
-    F: m.locked ? 4 | 128 : 4, // print (+ locked)
+    F: 4 | (m.locked ? 128 : 0) | (m.hidden ? 2 : 0), // print (+ locked, hidden)
     C: hexToRgb(st.color),
     CA: st.opacity,
     BS: { Type: 'Border', W: st.width, ...(lineDash(lineStyleOf(st), st.width) ? { S: 'D', D: lineDash(lineStyleOf(st), st.width) } : { S: 'S' }) },

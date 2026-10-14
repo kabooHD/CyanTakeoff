@@ -87,6 +87,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Undo', shortcut: 'Ctrl+Z', disabled: !doc?.undo.length, action: s.undo },
       { label: 'Redo', shortcut: 'Ctrl+Y', disabled: !doc?.redo.length, action: s.redo },
       { sep: true },
+      { label: 'Cut', shortcut: 'Ctrl+X', disabled: !doc?.selection.length, action: () => { if (doc) { s.copy(); s.deleteMarkups(doc.selection); } } },
       { label: 'Copy', shortcut: 'Ctrl+C', disabled: !doc?.selection.length, action: s.copy },
       { label: 'Paste', shortcut: 'Ctrl+V', disabled: !s.clipboard.length || noDoc, action: () => s.paste() },
       { label: 'Paste in Place', shortcut: 'Ctrl+Shift+V', disabled: !s.clipboard.length || noDoc, action: () => s.paste(true) },

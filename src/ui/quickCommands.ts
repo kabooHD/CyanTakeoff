@@ -75,3 +75,20 @@ export function editAction(ids?: string[]) {
 }
 
 export const balanceSplit = () => useApp.setState({ splitRatio: 0.5 });
+
+/** Edit > Hide: hidden markups stay in the list (greyed) but are not drawn or printed. */
+export function hideSelected(hidden = true) {
+  const s = useApp.getState();
+  const d = s.docs.find((x) => x.id === s.activeId);
+  if (!d?.selection.length) return;
+  s.updateMarkups(d.selection, () => ({ hidden: hidden || undefined }));
+  s.setStatus(hidden ? `${d.selection.length} markup${d.selection.length === 1 ? '' : 's'} hidden (Edit > Show Hidden Markups brings them back)` : 'Markups shown');
+}
+export function showHiddenMarkups() {
+  const s = useApp.getState();
+  const d = s.docs.find((x) => x.id === s.activeId);
+  const ids = d?.markups.filter((m) => m.hidden).map((m) => m.id) ?? [];
+  if (!ids.length) { s.setStatus('No hidden markups in this document'); return; }
+  s.updateMarkups(ids, () => ({ hidden: undefined }));
+  s.setStatus(`${ids.length} hidden markup${ids.length === 1 ? '' : 's'} shown`);
+}
