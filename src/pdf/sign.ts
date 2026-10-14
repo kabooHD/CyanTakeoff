@@ -5,7 +5,7 @@
 // verification uses WebCrypto (RSA PKCS#1 v1.5 and ECDSA).
 import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFNumber, PDFRef, PDFString, StandardFonts, type PDFPage } from 'pdf-lib';
 import type forgeNs from 'node-forge';
-import { incrementalUpdate, keepPageContents, loadForUpdate } from './incremental';
+import { hasSignatures, incrementalUpdate, keepPageContents, loadForUpdate } from './incremental';
 
 type Forge = typeof forgeNs;
 let forgeP: Promise<Forge> | null = null;
@@ -74,6 +74,8 @@ export interface SignOptions {
   tsa?: string;
   /** How to send the timestamp request (default: HTTP POST to `tsa`). */
   fetchTimestamp?: (request: Uint8Array) => Promise<Uint8Array>;
+  /** Certify the document (DocMDP): 1 no changes allowed, 2 form filling and signing, 3 also annotations. */
+  certify?: 1 | 2 | 3;
 }
 
 /** RFC 3161 TimeStampReq for a SHA-256 hash of `data`, asking for the TSA's certificate. */
@@ -142,7 +144,12 @@ export async function signPdf(pdf: Uint8Array, opts: SignOptions): Promise<Uint8
     M: PDFString.of(pdfDate(date)), Name: PDFHexString.fromText(name),
     ...(opts.reason ? { Reason: PDFHexString.fromText(opts.reason) } : {}),
     ...(opts.location ? { Location: PDFHexString.fromText(opts.location) } : {}),
+    ...(opts.certify ? { Reference: [{ Type: 'SigRef', TransformMethod: 'DocMDP', TransformParams: { Type: 'TransformParams', P: opts.certify, V: '1.2' }, DigestMethod: 'SHA256' }] } : {}),
   }));
+  if (opts.certify) {
+    if (hasSignatures(doc)) throw new Error('A document can only be certified by its first signature.');
+    doc.catalog.set(N('Perms'), ctx.obj({ DocMDP: sig }));
+  }
   const form = doc.getForm();
   const acro = form.acroForm.dict;
   acro.set(N('SigFlags'), PDFNumber.of(3)); // signatures exist; append only
@@ -246,6 +253,8 @@ export interface SignatureInfo {
   detail: string;
   /** False when the document has later revisions (changes after this signature). */
   coversDocument: boolean;
+  /** DocMDP certification level when this signature certifies the document (1 no changes, 2 forms, 3 forms and markups). */
+  certified?: 1 | 2 | 3;
   /** Signing time (or now) within the certificate's validity period. */
   certInDate: boolean;
   selfSigned: boolean;
@@ -473,6 +482,15 @@ export async function verifySignatures(pdf: Uint8Array, trusted: Uint8Array[] = 
     const info: SignatureInfo = { field: name, signer: 'Unknown', issuer: '', status: 'unknown', detail: '', coversDocument: false, certInDate: false, selfSigned: false, trusted: false };
     const text = (k: string) => { const x = v.lookup(N(k)); return x instanceof PDFString || x instanceof PDFHexString ? x.decodeText() : undefined; };
     info.reason = text('Reason'); info.location = text('Location');
+    const refs = v.lookup(N('Reference'));
+    if (refs instanceof PDFArray) {
+      for (const r of refs.asArray()) {
+        const sr = r instanceof PDFDict ? r : doc.context.lookup(r);
+        const tp = sr instanceof PDFDict ? sr.lookup(N('TransformParams')) : undefined;
+        const pv = tp instanceof PDFDict ? tp.get(N('P')) : undefined;
+        if (sr instanceof PDFDict && String(sr.get(N('TransformMethod'))) === '/DocMDP') info.certified = (pv instanceof PDFNumber ? pv.asNumber() : 1) as 1 | 2 | 3;
+      }
+    }
     out.push(info);
     try {
       const br = (v.lookup(N('ByteRange')) as PDFArray).asArray().map((x) => (x as PDFNumber).asNumber());

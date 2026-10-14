@@ -1700,6 +1700,26 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.getByText('Watermark removed').waitFor({ timeout: 20000 });
   await page.waitForTimeout(800);
   assert(await find('DRAFT') === 0 && await find('CT0001') === 1, 'Remove Watermark removes only the watermark');
+  // File exports: Export Text, Publish as Uncompressed; Edit > Undo History.
+  {
+    const [td] = await Promise.all([page.waitForEvent('download'), menu('File', 'Export Text')]);
+    assert(td.suggestedFilename().endsWith('.txt'), `Export Text downloads a text file (${td.suggestedFilename()})`);
+    const txtPath = `${OUT}/export.txt`;
+    await td.saveAs(txtPath);
+    assert(readFileSync(txtPath, 'utf8').includes('--- Page '), 'the text export lists the pages');
+    const [ud] = await Promise.all([page.waitForEvent('download'), menu('File', 'Publish as Uncompressed')]);
+    assert(ud.suggestedFilename().endsWith(' (uncompressed).pdf'), 'Publish as Uncompressed downloads a copy');
+    await page.getByText(/Published .* \(uncompressed\)\.pdf/).waitFor({ timeout: 20000 });
+    await page.locator('.menubar-item > button', { hasText: /^Edit$/ }).click();
+    const uhEnabled = await page.getByRole('menuitem', { name: 'Undo History…' }).isEnabled();
+    if (uhEnabled) {
+      await page.getByRole('menuitem', { name: 'Undo History…' }).click();
+      const uh = page.locator('[role=dialog][aria-label="Undo History"]');
+      const steps = await uh.locator('[aria-label^="Undo to step"]').count();
+      assert(steps >= 1, `Undo History lists the unsaved steps (${steps})`);
+      await uh.getByRole('button', { name: 'Close' }).click();
+    } else await page.keyboard.press('Escape');
+  }
   // Color Processing, Repair PDF and Archive as PDF/A on the active document.
   {
     await menu('Document', 'Color Processing…');
@@ -2196,6 +2216,20 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Control+v');
   await page.waitForTimeout(200);
   assert(await page.locator('.ml-table tbody tr').count() === n1 + 1, 'Snapshot Content pastes as an image markup');
+  // Crop Image on the pasted snapshot (selected after pasting): keep its left half.
+  {
+    const imgEl = page.locator('.page .markup-layer image').last();
+    const ib = await imgEl.boundingBox();
+    if (ib) {
+      await page.locator('.menubar-item > button', { hasText: /^Edit$/ }).click();
+      await page.getByRole('menuitem', { name: 'Crop Image…' }).click();
+      await page.mouse.move(ib.x + 2, ib.y + 2); await page.mouse.down();
+      await page.mouse.move(ib.x + ib.width / 2, ib.y + ib.height - 2, { steps: 4 }); await page.mouse.up();
+      await page.getByText('Image cropped').waitFor({ timeout: 10000 });
+      const nb = await page.locator('.page .markup-layer image').last().boundingBox();
+      assert(nb.width < ib.width * 0.6, `Crop Image keeps the dragged part (${Math.round(ib.width)} -> ${Math.round(nb.width)})`);
+    }
+  }
   await page.keyboard.press('Control+Alt+c');
   await page.waitForFunction(() => /Page copied/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 20000 });
   const png = await page.evaluate(async () => { const items = await navigator.clipboard.read(); return items[0]?.types.join(','); });

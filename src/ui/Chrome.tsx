@@ -8,6 +8,9 @@ import { usePageSetup } from './PageSetup';
 import { batchHint } from './filesRow';
 import { useApplyStamp } from './ApplyStamp';
 import { archiveAsPdfA, useColorProcess } from './ColorProcess';
+import { exportText, publishFlattened, publishUncompressed, useExportImage } from './FileExports';
+import { useUndoHistory } from './UndoHistory';
+import { validateSignatures } from './DigitalSignature';
 import { exportFormData, importFormData, mergeFormData, migrateTypewrittenText, resetForm } from './FormData';
 import { Icon } from './icons';
 import { MenuList, type MenuItem } from './ContextMenu';
@@ -83,7 +86,11 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Import Markups (XFDF)…', disabled: noDoc, action: () => importMarkupsXfdf() },
       { label: 'Export Markups (XFDF)', disabled: noDoc, action: () => exportMarkupsXfdf() },
       { sep: true },
+      { label: 'Export as Image…', disabled: noDoc, action: () => useExportImage.setState({ open: true }) },
+      { label: 'Export Text', disabled: noDoc, action: exportText },
+      { label: 'Publish as Flattened', disabled: noDoc, action: publishFlattened },
       { label: 'Publish as Compressed', shortcut: 'Ctrl+Shift+P', disabled: noDoc, action: publishCompressed },
+      { label: 'Publish as Uncompressed', disabled: noDoc, action: publishUncompressed },
       { label: 'Email…', shortcut: 'Ctrl+E', disabled: noDoc, action: emailDocument },
       { label: 'Reduce File Size…', disabled: noDoc, action: () => useReduceDialog.setState({ open: true }) },
       { sep: true },
@@ -92,6 +99,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
     Edit: [
       { label: 'Undo', shortcut: 'Ctrl+Z', disabled: !doc?.undo.length, action: s.undo },
       { label: 'Redo', shortcut: 'Ctrl+Y', disabled: !doc?.redo.length, action: s.redo },
+      { label: 'Undo History…', disabled: !doc?.undo.length, action: () => useUndoHistory.setState({ open: true }) },
       { sep: true },
       { label: 'Cut', shortcut: 'Ctrl+X', disabled: !doc?.selection.length, action: () => { if (doc) { s.copy(); s.deleteMarkups(doc.selection); } } },
       { label: 'Copy', shortcut: 'Ctrl+C', disabled: !doc?.selection.length, action: s.copy },
@@ -177,6 +185,8 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Unflatten', shortcut: 'Ctrl+Shift+U', disabled: noDoc, action: unflattenMarkups },
       { sep: true },
       { label: 'Signature…', disabled: noDoc, action: () => useSignature.setState({ open: true }) },
+      { label: 'Certify Document (Digital ID)…', disabled: noDoc, action: () => openSignDialog(undefined, true) },
+      { label: 'Validate Signatures', disabled: noDoc, action: validateSignatures },
       { label: 'Sign Document (Digital ID)…', disabled: noDoc, action: () => openSignDialog() },
       { label: 'Mark for Redaction', shortcut: 'Shift+R', disabled: noDoc, action: () => s.setTool('redaction') },
       { label: 'Mark Text for Redaction', shortcut: 'Shift+K', disabled: noDoc, action: () => s.setTool('redact-text') },

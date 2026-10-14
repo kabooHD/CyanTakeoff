@@ -354,6 +354,20 @@ problems; ours rebuilds the file structure, drops broken annotation and
 content entries and closes open graphics states (Revu's AutoCAD wipeout,
 striped-image and clipping fixes: not yet).
 
+## File exports, Undo History, Crop Image, Certify
+File > Export: ours exports PNG or JPEG (one file per page, resolution,
+with or without markups) and plain text (reading order, pages separated);
+Revu also offers TIFF/GIF/BMP, RTF/HTML and Office formats (not yet).
+Publish As: Flattened (markups merged into the content), Compressed,
+Uncompressed (plain PDF, revisions merged); Revert As (earlier saved
+revisions) is covered by Refresh (F5) reloading the file. Edit > Undo
+History lists the unsaved steps (markups, scale, pages) to undo back to
+one. Markup > Crop Image: drag the part of a selected image markup to
+keep. Document > Certify Document signs with a DocMDP certification (no
+changes / form filling and signing / also markups), only as the first
+signature; Validate Signatures re-checks them and opens the Signatures
+panel.
+
 ## Header & Footer, Bates, Watermark
 Header & Footer (Document menu, Batch for many files): left/centre/right
 text in the header and footer, with fields such as page number, page label,
