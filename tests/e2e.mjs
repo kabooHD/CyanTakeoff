@@ -663,6 +663,39 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const [sp] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'PDF report' }).click()]);
   await sp.saveAs(`${OUT}/summary.pdf`);
   assert((await PDFDocument.load(readFileSync(`${OUT}/summary.pdf`))).getPageCount() >= 1, 'PDF summary report generated');
+  // Summary dialog: CSV with ID columns and replies; PDF appended to the document with hyperlinked rows.
+  {
+    const pagesOf = async () => Number((await page.locator('.statusbar').innerText()).match(/of (\d+)\)/)[1]);
+    const n0 = await pagesOf();
+    await page.getByRole('button', { name: 'Summary ▾' }).click();
+    await page.getByRole('button', { name: 'Summary…' }).click();
+    const sd = page.getByRole('dialog', { name: 'Markup Summary' });
+    await sd.getByRole('tab', { name: 'Filter & Sort' }).click();
+    await sd.getByLabel('Sort by').selectOption('subject');
+    await sd.getByRole('tab', { name: 'Output' }).click();
+    await sd.getByLabel('Export as').selectOption('csv');
+    await sd.getByLabel('ID columns (ID and Parent)').check();
+    await sd.locator('label', { hasText: /^\s*Replies/ }).locator('input').check();
+    const [cd] = await Promise.all([page.waitForEvent('download'), sd.getByRole('button', { name: 'OK' }).click()]);
+    await cd.saveAs(`${OUT}/summary-dialog.csv`);
+    const csv = readFileSync(`${OUT}/summary-dialog.csv`, 'utf8');
+    assert(csv.startsWith('﻿ID,Parent,Subject') && csv.includes('Reply: ') && csv.includes('Verified on site'), 'the Summary dialog writes CSV with ID columns and replies');
+    const subjects = csv.split('\r\n').slice(1).filter((l) => !l.includes('Reply: ') && !l.includes(',Total,')).map((l) => l.split(',')[2]);
+    assert(subjects.join() === [...subjects].sort((x, y) => x.localeCompare(y)).join(), `rows are sorted by Subject (${subjects.join('|')})`);
+    await page.getByRole('button', { name: 'Summary ▾' }).click();
+    await page.getByRole('button', { name: 'Summary…' }).click();
+    await sd.getByRole('tab', { name: 'Output' }).click();
+    await sd.getByLabel('Export as').selectOption('pdf');
+    await sd.getByLabel('Append and hyperlink to current PDF').check();
+    await sd.getByLabel('Thumbnail').selectOption('small');
+    await sd.getByRole('button', { name: 'OK' }).click();
+    await page.waitForFunction(() => /Markups Summary: \d+ pages? appended/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 60000 });
+    const added = Number((await page.locator('.statusbar').innerText()).match(/Markups Summary: (\d+) page/)[1]);
+    await page.waitForFunction((n) => (document.querySelector('.statusbar')?.textContent ?? '').includes(`of ${n})`), n0 + added, { timeout: 20000 });
+    assert(added >= 1 && await pagesOf() === n0 + added, `the PDF summary is appended to the document (${added} pages)`);
+    await page.keyboard.press('Control+z');
+    await page.waitForFunction((n) => (document.querySelector('.statusbar')?.textContent ?? '').includes(`of ${n})`), n0, { timeout: 20000 });
+  }
   const [rd] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
   await rd.saveAs(`${OUT}/saved-replies.pdf`);
   await page.waitForTimeout(800);

@@ -10,6 +10,7 @@ import { Icon } from './icons';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { markupMenuItems } from './markupMenu';
 import { openCapturePreview } from './Capture';
+import { openSummaryDialog } from './SummaryDialog';
 
 /** Saved filter sets (Revu's Saved Filters), kept in the browser. */
 interface SavedFilter { name: string; filters: Record<string, string>; search: string }
@@ -178,6 +179,7 @@ export function MarkupsList() {
           </button>
           {exportOpen && (
             <div className="ml-columns-menu right" onMouseLeave={() => setExportOpen(false)}>
+              <button onClick={() => { setExportOpen(false); openSummaryDialog(); }}>Summary…</button>
               <button onClick={() => { setExportOpen(false); exportSummaryXlsx(rows.map((r) => r.m), columns); }}>Excel (.xlsx)</button>
               <button onClick={() => { setExportOpen(false); exportSummaryPdf(rows.map((r) => r.m), columns); }}>PDF report</button>
               <button onClick={() => { setExportOpen(false); exportSummaryCsv(rows.map((r) => r.m), columns); }}>CSV</button>

@@ -778,7 +778,17 @@ folders, manual correlation and saved .bcx batches).
   Units groups the rows under collapsible headings. Columns also: X, Y,
   X/Y Center, Document Width/Height (inches from the lower left), Width
   and Height (real-world, at the markup's scale).
-- Summary: CSV, XML, PDF or print, with Columns and Filter & Sort tabs.
+- Summary (Summary ▾ > Summary…, Batch > Summary…): Columns tab (pick
+  and order columns, Show empty columns), Filter & Sort tab (a filter
+  per column, Sort by / Then by with direction), Output tab: Export as
+  PDF, CSV, XML, Excel or Print; Title and Append date to title. CSV/XML/
+  Excel: Include (markups, totals, both), column headers, ID columns (ID
+  and Parent of grouped markups), measurement units, replies. PDF/Print:
+  Append and hyperlink to current PDF (the report's pages are added to
+  the document, each row jumping to its markup's page), Insert page break
+  per field, Include totals, Thumbnail (none/small/medium, with or
+  without page content), replies. The quick Excel / PDF / CSV entries
+  export the list as shown.
 
 ## Preferences (Ctrl+K)
 - General: User (author of new markups), Theme (Light/Dark), tab

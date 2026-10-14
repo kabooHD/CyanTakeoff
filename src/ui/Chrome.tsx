@@ -47,6 +47,7 @@ import { useRecent } from '../model/recent';
 import { reopen } from './FileAccess';
 import { copyPageToSnapshot, copyText, selectAllText } from './textCommands';
 import { openCommandFinder, registerMenus } from './CommandFinder';
+import { openSummaryDialog } from './SummaryDialog';
 
 // ---------------- Menu bar ----------------
 
@@ -273,6 +274,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Quantity Link (Excel)…', disabled: noDoc, action: () => useQuantityLink.setState({ open: true }) },
       { label: 'Summary (Excel)', disabled: noDoc, action: () => { const d = activeDoc(); if (d) exportSummaryXlsx(d.markups, allColumns(d)); } },
       { label: 'Summary (PDF)', disabled: noDoc, action: () => { const d = activeDoc(); if (d) exportSummaryPdf(d.markups, allColumns(d)); } },
+      { label: 'Summary…', disabled: noDoc, action: openSummaryDialog },
       { label: 'Combine Files…', action: combineFiles },
     ],
     Window: [

@@ -593,3 +593,6 @@ label.button, a.button { display: inline-block; padding: 2px 8px; border: 1px so
 .text-styles .text-toggle:nth-child(2) { font-style: italic; }
 .text-styles .text-toggle:nth-child(3) { text-decoration: underline; }
 .text-styles .text-toggle:nth-child(4) { text-decoration: line-through; }
+
+.summary-dialog { width: min(640px, 94vw); }
+.summary-columns, .summary-filters { max-height: 40vh; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 4px 0; }
