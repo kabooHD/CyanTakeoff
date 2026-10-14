@@ -303,7 +303,8 @@ range (e.g. skip the cover), preview. Bates numbering adds prefix, suffix,
 start number and digit padding (six or more digits is common). Watermarks
 add large faded text across pages. Ours writes all three as real page text
 tagged as pagination artifacts (so they print everywhere) and can remove
-what it added; Batch across many files: not yet.
+what it added; a Files option runs any of the three over all open
+documents (Bates numbers continue from one file to the next).
 
 ## Quantity Link (Excel)
 Revu's Quantity Link is an Excel add-in: right-click a cell > Quantity Link

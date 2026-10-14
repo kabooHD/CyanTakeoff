@@ -1668,6 +1668,24 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.getByText('Watermark removed').waitFor({ timeout: 20000 });
   await page.waitForTimeout(800);
   assert(await find('DRAFT') === 0 && await find('CT0001') === 1, 'Remove Watermark removes only the watermark');
+  // Batch: Header & Footer over all open documents.
+  if (await page.locator('.doc-tab').count() >= 2) {
+    const activeTab = await page.locator('.doc-tab.active').innerText();
+    await menu('Batch', 'Header & Footer…');
+    const hd = page.locator('[role=dialog][aria-label="Header & Footer"]');
+    await hd.locator('[aria-label="Header center"]').fill('BATCHHF');
+    await hd.locator('[aria-label="Files"]').selectOption('all');
+    await hd.getByRole('button', { name: 'OK' }).click();
+    await page.getByText(/Header & Footer added to \d+ documents/).waitFor({ timeout: 60000 });
+    await page.waitForTimeout(800);
+    assert(await find('BATCHHF') >= 1, 'batch Header & Footer is on the active document');
+    const other = page.locator('.doc-tab', { hasNotText: activeTab }).first();
+    await other.click();
+    await page.waitForTimeout(600);
+    assert(await find('BATCHHF') >= 1, 'batch Header & Footer is on another open document too');
+    await page.locator('.doc-tab', { hasText: activeTab }).first().click();
+    await page.waitForTimeout(400);
+  }
   await page.evaluate(() => document.activeElement?.blur());
 }
 

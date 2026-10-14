@@ -262,7 +262,7 @@ interface AppState {
    * Returns false if it failed (the status bar says why).
    */
   /** Change the file with pdf-lib (undoable). `markups` replaces the document's markups in the file first (for changes that move both). */
-  transformDoc(fn: (lib: PDFDocument, bytes: Uint8Array) => Promise<void | Uint8Array> | void | Uint8Array, done: string, page?: number, markups?: Markup[]): Promise<boolean>;
+  transformDoc(fn: (lib: PDFDocument, bytes: Uint8Array) => Promise<void | Uint8Array> | void | Uint8Array, done: string, page?: number, markups?: Markup[], docId?: string): Promise<boolean>;
   /** Replace the document's custom columns. */
   setColumns(cols: CustomColumn[]): void;
   setFieldValue(name: string, value: string | boolean): void;
@@ -734,8 +734,8 @@ export const useApp = create<AppState>((set, get) => {
       });
     },
     setActiveViewport: (activeViewport) => set({ activeViewport }),
-    async transformDoc(fn, done, page, markups) {
-      const d = activeDoc();
+    async transformDoc(fn, done, page, markups, docId) {
+      const d = docId ? get().docs.find((x) => x.id === docId) : activeDoc();
       if (!d) return false;
       if (d.loaded.readOnly) { set({ status: 'This file could not be parsed for editing.' }); return false; }
       set({ busy: true, status: 'Updating pages…' });

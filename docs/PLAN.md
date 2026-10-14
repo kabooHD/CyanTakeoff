@@ -202,7 +202,8 @@ filling, image signatures, redaction and OCR.
 - [x] Header & Footer (6 positions, fields: page, pages, page label, date,
   time, file name, Bates), Bates Numbering (prefix/start/digits/suffix),
   Watermark (text, font, colour, opacity, rotation, behind/in front); page
-  ranges, preview; written as pagination artifacts and removable
+  ranges, preview, all open documents at once; written as pagination
+  artifacts and removable
 - [x] Password security: open RC4/AES-128/AES-256 protected files (password
   prompt; permissions honoured when opened with the open password), saving
   keeps the same passwords; Security (Ctrl+L) sets/removes AES-256

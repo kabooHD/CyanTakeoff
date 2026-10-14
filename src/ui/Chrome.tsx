@@ -194,6 +194,8 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Slip Sheet…', disabled: noDoc, action: () => openPagesDialog('slip-sheet') },
       { label: 'Flatten…', disabled: noDoc, action: () => openPagesDialog('flatten') },
       { label: 'Bates Numbering…', disabled: noDoc, action: () => useStampDialog.setState({ open: 'bates' }) },
+      { label: 'Header & Footer…', disabled: noDoc, action: () => useStampDialog.setState({ open: 'header' }) },
+      { label: 'Watermark…', disabled: noDoc, action: () => useStampDialog.setState({ open: 'watermark' }) },
       { label: 'Quantity Link (Excel)…', disabled: noDoc, action: () => useQuantityLink.setState({ open: true }) },
       { label: 'Summary (Excel)', disabled: noDoc, action: () => { const d = activeDoc(); if (d) exportSummaryXlsx(d.markups, allColumns(d)); } },
       { label: 'Summary (PDF)', disabled: noDoc, action: () => { const d = activeDoc(); if (d) exportSummaryPdf(d.markups, allColumns(d)); } },
