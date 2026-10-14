@@ -1,6 +1,7 @@
 // File > Reduce File Size: options dialog; runs as an undoable document
 // change and reports the size before and after.
 import { useState } from 'react';
+import type { PDFDocument } from 'pdf-lib';
 import { create } from 'zustand';
 import { useApp } from '../model/store';
 import { hasSignatures } from '../pdf/incremental';
@@ -24,6 +25,20 @@ async function resample(jpeg: Uint8Array, w: number, h: number, quality: number)
   } catch { return null; }
 }
 
+/** Apply the reduce options to a document and save it compactly. */
+export async function reduceLib(lib: PDFDocument, o: ReduceOptions): Promise<Uint8Array> {
+  removeExtras(lib, o);
+  if (o.imageDpi > 0) {
+    for (const im of oversizedJpegs(lib, o.imageDpi)) {
+      const out = await resample(im.stream.contents, im.targetW, im.targetH, o.quality);
+      if (out && out.length < im.stream.contents.length) replaceJpeg(lib, im.ref, im.stream, out, im.targetW, im.targetH);
+    }
+  }
+  if (o.removeUnused) removeUnused(lib);
+  if (o.compress) compressStreams(lib);
+  return lib.save({ useObjectStreams: true });
+}
+
 export async function reduceFileSize(o: ReduceOptions) {
   const s = useApp.getState();
   const d = s.docs.find((x) => x.id === s.activeId);
@@ -32,16 +47,7 @@ export async function reduceFileSize(o: ReduceOptions) {
   let after = before;
   await s.transformDoc(async (lib) => {
     if (hasSignatures(lib)) throw new Error('this file is digitally signed; reducing it would invalidate the signatures');
-    removeExtras(lib, o);
-    if (o.imageDpi > 0) {
-      for (const im of oversizedJpegs(lib, o.imageDpi)) {
-        const out = await resample(im.stream.contents, im.targetW, im.targetH, o.quality);
-        if (out && out.length < im.stream.contents.length) replaceJpeg(lib, im.ref, im.stream, out, im.targetW, im.targetH);
-      }
-    }
-    if (o.removeUnused) removeUnused(lib);
-    if (o.compress) compressStreams(lib);
-    const bytes = await lib.save({ useObjectStreams: true });
+    const bytes = await reduceLib(lib, o);
     after = bytes.length;
     // Never make it bigger.
     return bytes.length < before ? bytes : d.bytes;

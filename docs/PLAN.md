@@ -228,6 +228,11 @@ filling, image signatures, redaction and OCR.
   delete); links to Places round-trip. File Access (Alt+A): recent files
   in the browser (pin, remove, reopen in place with file access; dropped
   files keep their handle in Chrome/Edge), also on the start page
+- [x] New PDF (blank pages of a chosen size, or one page per image at a
+  chosen dpi), Crop Pages (drawn rectangle or margins, page range, Remove
+  Crop), Deskew (projection-profile skew estimate, content rotated about
+  the page centre), Email (system share sheet, else download + mail
+  draft), Publish as Compressed (a reduced copy; the open file unchanged)
 
 ### Next 2: public test build in local mode (days)
 - Host on a VPS (static site + HTTPS), with a feedback link

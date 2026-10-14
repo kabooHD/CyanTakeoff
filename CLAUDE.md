@@ -109,7 +109,9 @@ F4 navigation bar, Shift+F10 context menu); Select Text / Select All Text
 (src/model/textSelect.ts, src/ui/textCommands.ts), Snapshot with markups
 (src/ui/markupRaster.tsx), Snapshot Content, Copy Page to Snapshot;
 Links panel with Places (src/ui/LinksPanel.tsx, src/pdf/places.ts) and
-File Access recent files (src/model/recent.ts, src/ui/FileAccess.tsx); low-end machine pass (src/model/device.ts: undo
+File Access recent files (src/model/recent.ts, src/ui/FileAccess.tsx);
+New PDF, Crop Pages, Deskew, Email, Publish as Compressed (src/ui/DocTools.tsx,
+src/pdf/docTools.ts, src/model/deskew.ts); low-end machine pass (src/model/device.ts: undo
 memory budget, cold undo snapshots, canvas limits; docs/perf.md); CyanTakeoff (=Revu)
 and Batch menus; form filling (AcroForm inputs saved into the form) and
 field creation (Tools > field tools, X = signature field, Forms Editor

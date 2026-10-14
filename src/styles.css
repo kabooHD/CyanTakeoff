@@ -483,3 +483,4 @@ button.active { background: #d6e4fa; }
 .recent-row .recent-pin.on { opacity: 1; }
 .recent-row:hover .recent-pin, .recent-row:hover .recent-x { opacity: 0.8; }
 .start-recent { margin-top: 14px; text-align: left; }
+.crop-margins { gap: 8px; flex-wrap: wrap; }

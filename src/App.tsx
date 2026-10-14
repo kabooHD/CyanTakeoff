@@ -40,6 +40,7 @@ import { DocPropertiesDialog, useDocProps } from './ui/DocProperties';
 import { Presentation } from './ui/Presentation';
 import { PlaceDialog } from './ui/LinksPanel';
 import { RecentList } from './ui/FileAccess';
+import { DocToolsDialogs, emailDocument, publishCompressed, useDocTools } from './ui/DocTools';
 import { copyPageToSnapshot, copyText, selectAllText } from './ui/textCommands';
 import { autosizeTextBoxes, balanceSplit, refreshDocument, removeSelectedFromGroup, saveAll, toggleFullScreen } from './ui/quickCommands';
 
@@ -80,6 +81,11 @@ export function App() {
         case 'Ctrl+O': return run(openFile);
         case 'Ctrl+S': return run(() => s.save());
         case 'Ctrl+F2': return run(saveAll);
+        case 'Ctrl+N': return run(() => useDocTools.setState({ open: 'new' }));
+        case 'Ctrl+E': return run(() => d && emailDocument());
+        case 'Ctrl+Shift+P': return run(() => d && publishCompressed());
+        case 'Shift+Alt+O': return run(() => d && useDocTools.setState({ open: 'crop' }));
+        case 'Ctrl+Alt+D': return run(() => d && useDocTools.setState({ open: 'deskew' }));
         case 'F5': case 'Shift+F5': return run(() => d && refreshDocument());
         case 'Ctrl+D': return run(() => d && useDocProps.setState({ open: true }));
         case 'Alt+Z': return run(autosizeTextBoxes);
@@ -284,6 +290,7 @@ export function App() {
       <DocPropertiesDialog />
       <Presentation />
       <PlaceDialog />
+      <DocToolsDialogs />
       {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
       {dialog === 'about' && <AboutDialog onClose={() => setDialog(null)} />}
     </div>
@@ -318,6 +325,7 @@ function StartPage() {
         <p className="muted">Open-source PDF markup and quantity takeoff</p>
         <div className="start-actions">
           <button className="primary" onClick={openFile}><Icon name="open" /> Open PDF…</button>
+          <button onClick={() => useDocTools.setState({ open: 'new' })}>New PDF…</button>
           <button onClick={openSample}>Open sample drawing</button>
         </div>
         <p className="muted small">or drag and drop PDF files anywhere</p>

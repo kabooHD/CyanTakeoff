@@ -1944,6 +1944,72 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Alt+a');
 }
 
+// New PDF, Crop Pages, Deskew, Email (share sheet), Publish as Compressed.
+{
+  await page.keyboard.press('Escape');
+  await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+  await page.getByRole('menuitem', { name: /^New PDF/ }).click();
+  let dlg = page.locator('[role=dialog][aria-label="New PDF"]');
+  await dlg.locator('[aria-label="Paper size"]').selectOption('Tabloid (11×17)');
+  await dlg.locator('[aria-label="Orientation"]').selectOption('p');
+  await dlg.locator('[aria-label="Number of pages"]').fill('3');
+  await dlg.getByRole('button', { name: 'Create Blank PDF' }).click();
+  await page.locator('.doc-tab', { hasText: 'Untitled.pdf' }).waitFor();
+  await page.waitForFunction(() => /\(1 of 3\)/.test(document.querySelector('.sb-nav')?.textContent ?? ''));
+  assert((await page.locator('.sb-size').innerText()).includes('11.00 x 17.00'), 'New PDF: three blank Tabloid pages');
+
+  await page.keyboard.press('Shift+Alt+O');
+  dlg = page.locator('[role=dialog][aria-label="Crop Pages"]');
+  await dlg.locator('[aria-label="Page range"]').selectOption('all');
+  for (const k of ['Left', 'Right', 'Top', 'Bottom']) await dlg.locator(`[aria-label="Crop ${k}"]`).fill('1');
+  await dlg.getByRole('button', { name: 'Crop', exact: true }).click();
+  await page.waitForFunction(() => /9\.00 x 15\.00/.test(document.querySelector('.sb-size')?.textContent ?? ''), null, { timeout: 15000 });
+  assert(true, 'Crop Pages trims 1 in from every side');
+  await page.keyboard.press('Control+ArrowRight');
+  await page.waitForTimeout(300);
+  assert((await page.locator('.sb-size').innerText()).includes('9.00 x 15.00'), 'all pages are cropped');
+  await page.keyboard.press('Shift+Alt+O');
+  await page.locator('[role=dialog][aria-label="Crop Pages"] [aria-label="Page range"]').selectOption('all');
+  await page.getByRole('button', { name: 'Remove Crop' }).click();
+  await page.waitForFunction(() => /11\.00 x 17\.00/.test(document.querySelector('.sb-size')?.textContent ?? ''), null, { timeout: 15000 });
+  assert(true, 'Remove Crop restores the page');
+
+  // A scanned-looking page tilted 3°, made into a PDF from the image, then deskewed.
+  const png = await page.evaluate(() => {
+    const c = document.createElement('canvas');
+    c.width = 1100; c.height = 850;
+    const g = c.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, 1100, 850);
+    g.translate(550, 425); g.rotate(3 * Math.PI / 180); g.translate(-550, -425);
+    g.fillStyle = '#000';
+    for (let y = 120; y < 760; y += 30) for (let x = 120; x < 980; x += 14) g.fillRect(x, y, 9, 4);
+    return c.toDataURL('image/png').split(',')[1];
+  });
+  writeFileSync(`${OUT}/skewed.png`, Buffer.from(png, 'base64'));
+  await page.keyboard.press('Control+n');
+  dlg = page.locator('[role=dialog][aria-label="New PDF"]');
+  await dlg.locator('[aria-label="Images"]').setInputFiles(`${OUT}/skewed.png`);
+  await dlg.locator('[aria-label="Image resolution"]').fill('100');
+  await dlg.getByRole('button', { name: /Create from 1 Image/ }).click();
+  await page.locator('.doc-tab', { hasText: 'skewed.pdf' }).waitFor();
+  assert((await page.locator('.sb-size').innerText()).includes('11.00 x 8.50'), 'New PDF from an image sizes the page at the chosen resolution');
+  await page.keyboard.press('Control+Alt+d');
+  await page.locator('[role=dialog][aria-label="Deskew"]').getByRole('button', { name: 'Deskew', exact: true }).click();
+  await page.waitForFunction(() => /Deskewed 1 page/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 30000 });
+  const msg = await page.locator('.sb-status').innerText();
+  const deg = Number(/: (-?[\d.]+)°/.exec(msg)?.[1]);
+  assert(Math.abs(Math.abs(deg) - 3) < 0.2, `Deskew finds the 3° tilt (${msg})`);
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${OUT}/deskewed.png` });
+
+  await page.evaluate(() => { navigator.canShare = () => true; navigator.share = async (d) => { window.__shared = d.files[0].name; }; });
+  await page.keyboard.press('Control+e');
+  await page.waitForFunction(() => window.__shared === 'skewed.pdf');
+  assert(true, 'Email shares the PDF through the system share sheet');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+Shift+P')]);
+  assert(dl.suggestedFilename() === 'skewed (compressed).pdf', `Publish as Compressed downloads a copy (${dl.suggestedFilename()})`);
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],

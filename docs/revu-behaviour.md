@@ -430,6 +430,18 @@ pages, margins options, Dim Filtered Markups, Print Spaces.
 - File Access lists recent files (kept in this browser); pinned files stay
   on top. A file opened with file access reopens and saves in place.
 
+## New PDF, Crop, Deskew, Email, Publish
+- New PDF (Ctrl+N; browsers may keep Ctrl+N, so also File menu and the
+  start page): blank pages, or a PDF made from images (page size from the
+  image resolution).
+- Crop Pages (Shift+Alt+O): set the visible area (CropBox) by drawing a
+  rectangle or trimming margins, for a page range; Remove Crop undoes it.
+- Deskew (Ctrl+Alt+D): straightens tilted scans (we measure the tilt of
+  the lines and rotate the page content to match; up to 10°).
+- Email (Ctrl+E): sends the PDF (share sheet where available).
+- Publish as Compressed (Ctrl+Shift+P): saves a compressed copy (images
+  resampled, history and unused data removed).
+
 ## Status bar
 - Left: help for the current tool and the toggles Show Grid, Snap to
   Grid, Snap to Content, Snap to Markup (points and guidelines from nearby

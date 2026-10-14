@@ -9,7 +9,7 @@ const c = (group: string, label: string, combo: string): Command => ({ id: combo
 
 /** Commands handled by the global key handler (App.tsx), with their Revu default shortcuts. */
 export const APP_COMMANDS: Command[] = [
-  c('File', 'Open', 'Ctrl+O'), c('File', 'Save', 'Ctrl+S'), c('File', 'Save As', 'Ctrl+Shift+S'), c('File', 'Close', 'Ctrl+F4'), c('File', 'Print', 'Ctrl+P'), c('File', 'Close All', 'Ctrl+Shift+W'), c('File', 'Save All', 'Ctrl+F2'), c('File', 'Refresh', 'F5'),
+  c('File', 'Open', 'Ctrl+O'), c('File', 'Save', 'Ctrl+S'), c('File', 'Save As', 'Ctrl+Shift+S'), c('File', 'Close', 'Ctrl+F4'), c('File', 'Print', 'Ctrl+P'), c('File', 'Close All', 'Ctrl+Shift+W'), c('File', 'Save All', 'Ctrl+F2'), c('File', 'New PDF', 'Ctrl+N'), c('File', 'Email', 'Ctrl+E'), c('File', 'Publish as Compressed', 'Ctrl+Shift+P'), c('File', 'Refresh', 'F5'),
   c('Edit', 'Undo', 'Ctrl+Z'), c('Edit', 'Redo', 'Ctrl+Y'), c('Edit', 'Copy', 'Ctrl+C'), c('Edit', 'Cut', 'Ctrl+X'), c('Edit', 'Paste', 'Ctrl+V'),
   c('Edit', 'Paste in Place', 'Ctrl+Shift+V'), c('Edit', 'Select All', 'Ctrl+A'), c('Edit', 'Delete', 'Delete'), c('Edit', 'Format Painter', 'Ctrl+Shift+C'), c('Edit', 'Select All Text', 'Ctrl+Shift+A'), c('Edit', 'Copy Page to Snapshot', 'Ctrl+Alt+C'), c('Edit', 'Check Spelling', 'F7'),
   c('Markup', 'Group', 'Ctrl+G'), c('Markup', 'Ungroup', 'Ctrl+Shift+G'), c('Markup', 'Bring Forward', 'Ctrl+J'), c('Markup', 'Bring to Front', 'Ctrl+Shift+J'),
@@ -26,7 +26,7 @@ export const APP_COMMANDS: Command[] = [
   c('View', 'Split Horizontal', 'Ctrl+H'), c('View', 'Split Vertical', 'Ctrl+2'), c('View', 'Unsplit', 'Ctrl+Shift+2'), c('View', 'Switch', 'Ctrl+1'), c('View', 'Toggle Split', 'Ctrl+I'),
   c('Navigation', 'Next Page', 'Ctrl+ArrowRight'), c('Navigation', 'Previous Page', 'Ctrl+ArrowLeft'), c('Navigation', 'First Page', 'Home'), c('Navigation', 'Last Page', 'End'),
   c('Search', 'Search', 'Ctrl+F'), c('Search', 'Next Result', 'F3'), c('Search', 'Previous Result', 'Shift+F3'),
-  c('Document', 'Document Properties', 'Ctrl+D'), c('Document', 'Add Bookmark', 'Ctrl+B'), c('Document', 'Security', 'Ctrl+L'), c('Document', 'Insert Pages', 'Ctrl+Shift+I'), c('Document', 'Insert Blank Page', 'Ctrl+Shift+N'), c('Document', 'Delete Pages', 'Ctrl+Shift+D'),
+  c('Document', 'Document Properties', 'Ctrl+D'), c('Document', 'Crop Pages', 'Shift+Alt+O'), c('Document', 'Deskew', 'Ctrl+Alt+D'), c('Document', 'Add Bookmark', 'Ctrl+B'), c('Document', 'Security', 'Ctrl+L'), c('Document', 'Insert Pages', 'Ctrl+Shift+I'), c('Document', 'Insert Blank Page', 'Ctrl+Shift+N'), c('Document', 'Delete Pages', 'Ctrl+Shift+D'),
   c('Document', 'Extract Pages', 'Ctrl+Shift+X'), c('Document', 'Replace Pages', 'Ctrl+Shift+Y'), c('Document', 'Rotate Pages', 'Ctrl+Shift+R'),
   c('Document', 'Apply Redactions', 'Shift+A'), c('Document', 'OCR', 'Ctrl+Shift+O'), c('Document', 'Rotate Clockwise', 'Shift+Alt++'), c('Document', 'Rotate Counterclockwise', 'Shift+Alt+-'), c('Document', 'Flatten', 'Ctrl+Shift+M'),
   c('Window', 'Markups', 'Alt+L'), c('Window', 'Thumbnails', 'Alt+T'), c('Window', 'Bookmarks', 'Alt+B'), c('Window', 'Spaces', 'Alt+S'), c('Window', 'Layers', 'Alt+Y'), c('Window', 'Links', 'Alt+N'), c('Window', 'File Access', 'Alt+A'),

@@ -28,6 +28,7 @@ import { arrangeItems } from './arrangeMenu';
 import { useCursor } from './cursor';
 import { balanceSplit, refreshDocument, saveAll, toggleFullScreen } from './quickCommands';
 import { useDocProps } from './DocProperties';
+import { emailDocument, publishCompressed, useDocTools } from './DocTools';
 import { copyPageToSnapshot, copyText, selectAllText } from './textCommands';
 
 // ---------------- Menu bar ----------------
@@ -58,6 +59,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'About CyanTakeoff', action: onAbout },
     ],
     File: [
+      { label: 'New PDF…', shortcut: 'Ctrl+N', action: () => useDocTools.setState({ open: 'new' }) },
       { label: 'Open…', shortcut: 'Ctrl+O', action: openFile },
       { label: 'Open Sample Drawing', action: openSample },
       { label: 'Combine Files…', action: combineFiles },
@@ -72,6 +74,8 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Import Markups (XFDF)…', disabled: noDoc, action: () => importMarkupsXfdf() },
       { label: 'Export Markups (XFDF)', disabled: noDoc, action: () => exportMarkupsXfdf() },
       { sep: true },
+      { label: 'Publish as Compressed', shortcut: 'Ctrl+Shift+P', disabled: noDoc, action: publishCompressed },
+      { label: 'Email…', shortcut: 'Ctrl+E', disabled: noDoc, action: emailDocument },
       { label: 'Reduce File Size…', disabled: noDoc, action: () => useReduceDialog.setState({ open: true }) },
       { sep: true },
       { label: 'Print…', shortcut: 'Ctrl+P', disabled: noDoc, action: openPrint },
@@ -134,6 +138,8 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Extract Pages…', shortcut: 'Ctrl+Shift+X', disabled: noDoc, action: () => openPagesDialog('extract') },
       { label: 'Replace Pages…', shortcut: 'Ctrl+Shift+Y', disabled: noDoc, action: () => openPagesDialog('replace') },
       { label: 'Rotate Pages…', shortcut: 'Ctrl+Shift+R', disabled: noDoc, action: () => openPagesDialog('rotate') },
+      { label: 'Crop Pages…', shortcut: 'Shift+Alt+O', disabled: noDoc, action: () => useDocTools.setState({ open: 'crop' }) },
+      { label: 'Deskew…', shortcut: 'Ctrl+Alt+D', disabled: noDoc, action: () => useDocTools.setState({ open: 'deskew' }) },
       { label: 'Split Document…', disabled: noDoc, action: () => openPagesDialog('split') },
       { sep: true },
       { label: 'Header & Footer…', disabled: noDoc, action: () => useStampDialog.setState({ open: 'header' }) },
