@@ -213,7 +213,8 @@ filling, image signatures, redaction and OCR.
 - [x] Reduce File Size (unused objects, compression, thumbnails, private
   data, metadata, JPEG downsampling by placed dpi, object streams)
 - [x] XFDF export/import of markups (standard XFDF plus our measurement data
-  in a namespaced element; Revu measurements round-trip)
+  in a namespaced element; Revu measurements round-trip; stamp artwork in
+  <appearance>)
 - [x] Edit Text (rewrite a run of the drawing's text in its own font and
   colour when possible, else a standard font), Erase Content (remove
   everything under a rectangle) and Cut Content (to the clipboard as a

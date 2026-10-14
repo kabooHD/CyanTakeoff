@@ -1711,11 +1711,27 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   };
   const total = async () => Number((await page.getByText(/ of \d+ markups/).innerText()).match(/of (\d+)/)[1]);
   await page.locator('.doc-tab').first().click();
+  // A snapshot (image stamp) so the export carries an appearance.
+  {
+    await page.mouse.click(5, 500);
+    await page.keyboard.press('Control+4');
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Control+9');
+    await page.waitForTimeout(500);
+    const lb = await page.locator('.page .markup-layer').boundingBox();
+    await page.keyboard.press('Shift+G');
+    await page.mouse.move(lb.x + lb.width * 0.84, lb.y + lb.height * 0.9); await page.mouse.down();
+    await page.mouse.move(lb.x + lb.width * 0.95, lb.y + lb.height * 0.95, { steps: 4 }); await page.mouse.up();
+    await page.waitForFunction(() => /Snapshot copied/.test(document.querySelector('.statusbar')?.textContent ?? ''));
+    await page.keyboard.press('Control+v');
+    await page.waitForTimeout(300);
+  }
   const n0 = await total();
   const [x] = await Promise.all([page.waitForEvent('download'), menu('File', 'Export Markups (XFDF)')]);
   const xfdf = `${OUT}/markups.xfdf`;
   await x.saveAs(xfdf);
   assert(readFileSync(xfdf, 'utf8').includes('<annots>'), 'Export Markups writes XFDF');
+  assert(/<stamp [^>]*>(?:(?!<\/stamp>).)*<appearance>[A-Za-z0-9+/=]{100,}<\/appearance>/s.test(readFileSync(xfdf, 'utf8')), 'the snapshot stamp exports its appearance');
   const tabs = await page.locator('.doc-tab').count();
   await menu('File', 'Open Sample Drawing');
   await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs);
@@ -1728,6 +1744,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const got = await total();
   if (got !== fresh + n0) console.log('subjects:', (await page.locator('.ml-table tbody tr td:first-child').allInnerTexts()).join(','));
   assert(got === fresh + n0, `Import Markups brings them all into a clean copy (${fresh} + ${n0} = ${got})`);
+  assert((await page.locator('.ml-table tbody tr td:first-child').allInnerTexts()).some((t) => t.includes('Snapshot')), 'the imported snapshot is an image markup again');
 
   // Security: a password to open, applied on save.
   await page.keyboard.press('Control+l');

@@ -3,9 +3,12 @@
 // Standard elements and attributes carry what every PDF app understands;
 // keys XFDF has no attribute for (measurement scale /Measure, intent data,
 // our CTData) travel in a namespaced <ct:extra> element as PDF syntax, which
-// other apps ignore, so a CyanTakeoff round trip loses nothing.
+// other apps ignore, so a CyanTakeoff round trip loses nothing. Stamps
+// (images, snapshots, custom stamps) carry their artwork in <appearance>:
+// base64 of an XML picture of the /AP dictionary (DICT, STREAM, ARRAY, NAME,
+// INT, FIXED, BOOL and hex DATA elements), the form Acrobat writes.
 import {
-  PDFArray, PDFDict, PDFHexString, PDFName, PDFNumber, PDFObjectParser, PDFRef, PDFStream, PDFString,
+  PDFArray, PDFBool, PDFDict, PDFHexString, PDFName, PDFNumber, PDFObjectParser, PDFRawStream, PDFRef, PDFStream, PDFString,
   type PDFContext, type PDFDocument, type PDFObject,
 } from 'pdf-lib';
 
@@ -26,6 +29,82 @@ const STANDARD = new Set(['Type', 'Subtype', 'Rect', 'NM', 'T', 'Subj', 'M', 'Cr
 const esc = (s: string) => s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]!)).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
 const unesc = (s: string) => s.replace(/&(lt|gt|amp|quot|apos|#\d+|#x[0-9a-f]+);/gi, (_m, e: string) =>
   e === 'lt' ? '<' : e === 'gt' ? '>' : e === 'amp' ? '&' : e === 'quot' ? '"' : e === 'apos' ? "'" : String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)));
+
+// ---------- stamp appearances ----------
+
+const hex = (b: Uint8Array) => { let out = ''; for (const x of b) out += x.toString(16).padStart(2, '0'); return out; };
+const unhex = (h: string) => { const t = h.replace(/[^0-9a-f]/gi, ''); const out = new Uint8Array(t.length >> 1); for (let i = 0; i < out.length; i++) out[i] = parseInt(t.slice(i * 2, i * 2 + 2), 16); return out; };
+const b64 = (s: string) => btoa(unescape(encodeURIComponent(s)));
+const unb64 = (s: string) => decodeURIComponent(escape(atob(s.replace(/\s+/g, ''))));
+
+/** One PDF object as an appearance XML element (`key` set when it is a dictionary entry). */
+function apXml(o: PDFObject | undefined, ctx: PDFContext, key?: string, depth = 0): string {
+  const k = key ? ` KEY="${esc(key)}"` : '';
+  const v = o instanceof PDFRef ? ctx.lookup(o) : o;
+  if (depth > 24 || v === undefined) return '';
+  if (v instanceof PDFStream) {
+    const dict = v.dict, bytes = v instanceof PDFRawStream ? v.contents : v.getContents();
+    const inner = dict.entries().filter(([n]) => n.decodeText() !== 'Length').map(([n, x]) => apXml(x, ctx, n.decodeText(), depth + 1)).join('');
+    return `<STREAM${k}>${inner}<DATA ENCODING="HEX">${hex(bytes)}</DATA></STREAM>`;
+  }
+  if (v instanceof PDFDict) return `<DICT${k}>${v.entries().map(([n, x]) => apXml(x, ctx, n.decodeText(), depth + 1)).join('')}</DICT>`;
+  if (v instanceof PDFArray) return `<ARRAY${k}>${v.asArray().map((x) => apXml(x, ctx, undefined, depth + 1)).join('')}</ARRAY>`;
+  if (v instanceof PDFName) return `<NAME${k} VAL="${esc(v.decodeText())}"/>`;
+  if (v instanceof PDFNumber) { const n = v.asNumber(); return Number.isInteger(n) ? `<INT${k} VAL="${n}"/>` : `<FIXED${k} VAL="${n}"/>`; }
+  if (v instanceof PDFBool) return `<BOOL${k} VAL="${v.asBoolean()}"/>`;
+  return ''; // strings do not occur in appearance streams' dictionaries
+}
+
+/** The <appearance> text for an annotation's /AP, or '' when it has none. */
+export function appearanceOf(a: PDFDict, ctx: PDFContext): string {
+  const ap = a.get(N('AP'));
+  const d = ap instanceof PDFRef ? ctx.lookup(ap) : ap;
+  if (!(d instanceof PDFDict)) return '';
+  const streams = d.entries().filter(([, x]) => (x instanceof PDFRef ? ctx.lookup(x) : x) instanceof PDFStream);
+  if (!streams.length) return '';
+  return b64(`<DICT KEY="AP">${streams.map(([n, x]) => apXml(x, ctx, n.decodeText(), 1)).join('')}</DICT>`);
+}
+
+/** Build the PDF object an appearance XML element describes. */
+function apObject(el: XNode, ctx: PDFContext): PDFObject | undefined {
+  const name = local(el.name).toUpperCase(), val = el.attrs.VAL ?? el.attrs.val ?? '';
+  const entries = (kids: XNode[]) => {
+    const d = ctx.obj({}) as PDFDict;
+    for (const c of kids) {
+      const key = c.attrs.KEY ?? c.attrs.key;
+      const o = key ? apObject(c, ctx) : undefined;
+      if (key && o) d.set(N(key), o);
+    }
+    return d;
+  };
+  if (name === 'STREAM') {
+    const data = el.children.find((c) => local(c.name).toUpperCase() === 'DATA');
+    const enc = (data?.attrs.ENCODING ?? data?.attrs.encoding ?? 'HEX').toUpperCase();
+    const bytes = !data ? new Uint8Array() : enc === 'HEX' ? unhex(data.text) : new TextEncoder().encode(data.text);
+    const dict = entries(el.children.filter((c) => local(c.name).toUpperCase() !== 'DATA'));
+    dict.delete(N('Length'));
+    return ctx.register(PDFRawStream.of(dict, bytes));
+  }
+  if (name === 'DICT') return entries(el.children);
+  if (name === 'ARRAY') return ctx.obj(el.children.map((c) => apObject(c, ctx)).filter((x): x is PDFObject => !!x));
+  if (name === 'NAME') return N(val);
+  if (name === 'INT' || name === 'FIXED') { const n = Number(val); return Number.isFinite(n) ? PDFNumber.of(n) : undefined; }
+  if (name === 'BOOL') return val === 'true' ? PDFBool.True : PDFBool.False;
+  return undefined;
+}
+
+/** Set /AP from an <appearance> text; false when it cannot be read. */
+export function setAppearance(d: PDFDict, text: string, ctx: PDFContext): boolean {
+  try {
+    const root = parseXml(unb64(text));
+    const dict = root.children.find((c) => local(c.name).toUpperCase() === 'DICT');
+    if (!dict) return false;
+    const ap = apObject(dict, ctx);
+    if (!(ap instanceof PDFDict) || !ap.has(N('N'))) return false;
+    d.set(N('AP'), ap);
+    return true;
+  } catch { return false; }
+}
 
 const nums = (o: PDFObject | undefined) => (o instanceof PDFArray ? o.asArray().map((x) => (x instanceof PDFNumber ? x.asNumber() : 0)) : []);
 const text = (o: PDFObject | undefined) => (o instanceof PDFString || o instanceof PDFHexString ? o.decodeText() : '');
@@ -132,6 +211,7 @@ export function exportXfdf(doc: PDFDocument, fileName: string): string {
       const q = a.lookup(N('Q')); if (q instanceof PDFNumber) at.justification = ['left', 'centered', 'right'][q.asNumber()] ?? 'left';
     }
     if (st === 'Stamp' || st === 'Text') { const nmIcon = a.get(N('Name')); if (nmIcon instanceof PDFName) at.icon = nmIcon.decodeText(); }
+    if (st === 'Stamp') { const ap = appearanceOf(a, ctx); if (ap) children.push(`<appearance>${ap}</appearance>`); }
     const contents = text(a.lookup(N('Contents')));
     if (contents) children.push(`<contents>${esc(contents)}</contents>`);
     // Everything else, as PDF syntax.
@@ -248,6 +328,7 @@ export function importXfdf(doc: PDFDocument, xml: string): number {
     const ds = find(el, 'defaultstyle'); if (ds) d.set(N('DS'), PDFString.of(ds.text));
     if (a.justification) d.set(N('Q'), PDFNumber.of({ left: 0, centered: 1, right: 2 }[a.justification] ?? 0));
     if (a.icon) d.set(N('Name'), N(a.icon));
+    const ap = find(el, 'appearance'); if (ap?.text.trim()) setAppearance(d, ap.text, ctx);
     const contents = find(el, 'contents'); if (contents) d.set(N('Contents'), PDFHexString.fromText(contents.text));
     const extra = find(el, 'extra');
     if (extra?.text.trim()) {

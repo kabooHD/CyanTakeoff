@@ -293,7 +293,9 @@ password to open and/or a permissions password restricting printing,
 changes, copying, commenting and form filling; changing it needs the
 permissions password. Reduce File Size removes unneeded data and
 recompresses/downsamples images. Markups can be exported to and imported
-from XFDF, the standard markup exchange format. Ours: new security is
+from XFDF, the standard markup exchange format; stamps (images, snapshots,
+custom stamps) travel with their artwork in <appearance>, the base64 XML
+picture of the /AP dictionary Acrobat uses. Ours: new security is
 AES-256; files encrypted with RC4 or AES-128 keep their own settings when
 saved; certificate security is not supported (such files open read-only).
 
