@@ -2010,6 +2010,28 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert(dl.suggestedFilename() === 'skewed (compressed).pdf', `Publish as Compressed downloads a copy (${dl.suggestedFilename()})`);
 }
 
+// Flatten with markup recovery, then Unflatten (Ctrl+Shift+U) brings the markups back.
+{
+  const rows = () => page.locator('.ml-table tbody tr:not(.reply-row)').count();
+  const box = await svg.boundingBox();
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 100, box.y + 100); await page.mouse.down(); await page.mouse.move(box.x + 300, box.y + 200, { steps: 4 }); await page.mouse.up();
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 350, box.y + 100); await page.mouse.down(); await page.mouse.move(box.x + 450, box.y + 250, { steps: 4 }); await page.mouse.up();
+  await page.waitForTimeout(200);
+  const n0 = await rows();
+  assert(n0 === 2, `two rectangles drawn (${n0})`);
+  await page.keyboard.press('Control+Shift+M');
+  const fd = page.getByRole('dialog', { name: 'Flatten Markups' });
+  assert(await fd.getByLabel(/Allow markup recovery/).isChecked(), 'Allow markup recovery is on by default');
+  await fd.getByRole('button', { name: 'OK' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.ml-table tbody tr').length === 0, null, { timeout: 15000 });
+  await page.keyboard.press('Control+Shift+U');
+  await page.waitForFunction(() => /Unflattened 2 markups/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 15000 });
+  assert(await rows() === 2, 'Unflatten restores the flattened markups');
+  await page.screenshot({ path: `${OUT}/unflattened.png` });
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],

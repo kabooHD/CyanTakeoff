@@ -18,7 +18,7 @@ import { openFile, openFileObject, openSample } from './ui/actions';
 import { Icon } from './ui/icons';
 import { SpaceDialog } from './ui/SpacesPanel';
 import { nextHit, useSearch } from './ui/Search';
-import { PagesDialog, openPagesDialog } from './ui/PagesDialog';
+import { PagesDialog, openPagesDialog, unflattenMarkups } from './ui/PagesDialog';
 import { rotatePages } from './pdf/pages';
 import { CompareDialog } from './ui/Compare';
 import { PrintDialog, openPrint } from './ui/Print';
@@ -184,6 +184,7 @@ export function App() {
         case 'Ctrl+Shift+Y': return run(() => d && openPagesDialog('replace'));
         case 'Ctrl+Shift+R': return run(() => d && openPagesDialog('rotate'));
         case 'Ctrl+Shift+M': return run(() => d && openPagesDialog('flatten'));
+        case 'Ctrl+Shift+U': return run(() => d && unflattenMarkups());
         case 'Shift+Alt++': case 'Shift+Alt+=': return run(() => d && s.transformDoc((lib) => rotatePages(lib, [d.page], 90), 'Rotated clockwise'));
         case 'Shift+Alt+-': case 'Shift+Alt+_': return run(() => d && s.transformDoc((lib) => rotatePages(lib, [d.page], -90), 'Rotated counterclockwise'));
         case 'Ctrl+H': return run(() => s.splitView('h'));

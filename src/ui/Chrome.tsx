@@ -7,7 +7,7 @@ import { Icon } from './icons';
 import { MenuList, type MenuItem } from './ContextMenu';
 import { allColumns, exportSummaryCsv, exportSummaryPdf, exportSummaryXlsx, openFile, openSample, exportMarkupsXfdf, importMarkupsXfdf } from './actions';
 import { viewerApi } from './Viewer';
-import { combineFiles, openPagesDialog } from './PagesDialog';
+import { combineFiles, openPagesDialog, unflattenMarkups } from './PagesDialog';
 import { openCompare } from './Compare';
 import { openPrint } from './Print';
 import { addBookmark } from './BookmarksPanel';
@@ -154,6 +154,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Batch Link…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'batch-link' }) },
       { sep: true },
       { label: 'Flatten Markups…', shortcut: 'Ctrl+Shift+M', disabled: noDoc, action: () => openPagesDialog('flatten') },
+      { label: 'Unflatten', shortcut: 'Ctrl+Shift+U', disabled: noDoc, action: unflattenMarkups },
       { sep: true },
       { label: 'Signature…', disabled: noDoc, action: () => useSignature.setState({ open: true }) },
       { label: 'Sign Document (Digital ID)…', disabled: noDoc, action: () => openSignDialog() },

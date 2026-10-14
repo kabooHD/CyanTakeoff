@@ -8,7 +8,7 @@ import { PDFDocument } from 'pdf-lib';
 import { serialize, useApp, useActiveDoc } from '../model/store';
 import { parsePageRange } from '../model/measure';
 import {
-  deletePages, extractPages, flattenPage, insertBlankPage, insertPages, replacePage, rotatePages, splitDocument,
+  deletePages, extractPages, flattenPage, flattenedPages, unflattenPage, insertBlankPage, insertPages, replacePage, rotatePages, splitDocument,
 } from '../pdf/pages';
 import { pickFile } from './toolActions';
 import { openPdf } from '../pdf/document';
@@ -32,6 +32,20 @@ function download(bytes: Uint8Array, name: string) {
 }
 
 const base = (name: string) => name.replace(/\.pdf$/i, '');
+
+/** Document > Unflatten (Ctrl+Shift+U): put back markups flattened with recovery. */
+export async function unflattenMarkups() {
+  const s = useApp.getState();
+  let back = 0, blocked = 0, pagesN = 0;
+  const ok = await s.transformDoc((lib) => {
+    for (const i of flattenedPages(lib)) {
+      const n = unflattenPage(lib, lib.getPage(i));
+      if (n < 0) blocked++; else { back += n; pagesN++; }
+    }
+    if (!pagesN && !blocked) throw new Error('nothing to unflatten: no markups were flattened with recovery');
+  }, 'Unflattened');
+  if (ok) s.setStatus(`Unflattened ${back} markup${back === 1 ? '' : 's'} on ${pagesN} page${pagesN === 1 ? '' : 's'}${blocked ? `; ${blocked} page(s) were edited after flattening and cannot be unflattened` : ''}`);
+}
 
 export function PagesDialog() {
   const op = usePagesDialog((x) => x.op);
@@ -59,6 +73,7 @@ function PagesForm({ op }: { op: PagesOp }) {
   const [appendNew, setAppendNew] = useState(true);
   // Flatten > Assign Layer (Revu): an existing layer's name, or a new one ("Markups" when the file has none).
   const [assign, setAssign] = useState(false);
+  const [recover, setRecover] = useState(true);
   const [layerName, setLayerName] = useState(() => (doc?.layers ? Object.values(doc.layers.layers)[0]?.name : undefined) ?? 'Markups');
   if (!doc) return null;
   const close = () => usePagesDialog.setState({ op: null });
@@ -117,7 +132,7 @@ function PagesForm({ op }: { op: PagesOp }) {
           }
           // Markups go to the assigned layer, else stay on the layer they were on.
           const layerOf = (a: PDFDict) => target ?? (a.get(PDFName.of('OC')) instanceof PDFRef ? a.get(PDFName.of('OC')) as PDFRef : undefined);
-          for (const p of pages) flattenPage(lib, lib.getPage(p), () => false, layerOf);
+          for (const p of pages) flattenPage(lib, lib.getPage(p), () => false, layerOf, recover);
         }, `Flattened markups on ${pages.length} page(s)${assign ? ` to layer "${layerName.trim()}"` : ''}`);
         break;
       case 'ocr': {
@@ -213,7 +228,8 @@ function PagesForm({ op }: { op: PagesOp }) {
               <input aria-label="Flatten to layer" list="flatten-layers" value={layerName} disabled={!assign} onChange={(e) => setLayerName(e.target.value)} />
               <datalist id="flatten-layers">{Object.values(doc.layers?.layers ?? {}).map((l) => <option key={l.id} value={l.name} />)}</datalist>
             </div>
-            <p className="muted small">Markups become part of the page content and can no longer be edited. With Assign Layer they go on that layer (a new name creates it); otherwise a markup on a layer stays on its layer.</p>
+            <div className="form-row"><label><input type="checkbox" checked={recover} onChange={(e) => setRecover(e.target.checked)} /> Allow markup recovery (Document &gt; Unflatten, Ctrl+Shift+U)</label></div>
+            <p className="muted small">Markups become part of the page content{recover ? '; Unflatten brings them back as long as the page content is not edited (Edit Text, Erase Content, redaction)' : ' and can no longer be edited'}. With Assign Layer they go on that layer (a new name creates it); otherwise a markup on a layer stays on its layer.</p>
           </>}
           {op === 'slip-sheet' && <>{fileRow}<div className="form-row"><label><input type="checkbox" checked={appendNew} onChange={(e) => setAppendNew(e.target.checked)} /> Add sheets that are not in this document</label></div>
             <p className="muted small">Each sheet of the new revision replaces the sheet with the same number (page label), keeping its markups, scale and Spaces.</p></>}

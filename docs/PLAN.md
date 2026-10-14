@@ -233,6 +233,8 @@ filling, image signatures, redaction and OCR.
   Crop), Deskew (projection-profile skew estimate, content rotated about
   the page centre), Email (system share sheet, else download + mail
   draft), Publish as Compressed (a reduced copy; the open file unchanged)
+- [x] Flatten with Allow markup recovery (default on) and Unflatten
+  (Ctrl+Shift+U); refused for pages whose content was edited since
 
 ### Next 2: public test build in local mode (days)
 - Host on a VPS (static site + HTTPS), with a feedback link

@@ -442,6 +442,14 @@ pages, margins options, Dim Filtered Markups, Print Spaces.
 - Publish as Compressed (Ctrl+Shift+P): saves a compressed copy (images
   resampled, history and unused data removed).
 
+## Flatten and Unflatten
+- Flatten Markups (Ctrl+Shift+M) has "Allow markup recovery": the
+  markups can later be restored with Document > Unflatten (Ctrl+Shift+U).
+  Without it flattening is final. Editing the page content afterwards
+  (Edit Text, Erase Content, applying redactions) blocks recovery for that
+  page. We keep the recovery data in our own page keys (/CTFlattened,
+  /CTFlatContent); Revu cannot unflatten our files, nor we Revu's.
+
 ## Status bar
 - Left: help for the current tool and the toggles Show Grid, Snap to
   Grid, Snap to Content, Snap to Markup (points and guidelines from nearby

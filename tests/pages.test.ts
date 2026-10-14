@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { PDFArray, PDFDocument, PDFName } from 'pdf-lib';
-import { deletePages, extractPages, flattenPage, insertBlankPage, insertPages, movePage, replacePage, rotatePages, splitDocument } from '../src/pdf/pages';
+import { deletePages, extractPages, flattenPage, flattenedPages, unflattenPage, insertBlankPage, insertPages, movePage, replacePage, rotatePages, splitDocument } from '../src/pdf/pages';
 
 const load = (f: string) => PDFDocument.load(readFileSync(f), { updateMetadata: false });
 const annots = (d: PDFDocument, i: number) => d.getPage(i).node.lookup(PDFName.of('Annots'), PDFArray)?.size() ?? 0;
@@ -50,5 +50,31 @@ describe('page operations', () => {
     expect(annots(d, 0)).toBe(0);
     const again = await PDFDocument.load(await d.save());
     expect(again.getPageCount()).toBe(1);
+  });
+  it('unflattens markups flattened with recovery', async () => {
+    const d = await load('tests/fixtures/revu/measure.pdf');
+    const before = annots(d, 0);
+    const contents = () => (d.getPage(0).node.lookup(PDFName.of('Contents')) as PDFArray).size();
+    flattenPage(d, d.getPage(0), () => false, undefined, true);
+    expect(annots(d, 0)).toBe(0);
+    const again = await PDFDocument.load(await d.save());
+    expect(flattenedPages(again)).toEqual([0]);
+    expect(unflattenPage(again, again.getPage(0))).toBe(before);
+    expect(annots(again, 0)).toBe(before);
+    expect(flattenedPages(again)).toEqual([]);
+    // Only the q/Q wrapper added by flattening remains around the original content.
+    const n = (again.getPage(0).node.lookup(PDFName.of('Contents')) as PDFArray).size();
+    expect(n).toBeLessThan(contents());
+  });
+  it('refuses to unflatten when the drawn content was changed', async () => {
+    const d = await load('tests/fixtures/revu/measure.pdf');
+    flattenPage(d, d.getPage(0), () => false, undefined, true);
+    d.getPage(0).node.set(PDFName.of('Contents'), d.context.obj([]));
+    expect(unflattenPage(d, d.getPage(0))).toBe(-1);
+  });
+  it('without recovery nothing is kept', async () => {
+    const d = await load('tests/fixtures/revu/measure.pdf');
+    flattenPage(d, d.getPage(0));
+    expect(flattenedPages(d)).toEqual([]);
   });
 });

@@ -125,7 +125,13 @@ const nums = (doc: PDFDocument, a: unknown): number[] => {
  */
 export function flattenPage(doc: PDFDocument, page: PDFPage, keep: (a: PDFDict) => boolean = () => false,
   /** Revu's Flatten > Assign Layer: the layer (OCG) each flattened markup's appearance goes on, if any. */
-  layerOf?: (a: PDFDict) => PDFRef | undefined): number {
+  layerOf?: (a: PDFDict) => PDFRef | undefined,
+  /**
+   * Allow Markup Recovery (Revu): keep the flattened annotations and the
+   * content drawn for them listed on the page (/CTFlattened, /CTFlatContent)
+   * so Unflatten can remove the drawing and put the markups back.
+   */
+  recover = false): number {
   const layerName = (ocg: PDFRef) => {
     const res = page.node.Resources() ?? (doc.context.obj({}) as PDFDict);
     const pr = res.lookup(N('Properties'));
@@ -141,6 +147,7 @@ export function flattenPage(doc: PDFDocument, page: PDFPage, keep: (a: PDFDict) 
   const annots = page.node.lookup(N('Annots'));
   if (!(annots instanceof PDFArray)) return 0;
   const remaining: PDFRef[] = [];
+  const recovered: PDFRef[] = [], drawn: PDFRef[] = [];
   let n = 0;
   let wrapped = false;
   for (const r of annots.asArray()) {
@@ -155,6 +162,7 @@ export function flattenPage(doc: PDFDocument, page: PDFPage, keep: (a: PDFDict) 
       remaining.push(r);
       continue;
     }
+    if (recover) recovered.push(r);
     if (!hidden) {
       const rect = nums(doc, a.get(N('Rect')));
       const bbox = nums(doc, stream.dict.get(N('BBox')));
@@ -175,14 +183,50 @@ export function flattenPage(doc: PDFDocument, page: PDFPage, keep: (a: PDFDict) 
         let ops = `q ${sx} 0 0 ${sy} ${rect[0] - x0 * sx} ${rect[1] - y0 * sy} cm /${name.asString().slice(1)} Do Q`;
         const ocg = layerOf?.(a);
         if (ocg) ops = `/OC /${layerName(ocg)} BDC ${ops} EMC`;
-        const content = doc.context.flateStream(ops);
-        page.node.addContentStream(doc.context.register(content));
+        const content = doc.context.register(doc.context.flateStream(ops));
+        page.node.addContentStream(content);
+        if (recover) drawn.push(content);
         n++;
       }
     }
   }
   page.node.set(N('Annots'), doc.context.obj(remaining));
+  if (recovered.length) {
+    const prev = (k: string) => { const v = page.node.lookup(N(k)); return v instanceof PDFArray ? v.asArray() : []; };
+    page.node.set(N('CTFlattened'), doc.context.obj([...prev('CTFlattened'), ...recovered]));
+    page.node.set(N('CTFlatContent'), doc.context.obj([...prev('CTFlatContent'), ...drawn]));
+  }
   return n;
+}
+
+/** Pages with markups that can be unflattened. */
+export function flattenedPages(doc: PDFDocument): number[] {
+  return doc.getPages().flatMap((p, i) => (p.node.lookup(N('CTFlattened')) instanceof PDFArray ? [i] : []));
+}
+
+/**
+ * Unflatten (Revu, Ctrl+Shift+U): remove the content drawn for markups
+ * flattened with recovery and put the annotations back. Returns how many
+ * markups came back, or -1 when the page content was changed since (Edit
+ * Text, redaction...) and the drawing can no longer be taken out.
+ */
+export function unflattenPage(doc: PDFDocument, page: PDFPage): number {
+  const saved = page.node.lookup(N('CTFlattened'));
+  if (!(saved instanceof PDFArray)) return 0;
+  const drawnArr = page.node.lookup(N('CTFlatContent'));
+  const drawn = drawnArr instanceof PDFArray ? drawnArr.asArray().filter((r): r is PDFRef => r instanceof PDFRef) : [];
+  const cRaw = page.node.get(N('Contents'));
+  const cs = cRaw ? doc.context.lookup(cRaw) : undefined;
+  const parts = cs instanceof PDFArray ? cs.asArray() : cRaw ? [cRaw] : [];
+  const tags = new Set(drawn.map((r) => r.tag));
+  if (drawn.some((r) => !parts.some((x) => x instanceof PDFRef && x.tag === r.tag))) return -1;
+  page.node.set(N('Contents'), doc.context.obj(parts.filter((x) => !(x instanceof PDFRef && tags.has(x.tag)))));
+  const annots = page.node.lookup(N('Annots'));
+  const back = saved.asArray().filter((r): r is PDFRef => r instanceof PDFRef);
+  page.node.set(N('Annots'), doc.context.obj([...(annots instanceof PDFArray ? annots.asArray() : []), ...back]));
+  page.node.delete(N('CTFlattened'));
+  page.node.delete(N('CTFlatContent'));
+  return back.length;
 }
 
 /** Write page labels (each page its own literal label) as the catalog /PageLabels number tree. */
