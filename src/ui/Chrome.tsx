@@ -43,6 +43,7 @@ import { useStampManager } from './Stamps';
 import { useManageStatus } from './StatusModels';
 import { emailDocument, insertLayeredPages, publishCompressed, useDocTools } from './DocTools';
 import { copyPageToSnapshot, copyText, selectAllText } from './textCommands';
+import { openCommandFinder, registerMenus } from './CommandFinder';
 
 // ---------------- Menu bar ----------------
 
@@ -284,10 +285,14 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Reset Layout', action: () => s.setPanels({ left: 'thumbnails', right: 'properties', markupsList: true }) },
     ],
     Help: [
+      { label: 'Find Tools + Commands…', action: openCommandFinder },
       { label: 'Keyboard Shortcuts', shortcut: 'F1', action: onShortcuts },
       { label: 'About CyanTakeoff', action: onAbout },
     ],
   };
+
+  // Help > Find Tools + Commands searches these menus.
+  useEffect(() => { registerMenus(menus); });
 
   return (
     <div className="menubar" ref={ref}>

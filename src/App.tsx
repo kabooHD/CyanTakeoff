@@ -51,6 +51,7 @@ import { ExportImageDialog } from './ui/FileExports';
 import { UndoHistoryDialog } from './ui/UndoHistory';
 import { TemplateDialog } from './ui/Templates';
 import { CapturePreview } from './ui/Capture';
+import { CommandFinderDialog } from './ui/CommandFinder';
 import { CameraDialog, useCamera } from './ui/Camera';
 import { ManageStatusDialog } from './ui/StatusModels';
 import { DocToolsDialogs, emailDocument, publishCompressed, useDocTools } from './ui/DocTools';
@@ -284,6 +285,7 @@ export function App() {
         <SideTabs side="right" />
       </div>
       <StatusBar />
+      <CommandFinderDialog />
       <ScaleDialog />
       <LinkDialog />
       <SpaceDialog />

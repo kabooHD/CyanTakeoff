@@ -622,6 +622,11 @@ Print Spaces.
 - Search > Replace Checked: replaces the checked results in the drawing's
   text (as Edit Text does).
 
+## Help > Find Tools + Commands
+A search box over every menu item and tool: type part of the name, pick
+with the arrow keys, Enter runs it (disabled items are greyed). Each row
+shows the menu it lives in and its shortcut.
+
 ## Capture, Sign & Seal, Layered Pages
 - Capture: a markup can carry photos (Properties > Capture: Add Photo or
   the camera; thumbnails, remove). The Markups List has a Capture column

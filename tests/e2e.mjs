@@ -627,6 +627,21 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert(await page.locator('.split-view').count() === 0, 'Ctrl+Shift+2 unsplits');
 }
 
+// Help > Find Tools + Commands: type part of a name, Enter runs it.
+{
+  await page.locator('.menubar-item > button', { hasText: /^Help$/ }).click();
+  await page.getByRole('menuitem', { name: 'Find Tools + Commands…' }).click();
+  const cf = page.locator('[role=dialog][aria-label="Find Tools + Commands"]');
+  await cf.locator('input').fill('blank pa');
+  const first = cf.locator('.command-row').first();
+  assert((await first.innerText()).includes('Insert Blank Page') && (await first.innerText()).includes('Document'), 'Find Tools + Commands lists the matching menu item with its menu');
+  await page.keyboard.press('Enter');
+  const ib = page.getByRole('dialog', { name: 'Insert Blank Page' });
+  await ib.waitFor();
+  assert(true, 'Enter runs the found command');
+  await ib.getByRole('button', { name: 'Cancel' }).click();
+}
+
 // Page operations (Document menu / Revu shortcuts): insert blank, rotate, delete, flatten.
 {
   const pagesOf = async () => Number((await page.locator('.statusbar').innerText()).match(/of (\d+)\)/)[1]);
