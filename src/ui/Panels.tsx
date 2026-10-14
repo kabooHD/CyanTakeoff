@@ -14,6 +14,7 @@ import { applyToolProperties } from '../model/toolScale';
 import { scaleAt, areaLabel, volumeLabel } from '../model/measure';
 import { LENGTH_UNITS, SEGMENT_TYPES, displayText } from '../model/measureDisplay';
 import { placeColumns } from '../model/listColumns';
+import { layoutOf, withLayout } from '../model/layoutProps';
 import { usePageSetup } from './PageSetup';
 import { useApp, useActiveDoc, type DocState } from '../model/store';
 import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, formatNumber, measure, precisionOf, unitLabel, withPrecision } from '../model/measure';
@@ -327,8 +328,23 @@ function Properties() {
           )}
         </>
       )}
+      {sel.length === 1 && m.points.length > 0 && m.type !== 'count' && (() => {
+        const pageH = doc?.loaded.pages[m.page]?.height ?? 0;
+        const lay = layoutOf(m.points, pageH);
+        const field = (k: keyof typeof lay, label: string) => (
+          <Row label={label}><input type="number" step={0.01} aria-label={`Layout ${label}`} value={lay[k]} disabled={!!m.locked}
+            onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v)) upd((x) => withLayout(x, pageH, { [k]: v })); }} /></Row>
+        );
+        return (
+          <>
+            <div className="prop-section">Layout (in)</div>
+            {field('x', 'X')}{field('y', 'Y')}{field('width', 'Width')}{field('height', 'Height')}
+          </>
+        );
+      })()}
       <div className="prop-actions">
         <button onClick={() => s.addToToolChest(m)}>Add to My Tools</button>
+        <button title="Make this markup's appearance the tool's default" onClick={() => { s.setToolDefault(m.type, m.style); s.setStatus(`${toolById(m.type).name}: this appearance is now the default`); }}>Set as Default</button>
         <button onClick={() => s.deleteMarkups(ids)}>Delete</button>
       </div>
     </div>

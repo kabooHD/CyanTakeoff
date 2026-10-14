@@ -38,6 +38,13 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - Precision dropdown: decimal or fractional depending on the scale.
 - Revu prompts for a scale before placing a measurement on an unscaled page.
 
+## Properties panel
+General (Author, Subject, Label, Comments, Lock), Appearance per tool,
+Custom Columns when the list has some, a Layout section with X, Y, Width,
+Height (ours: inches from the page's lower left; typing a value moves or
+resizes the markup), and Add to My Tools / Set as Default (the markup's
+appearance becomes the tool's default).
+
 ## Measurement display (Properties)
 Revu's measurement properties: Show Caption (which captions show, or
 none), Show Segment Values (each segment's length, aligned on, inside or

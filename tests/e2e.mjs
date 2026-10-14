@@ -1717,6 +1717,26 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.locator('.doc-tab').first().click();
     await page.waitForTimeout(300);
   }
+  // Properties > Layout: exact Width; Set as Default.
+  {
+    await page.keyboard.press('Escape');
+    const rectRow = page.locator('.ml-table tbody tr', { hasText: /^Rectangle/ }).first();
+    if (await rectRow.count()) {
+      await rectRow.click();
+      await page.waitForTimeout(300);
+      if (!(await page.locator('[aria-label="Layout Width"]').count())) await page.keyboard.press('Alt+P');
+      const wIn = page.locator('[aria-label="Layout Width"]');
+      await wIn.waitFor({ timeout: 5000 });
+      await wIn.fill('2.5');
+      await page.waitForTimeout(200);
+      assert(await wIn.inputValue() === '2.5', 'Layout Width resizes the markup to the typed size');
+      await page.getByRole('button', { name: 'Set as Default' }).click();
+      await page.getByText(/this appearance is now the default/).waitFor({ timeout: 5000 });
+      await page.evaluate(() => document.activeElement?.blur());
+      await page.keyboard.press('Control+z');
+      await page.keyboard.press('Escape');
+    }
+  }
   // Measurement display: segment values, centroid and caption off on an area measurement.
   {
     await page.keyboard.press('Escape');
