@@ -275,6 +275,16 @@ press-and-hold acts as a right-click. Ours: the same; a finger also pans in
 Select when it does not touch a markup, and View > Pen Mode makes every
 finger touch pan/zoom so only the pen draws (palm-friendly).
 
+## Review Text, Create Hyperlinks from URLs
+Review Text marks text for edits without changing the PDF: drag across
+text and type the replacement (the text is struck through, an insertion
+caret follows it, the new text is in the note), or click a spot and type
+the text to insert (caret only). Ours: Tools > Review Text, or
+right-click a text selection > Replace Selected Text; a Caret annotation
+(PDF /Caret) grouped with the StrikeOut. Create Hyperlinks from URLs puts a
+Hyperlink markup over every web address and email in the page text, over
+a page range.
+
 ## Edit Text, Erase Content
 Revu edits the PDF's own text in place; replacing text in a font that is
 not editable can be skipped or done with another font. Ours: Tools > Edit

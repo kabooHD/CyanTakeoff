@@ -38,7 +38,7 @@ export const APP_COMMANDS: Command[] = [
 
 export function allCommands(): Command[] {
   return [
-    ...TOOLS.filter((t) => !['viewport', 'space', 'legend', 'visual-pick', 'region-pick', 'edit-text', 'erase-content', 'cut-content', 'sketch-polygon', 'sketch-polyline', 'sketch-rectangle', 'sketch-ellipse'].includes(t.id))
+    ...TOOLS.filter((t) => !['viewport', 'space', 'legend', 'visual-pick', 'region-pick', 'edit-text', 'erase-content', 'cut-content', 'sketch-polygon', 'sketch-polyline', 'sketch-rectangle', 'sketch-ellipse', 'review-text', 'caret'].includes(t.id))
       .map((t) => ({ id: `tool:${t.id}`, label: t.name, group: t.group === 'measure' ? 'Measure' : t.group === 'markup' ? 'Markup tools' : t.group === 'form' ? 'Forms' : 'Selection', combo: t.shortcut })),
     ...APP_COMMANDS,
   ];

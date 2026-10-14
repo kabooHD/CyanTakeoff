@@ -39,6 +39,7 @@ import { finishPickRect } from './pickRect';
 import { editText, eraseContent } from '../pdf/editText';
 import { SKETCH_TOOLS } from '../model/sketch';
 import { SketchBar } from './SketchBar';
+import { reviewTextMark } from './ReviewText';
 import type { TextBox } from './toolActions';
 import { formatSequence, nextInSequence, sequenceMembers } from '../model/sequence';
 import { renderLimits } from '../model/device';
@@ -1047,6 +1048,13 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     if (draft.tool === 'region-pick') { setDraft(null); s.setTool('select'); finishPickRect(doc.id, pageIdx, a, p); return; }
     if (draft.tool === 'visual-pick') { setDraft(null); s.setTool('select'); setVisualTemplate(doc, pageIdx, a, p); return; }
     if (draft.tool === 'cloudplus') { setDraft({ ...draft, points: [a, p], dragFrom: undefined }); return; }
+    if (draft.tool === 'review-text') {
+      setDraft(null);
+      if (!pdfPage) return;
+      // A drag over text marks it for replacement; a click marks where text is inserted.
+      pageText(pdfPage, page.viewport).then((boxes) => reviewTextMark(pageIdx, Math.hypot(p.x - a.x, p.y - a.y) < 3 ? [] : textRectsIn(boxes, a, p), p));
+      return;
+    }
     if (def.interaction === 'text') {
       setDraft(null);
       textMarkup((draft.tool === 'redact-text' ? 'redaction' : draft.tool) as MarkupType, a, p).then((ok) => { if (!ok) s.setStatus('No text found there. Drag across text on the drawing.'); });
@@ -1222,6 +1230,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     if (['two-point', 'box', 'cutout', 'cutout-ellipse', 'text', 'cloudplus'].includes(def.interaction) && draft.dragFrom && draft.points.length === 1) {
       const moved = Math.hypot(e.clientX - draft.dragFrom.x, e.clientY - draft.dragFrom.y) > 4;
       if (moved) completeTwoPoint(constrain(toPage(e), e, draft.points[0]));
+      // Review Text: a plain click marks where text is inserted.
+      else if (draft.tool === 'review-text') { setDraft(null); reviewTextMark(pageIdx, [], draft.points[0]); }
     }
   };
 
@@ -1303,6 +1313,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         { label: 'Underline', action: make('underline') },
         { label: 'Squiggly', action: make('squiggly') },
         { label: 'Mark for Redaction', action: make('redaction') },
+        { label: 'Replace Selected Text…', action: () => { reviewTextMark(pageIdx, rectPts, rectPts[rectPts.length - 1]); useApp.setState({ textSel: null }); } },
         { sep: true },
         { label: `Search for “${ts.text.length > 30 ? `${ts.text.slice(0, 30)}…` : ts.text}”`, action: () => searchFor(ts.text.split('\n')[0]) },
         { label: 'Deselect Text', action: () => useApp.setState({ textSel: null }) },

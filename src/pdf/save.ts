@@ -303,6 +303,12 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
     case 'redaction':
       for (const [a, c] of rectPairs(P)) { o.poly(rectCorners(a, c), true); o.add(fillRgb && st.width > 0 ? 'B' : fillRgb ? 'f' : 'S'); }
       break;
+    case 'caret': {
+      const r = bounds(P);
+      o.poly([{ x: r.minX, y: r.minY }, { x: r.minX + r.w / 2, y: r.maxY }, { x: r.maxX, y: r.minY }], false);
+      o.add('S');
+      break;
+    }
     case 'strikeout': case 'underline': case 'squiggly':
       for (const [a, c] of rectPairs(P)) {
         const r = bounds([a, c]);
@@ -466,7 +472,7 @@ const SUBTYPE: Record<Markup['type'], string> = {
   textbox: 'FreeText', callout: 'FreeText', note: 'Text',
   angle: 'PolyLine', radius: 'Polygon', diameter: 'Circle',
   dimension: 'Line', typewriter: 'FreeText', cloudplus: 'Polygon', arc: 'PolyLine', flag: 'Text', stamp: 'Stamp',
-  strikeout: 'StrikeOut', underline: 'Underline', squiggly: 'Squiggly', image: 'Stamp', link: 'Link', attachment: 'FileAttachment',
+  strikeout: 'StrikeOut', underline: 'Underline', squiggly: 'Squiggly', caret: 'Caret', image: 'Stamp', link: 'Link', attachment: 'FileAttachment',
   legend: 'Stamp', redaction: 'Redact',
 };
 

@@ -1847,6 +1847,27 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Control+z');
   await page.waitForTimeout(1500);
   await page.evaluate(() => document.activeElement?.blur());
+  // Review Text > Replace Selected Text on this page's text.
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+Shift+A');
+  await page.locator('.text-sel').first().waitFor();
+  const rrows = await page.locator('.ml-table tbody tr:not(.reply-row)').count();
+  const tsb = await page.locator('.text-sel').first().boundingBox();
+  await page.mouse.click(tsb.x + tsb.width / 2, tsb.y + tsb.height / 2, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Replace Selected Text…' }).click();
+  const rd = page.locator('[role=dialog][aria-label="Replacement Text"]');
+  await rd.waitFor({ timeout: 10000 });
+  await rd.locator('textarea').fill('SITE PLAN');
+  await rd.getByRole('button', { name: 'OK' }).click();
+  await page.waitForTimeout(300);
+  assert(await page.locator('.ml-table tbody tr:not(.reply-row)').count() === rrows + 2, 'Replace Selected Text adds a strikethrough and an insertion caret');
+  const subjects = await page.locator('.ml-table tbody tr td:first-child').allInnerTexts();
+  assert(subjects.filter((t) => t.includes('Replace Text')).length >= 2, 'both carry the Replace Text subject');
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => document.activeElement?.blur());
 }
 
 // Touch and pen: pinch to zoom, finger pans, long press opens the menu, Pen Mode.
@@ -2276,6 +2297,45 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForTimeout(200);
   assert(await rows() === nS + 2, 'Polygon Sketch to Scale closes a polygon from typed sides');
   await page.keyboard.press('Escape');
+  // Review Text: drag across the title block text, type the replacement.
+  {
+    const lb = await page.locator('.page .markup-layer').first().boundingBox();
+    const n2 = await rows();
+    // Insert Text at Cursor: a click with the Review Text tool.
+    await menuTools('Review Text');
+    await page.mouse.click(lb.x + lb.width * 0.5, lb.y + lb.height * 0.5);
+    const idlg = page.locator('[role=dialog][aria-label="Inserted Text"]');
+    await idlg.waitFor({ timeout: 10000 });
+    await idlg.locator('textarea').fill('ADD NOTE');
+    await idlg.getByRole('button', { name: 'OK' }).click();
+    await page.waitForTimeout(300);
+    assert(await rows() === n2 + 1, 'Insert Text at Cursor adds an insertion caret');
+    // Replace Selected Text from a text selection's right-click menu (when the page has text).
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+Shift+A');
+    await page.waitForTimeout(500);
+    if (await page.locator('.text-sel').count()) {
+      const tsb2 = await page.locator('.text-sel').first().boundingBox();
+      await page.mouse.click(tsb2.x + tsb2.width / 2, tsb2.y + tsb2.height / 2, { button: 'right' });
+      await page.getByRole('menuitem', { name: 'Replace Selected Text…' }).click();
+      const rd = page.locator('[role=dialog][aria-label="Replacement Text"]');
+      await rd.waitFor({ timeout: 10000 });
+      await rd.locator('textarea').fill('SITE PLAN');
+      await rd.getByRole('button', { name: 'OK' }).click();
+      await page.waitForTimeout(300);
+      assert(await rows() === n2 + 3, 'Replace Selected Text adds a strikethrough and an insertion caret');
+      const subjects = await page.locator('.ml-table tbody tr td:first-child').allInnerTexts();
+      assert(subjects.filter((t) => t.includes('Replace Text')).length >= 2, 'both carry the Replace Text subject');
+    }
+    await page.keyboard.press('Escape');
+    // Create Hyperlinks from URLs over the current page runs (the sample has no addresses).
+    await menuTools('Create Hyperlinks from URLs…');
+    const ld = page.locator('[role=dialog][aria-label="Create Hyperlinks from URLs"]');
+    await ld.locator('[aria-label="Pages"]').selectOption('current');
+    await ld.getByRole('button', { name: 'OK' }).click();
+    await page.getByText(/Create Hyperlinks from URLs: /).waitFor({ timeout: 20000 });
+    assert(true, `Create Hyperlinks from URLs ran (${await page.getByText(/Create Hyperlinks from URLs: /).innerText()})`);
+  }
   // Edit Action: the rectangle drawn earlier jumps to page 1... use the new line instead.
   await page.mouse.click(box.x + 250, box.y + 300);
   await page.keyboard.press('Control+Shift+E');

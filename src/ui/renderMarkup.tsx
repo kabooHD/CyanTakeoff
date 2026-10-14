@@ -189,6 +189,12 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     case 'strikeout': case 'underline': case 'squiggly':
       shape = <>{rectPairs(P).map(([a, b], i) => <path key={i} {...c} fill="none" strokeWidth={Math.max(st.width, 0.8)} d={textLine(m.type, a, b)} />)}</>;
       break;
+    case 'caret': {
+      // Insertion mark: a small open caret ^ at the bottom of its box.
+      const b = bounds(P);
+      shape = <path {...c} fill="none" strokeWidth={Math.max(st.width, 1)} strokeLinejoin="miter" d={`M ${b.minX} ${b.maxY} L ${b.minX + b.w / 2} ${b.minY} L ${b.maxX} ${b.maxY}`} />;
+      break;
+    }
     case 'legend':
       shape = <LegendShape m={m} />;
       break;

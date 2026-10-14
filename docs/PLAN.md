@@ -215,6 +215,8 @@ filling, image signatures, redaction and OCR.
 - [x] XFDF export/import of markups (standard XFDF plus our measurement data
   in a namespaced element; Revu measurements round-trip; stamp artwork in
   <appearance>)
+- [x] Review Text (replace selected text / insert text at cursor: strikeout
+  + caret with the text in the note) and Create Hyperlinks from URLs
 - [x] Edit Text (rewrite a run of the drawing's text in its own font and
   colour when possible, else a standard font), Erase Content (remove
   everything under a rectangle) and Cut Content (to the clipboard as a

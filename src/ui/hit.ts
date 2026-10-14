@@ -12,7 +12,7 @@ export function outline(m: Markup): { pts: Pt[]; closed: boolean } {
         return { pts: rectCorners({ x: b.minX, y: b.minY }, { x: b.maxX, y: b.maxY }), closed: true };
       }
       return { pts: P.length > 1 ? rectCorners(P[0], P[1]) : P, closed: true };
-    case 'stamp': case 'image': case 'link': case 'typewriter': case 'legend':
+    case 'stamp': case 'image': case 'link': case 'typewriter': case 'legend': case 'caret':
       return { pts: P.length > 1 ? rectCorners(P[0], P[1]) : P, closed: true };
     case 'cloudplus': {
       const all = P.length >= 4 ? [...rectCorners(P[0], P[1]), ...rectCorners(P[2], P[3])] : P;

@@ -257,6 +257,11 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
       if (!pts.length && rect.length === 4) pts = rectPts(rect);
       type = 'redaction';
       break;
+    case 'Caret':
+      if (rect.length !== 4) return null;
+      pts = rectPts(rect);
+      type = 'caret';
+      break;
     case 'StrikeOut': case 'Underline': case 'Squiggly':
       pts = quadRects();
       type = subtype === 'StrikeOut' ? 'strikeout' : subtype === 'Underline' ? 'underline' : 'squiggly';
