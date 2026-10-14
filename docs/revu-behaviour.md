@@ -38,6 +38,12 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - Precision dropdown: decimal or fractional depending on the scale.
 - Revu prompts for a scale before placing a measurement on an unscaled page.
 
+## Measurements panel menu
+Show Measurement Tools (the tool buttons in the panel), Snap Orthogonal
+(measurements kept to 45° steps; Shift does it for one point), Snap to
+Content, Highlight Viewports (tinted while a measurement tool is active).
+Make Annotations from Measurements concerns Studio only.
+
 ## Properties panel
 General (Author, Subject, Label, Comments, Lock), Appearance per tool,
 Custom Columns when the list has some, a Layout section with X, Y, Width,

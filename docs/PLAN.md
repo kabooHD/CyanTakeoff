@@ -218,6 +218,8 @@ filling, image signatures, redaction and OCR.
 - [x] XFDF export/import of markups (standard XFDF plus our measurement data
   in a namespaced element; Revu measurements round-trip; stamp artwork in
   <appearance>)
+- [x] Measurements panel menu: Show Measurement Tools, Snap Orthogonal,
+  Snap to Content, Highlight Viewports
 - [x] Properties: Layout section (X, Y, Width, Height, editable) and Set
   as Default
 - [x] Measurement display: Show Caption, Show Segment Values (aligned),

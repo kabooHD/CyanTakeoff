@@ -272,4 +272,10 @@ export interface Toggles {
   syncDoc?: boolean;
   /** Markups List > Hide Markups: every markup off the drawing and the printout, until turned off. */
   hideMarkups?: boolean;
+  /** Measurements > Snap Orthogonal: measurements limited to 45° steps (Shift does it temporarily). */
+  snapOrtho?: boolean;
+  /** Measurements > Highlight Viewports off: viewports are not tinted while measuring. */
+  noViewportHighlight?: boolean;
+  /** Measurements > Show Measurement Tools off: no tool buttons in the panel. */
+  noMeasureTools?: boolean;
 }

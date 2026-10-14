@@ -574,7 +574,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       const d = Math.max(Math.abs(p.x - prev.x), Math.abs(p.y - prev.y));
       return { x: prev.x + Math.sign(p.x - prev.x || 1) * d, y: prev.y + Math.sign(p.y - prev.y || 1) * d };
     }
-    if (e.shiftKey && prev) p = ortho(prev, p);
+    // Snap Orthogonal (Measurements menu) keeps measurements to 45° steps; Shift does it for one point.
+    if ((e.shiftKey || (s.toggles.snapOrtho && isMeasureTool(s.tool))) && prev) p = ortho(prev, p);
     return p;
   };
 
@@ -1545,7 +1546,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
                     fontSize={10 / zoom} fill={sp.color} fillOpacity={0.9}>{sp.title}</text>
                 </g>
               ))}
-            {(isMeasureTool(s.tool) || s.tool === 'viewport' || s.tool === 'calibrate') && viewports.map((v) => (
+            {((isMeasureTool(s.tool) && !s.toggles.noViewportHighlight) || s.tool === 'viewport' || s.tool === 'calibrate') && viewports.map((v) => (
               <ViewportBox key={v.id} v={v} zoom={zoom} />
             ))}
             {s.activeViewport && !isMeasureTool(s.tool) && viewports.filter((v) => v.id === s.activeViewport).map((v) => (

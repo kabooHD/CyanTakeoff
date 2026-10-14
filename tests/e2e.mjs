@@ -1717,6 +1717,29 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.locator('.doc-tab').first().click();
     await page.waitForTimeout(300);
   }
+  // Measurements panel: Snap Orthogonal keeps a sloped drag horizontal; tool buttons in the panel.
+  {
+    await page.keyboard.press('Escape');
+    if (!(await page.locator('[aria-label="Measurements menu"]').count())) await page.keyboard.press('Alt+U');
+    await page.locator('[aria-label="Measurements menu"]').waitFor({ timeout: 5000 });
+    assert(await page.locator('.measure-tools button').count() >= 8, 'the Measurements panel shows the measurement tools');
+    await page.locator('[aria-label="Measurements menu"]').click();
+    await page.getByRole('menuitem', { name: 'Snap Orthogonal' }).click();
+    await page.waitForTimeout(200);
+    await page.locator('.measure-tools button[aria-label="Length"]').click();
+    const mb = await page.locator('.page .markup-layer').first().boundingBox();
+    const lines0 = await page.locator('.page .markup-layer line').count();
+    await page.mouse.move(mb.x + mb.width * 0.3, mb.y + mb.height * 0.6); await page.mouse.down();
+    await page.mouse.move(mb.x + mb.width * 0.5, mb.y + mb.height * 0.64, { steps: 4 }); await page.mouse.up();
+    await page.waitForTimeout(300);
+    const last = await page.locator('.page .markup-layer line').evaluateAll((els, n) => { const l = els[n]; return l ? [Number(l.getAttribute('y1')), Number(l.getAttribute('y2'))] : null; }, lines0);
+    assert(last && Math.abs(last[0] - last[1]) < 0.5, `Snap Orthogonal keeps the sloped drag horizontal (${last})`);
+    await page.keyboard.press('Escape');
+    await page.locator('[aria-label="Measurements menu"]').click();
+    await page.getByRole('menuitem', { name: 'Snap Orthogonal' }).click();
+    await page.keyboard.press('Control+z');
+    await page.evaluate(() => document.activeElement?.blur());
+  }
   // Properties > Layout: exact Width; Set as Default.
   {
     await page.keyboard.press('Escape');

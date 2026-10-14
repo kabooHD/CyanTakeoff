@@ -10,6 +10,7 @@ import { layerIds } from '../pdf/layers';
 import { SignaturesPanel } from './DigitalSignature';
 import { useEffect, useRef, useState } from 'react';
 import { create } from 'zustand';
+import { TOOLS } from '../tools/tools';
 import { applyToolProperties } from '../model/toolScale';
 import { scaleAt, areaLabel, volumeLabel } from '../model/measure';
 import { LENGTH_UNITS, SEGMENT_TYPES, displayText } from '../model/measureDisplay';
@@ -551,6 +552,7 @@ function Viewports() {
 function Measurements() {
   const s = useApp();
   const doc = useActiveDoc();
+  const [measureMenu, setMeasureMenu] = useState<{ x: number; y: number } | null>(null);
   if (!doc) return <p className="muted pad">Open a document to calibrate and measure.</p>;
   const scale = doc.calibrations[doc.page];
   const sel = doc.markups.filter((m) => doc.selection.includes(m.id));
@@ -560,8 +562,25 @@ function Measurements() {
     if (!v) continue;
     totals.length += v.length ?? 0; totals.area += v.area ?? 0; totals.volume += v.volume ?? 0; totals.count += v.count ?? 0;
   }
+  const measureTools = TOOLS.filter((t) => t.group === 'measure' && t.id !== 'viewport' && t.id !== 'space');
   return (
     <div className="props">
+      <div className="prop-actions pad measure-head">
+        <button aria-label="Measurements menu" onClick={(e) => setMeasureMenu({ x: e.clientX, y: e.clientY })}>Measurements ▾</button>
+      </div>
+      {measureMenu && <ContextMenu x={measureMenu.x} y={measureMenu.y} onClose={() => setMeasureMenu(null)} items={[
+        { label: 'Show Measurement Tools', checked: !s.toggles.noMeasureTools, action: () => s.toggle('noMeasureTools') },
+        { label: 'Snap Orthogonal', checked: !!s.toggles.snapOrtho, action: () => s.toggle('snapOrtho') },
+        { label: 'Snap to Content', checked: s.toggles.content, action: () => s.toggle('content') },
+        { label: 'Highlight Viewports', checked: !s.toggles.noViewportHighlight, action: () => s.toggle('noViewportHighlight') },
+      ]} />}
+      {!s.toggles.noMeasureTools && (
+        <div className="measure-tools" role="toolbar" aria-label="Measurement tools">
+          {measureTools.map((t) => (
+            <button key={t.id} className={s.tool === t.id ? 'on' : ''} title={`${t.name}${t.shortcut ? ` (${t.shortcut})` : ''}`} aria-label={t.name} onClick={() => s.setTool(t.id)}><Icon name={t.id} size={16} /></button>
+          ))}
+        </div>
+      )}
       <div className="prop-section">Page Scale</div>
       <Row label="Page"><input readOnly value={doc.loaded.pages[doc.page].label} /></Row>
       <div className="scale-current">{scale ? scale.label : 'Scale Not Set'}</div>

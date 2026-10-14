@@ -522,3 +522,8 @@ button.active { background: #d6e4fa; }
 .toolchest .tool-item { zoom: var(--tool-size, 1); }
 .tool-symbols { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; }
 .tool-item.symbol { display: inline-flex; padding: 3px; }
+
+/* Measurements panel tool buttons */
+.measure-tools { display: flex; flex-wrap: wrap; gap: 2px; padding: 2px 6px; }
+.measure-tools button { padding: 3px; }
+.measure-tools button.on { background: var(--accent-soft); border-color: var(--accent); }
