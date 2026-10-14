@@ -49,7 +49,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
   }, [open]);
 
   const noDoc = !doc;
-  const toolItems = (group: 'markup' | 'measure' | 'form'): MenuItem[] => TOOLS.filter((t) => t.group === group && !['viewport', 'space', 'legend', 'visual-pick', 'region-pick', 'edit-text', 'erase-content', 'cut-content'].includes(t.id)).map((t) => ({
+  const toolItems = (group: 'markup' | 'measure' | 'form'): MenuItem[] => TOOLS.filter((t) => t.group === group && !['viewport', 'space', 'legend', 'visual-pick', 'region-pick', 'edit-text', 'erase-content', 'cut-content', 'sketch-polygon', 'sketch-polyline', 'sketch-rectangle', 'sketch-ellipse'].includes(t.id)).map((t) => ({
     label: t.name, shortcut: effectiveCombo(`tool:${t.id}`, s.customKeys) || undefined, disabled: noDoc, checked: s.tool === t.id, action: () => s.setTool(t.id),
   }));
 
@@ -182,6 +182,10 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Edit Text', checked: s.tool === 'edit-text', disabled: noDoc, action: () => { s.setTool('edit-text'); s.setStatus('Edit Text: click a line of text on the drawing.'); } },
       { label: 'Erase Content', checked: s.tool === 'erase-content', disabled: noDoc, action: () => { s.setTool('erase-content'); s.setStatus('Erase Content: drag a rectangle; everything under it is removed from the page.'); } },
       { label: 'Cut Content', checked: s.tool === 'cut-content', disabled: noDoc, action: () => { s.setTool('cut-content'); s.setStatus('Cut Content: drag a rectangle; the content under it goes to the clipboard (paste with Ctrl+V) and is removed from the page.'); } },
+      { sep: true },
+      ...(['sketch-polygon', 'sketch-polyline', 'sketch-rectangle', 'sketch-ellipse'] as const).map((id) => ({
+        label: toolById(id).name, checked: s.tool === id, disabled: noDoc, action: () => { s.setTool(id); s.setStatus(`${toolById(id).name}: click the first point, then type the sizes.`); },
+      })),
       { sep: true },
       ...toolItems('form'),
       { label: 'Forms Editor…', shortcut: 'Ctrl+Shift+F', disabled: noDoc, action: () => useFormsDialog.setState({ editor: true }) },

@@ -492,6 +492,12 @@ Print Spaces.
 - Offset (O with one markup selected): Distance (in the page's scale
   units, else inches), Replace Markup, Angle Miter Limit, Offset as
   another type; the click picks the side (inside/outside for shapes).
+- Sketch to Scale (Tools): Polygon, Polyline, Rectangle, Ellipse drawn by
+  typing. Click the first point, then Length (Tab) Rotation (Enter) per
+  side; Enter again or C closes; a rectangle/ellipse takes Length, Width,
+  Rotation then Enter. Lengths are in the page's scale units (feet-inches
+  accepted), rotation in degrees counter-clockwise, relative to the page or
+  to the last side. Ours: a turned rectangle or ellipse becomes a polygon.
 - Multiply (right-click or Edit): parallel copies of the selection up,
   down, left or right, a distance apart (scale units, else inches), as
   many as fit on the sheet; copies are independent markups.

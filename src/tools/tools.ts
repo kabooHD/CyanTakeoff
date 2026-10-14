@@ -42,6 +42,11 @@ export const TOOLS: ToolDef[] = [
   { id: 'edit-text', name: 'Edit Text', group: 'navigate', interaction: 'point', subject: '' },
   { id: 'erase-content', name: 'Erase Content', group: 'navigate', interaction: 'box', subject: '' },
   { id: 'cut-content', name: 'Cut Content', group: 'navigate', interaction: 'box', subject: '' },
+  // Sketch to Scale: sizes typed in the Sketch bar (src/ui/SketchBar.tsx); the first click is the anchor.
+  { id: 'sketch-polygon', name: 'Polygon Sketch to Scale', group: 'navigate', interaction: 'poly', subject: 'Polygon', closed: true },
+  { id: 'sketch-polyline', name: 'Polyline Sketch to Scale', group: 'navigate', interaction: 'poly', subject: 'Polyline' },
+  { id: 'sketch-rectangle', name: 'Rectangle Sketch to Scale', group: 'navigate', interaction: 'poly', subject: 'Rectangle' },
+  { id: 'sketch-ellipse', name: 'Ellipse Sketch to Scale', group: 'navigate', interaction: 'poly', subject: 'Ellipse' },
   { id: 'region-pick', name: 'Select Region', group: 'navigate', interaction: 'box', subject: '' },
   { id: 'visual-pick', name: 'VisualSearch: Get Rectangle', group: 'navigate', interaction: 'box', subject: '' },
   { id: 'lasso', name: 'Lasso', group: 'navigate', shortcut: 'Shift+O', interaction: 'freehand', subject: '' },

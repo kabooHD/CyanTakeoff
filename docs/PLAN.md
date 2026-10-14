@@ -249,7 +249,8 @@ filling, image signatures, redaction and OCR.
   models and states with colour and text, default for new markups,
   who/when recorded), Edit Action on any markup (Ctrl+Shift+E), Offset (O:
   distance, Replace Markup, miter limit, Offset as), Multiply (parallel
-  copies), Hide / Show Hidden Markups, Cut, Camera (Ctrl+Alt+I),
+  copies), Hide / Show Hidden Markups, Cut, Sketch to Scale (polygon,
+  polyline, rectangle, ellipse by typed sizes), Camera (Ctrl+Alt+I),
   Search > Replace Checked (rewrites the page text)
 - [x] Signatures: trust list with certificate chain checks, RFC 3161
   timestamps (request when signing, check when verifying)

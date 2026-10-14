@@ -2249,6 +2249,33 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForTimeout(200);
   assert(await svg.locator('[data-id]').count() === drawn, 'Show Hidden Markups draws them again');
   await page.keyboard.press('Escape');
+  // Sketch to Scale: a 10 ft × 5 ft rectangle (sheet scale 18 pt/ft), then a polygon by sides.
+  const menuTools = async (item) => { await page.locator('.menubar-item > button', { hasText: /^Tools$/ }).click(); await page.getByRole('menuitem', { name: item, exact: true }).click(); };
+  const nS = await rows();
+  await menuTools('Rectangle Sketch to Scale');
+  await page.mouse.click(box.x + 120, box.y + 420);
+  const sb = page.locator('[role=toolbar][aria-label="Sketch to Scale"]');
+  await sb.locator('[aria-label="Sketch length"]').fill('10');
+  await sb.locator('[aria-label="Sketch width"]').fill('5');
+  await sb.locator('[aria-label="Sketch rotation"]').fill('0');
+  await sb.locator('[aria-label="Sketch rotation"]').press('Enter');
+  await page.waitForTimeout(200);
+  assert(await rows() === nS + 1, 'Rectangle Sketch to Scale places a rectangle');
+  const rw = await page.evaluate(() => { const r = [...document.querySelectorAll('.page .markup-layer rect')].pop(); return r ? Number(r.getAttribute('width')) : 0; });
+  const zoom = await page.evaluate(() => Number(document.querySelector('.page .markup-layer')?.getAttribute('data-zoom') ?? 0));
+  if (zoom) assert(Math.abs(rw / zoom - 180) < 1, `the sketched rectangle is 10 ft = 180 pt wide (${rw / zoom})`);
+  await menuTools('Polygon Sketch to Scale');
+  await page.mouse.click(box.x + 120, box.y + 520);
+  await sb.locator('[aria-label="Sketch length"]').fill('4');
+  await sb.locator('[aria-label="Sketch rotation"]').fill('0');
+  await sb.locator('[aria-label="Sketch rotation"]').press('Enter');
+  await sb.locator('[aria-label="Sketch length"]').fill('3');
+  await sb.locator('[aria-label="Sketch rotation"]').fill('90');
+  await sb.locator('[aria-label="Sketch rotation"]').press('Enter');
+  await sb.locator('[aria-label="Sketch length"]').press('c');
+  await page.waitForTimeout(200);
+  assert(await rows() === nS + 2, 'Polygon Sketch to Scale closes a polygon from typed sides');
+  await page.keyboard.press('Escape');
   // Edit Action: the rectangle drawn earlier jumps to page 1... use the new line instead.
   await page.mouse.click(box.x + 250, box.y + 300);
   await page.keyboard.press('Control+Shift+E');

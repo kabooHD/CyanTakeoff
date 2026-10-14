@@ -37,6 +37,8 @@ import { ViewOverlays, recordView } from './Rulers';
 import { setVisualTemplate } from './VisualSearch';
 import { finishPickRect } from './pickRect';
 import { editText, eraseContent } from '../pdf/editText';
+import { SKETCH_TOOLS } from '../model/sketch';
+import { SketchBar } from './SketchBar';
 import type { TextBox } from './toolActions';
 import { formatSequence, nextInSequence, sequenceMembers } from '../model/sequence';
 import { renderLimits } from '../model/device';
@@ -731,7 +733,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     }
     const t = toolById(draft.tool);
     const min = t.closed ? 3 : 2;
-    if (draft.points.length >= min) finish(draft.tool as MarkupType, draft.points, hasCurves(draft.handles) ? { handles: draft.handles } : {});
+    if (draft.points.length >= min) finish(baseType(draft.tool), draft.points, hasCurves(draft.handles) ? { handles: draft.handles } : {});
     else setDraft(null);
   };
 
@@ -1244,7 +1246,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       // the second click of the double-click added a duplicate point
       const pts = draft.points.slice(0, -1);
       const min = def.closed ? 3 : 2;
-      if (pts.length >= min) finish(draft.tool as MarkupType, pts);
+      if (pts.length >= min) finish(baseType(draft.tool), pts);
       return;
     }
     if (s.tool === 'select') {
@@ -1440,7 +1442,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   } else if (draft && draft.cursor) {
     const pts = def.interaction === 'freehand' || draft.curving !== undefined ? draft.points : [...draft.points, draft.cursor];
     const boxed = draft.tool.startsWith('form-') || draft.tool === 'lasso' || draft.tool === 'redact-text' || draft.tool === 'viewport' || draft.tool === 'snapshot' || draft.tool === 'snapshot-content' || draft.tool === 'select-text' || draft.tool === 'visual-pick' || draft.tool === 'region-pick' || draft.tool === 'erase-content' || draft.tool === 'cut-content' || draft.tool === 'link' || def.interaction === 'text';
-    let type = (draft.tool === 'calibrate' ? 'length' : boxed ? 'rectangle' : draft.tool) as MarkupType;
+    let type = (draft.tool === 'calibrate' ? 'length' : boxed ? 'rectangle' : baseType(draft.tool)) as MarkupType;
     let P = pts;
     if (draft.tool === 'cloudplus' && pts.length >= 3) P = [pts[0], pts[1], pts[2], { x: pts[2].x + 144, y: pts[2].y + 40 }];
     if (draft.tool === 'radius-3pt') {
@@ -1630,6 +1632,11 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         </div>
       )}
       {offsetSrc && isActivePane && <OffsetBar scale={scaleFor(offsetSrc.points[0])} />}
+      {SKETCH_TOOLS[s.tool] && isActivePane && (
+        <SketchBar kind={SKETCH_TOOLS[s.tool]!} points={draft?.points ?? []} scale={scaleFor(draft?.points[0])}
+          onPoint={(p) => setDraft((d) => ({ ...(d ?? { tool: s.tool, points: [], cursor: null }), points: [...(d?.points ?? []), p] }))}
+          onCommit={(type, pts) => finish(type, pts)} onFinish={finishPoly} onCancel={() => { setDraft(null); s.setTool('select'); }} />
+      )}
       {s.tool === 'stamp' && (
         <div className="fill-bar" role="toolbar" aria-label="Stamp">
           <strong>Stamp</strong>
@@ -1719,6 +1726,8 @@ const cleanHandles = (h: Handles): Handles | undefined => (hasCurves(h) ? h : un
 
 /** Tools that draw a region: drag a rectangle, or click points and close the shape. */
 const isRegion = (t: ToolId) => t === 'cutout' || t === 'space';
+/** The markup a drawing tool makes (Sketch to Scale tools make plain markups). */
+const baseType = (t: ToolId): MarkupType => (SKETCH_TOOLS[t] ?? t) as MarkupType;
 const isMeasureTool = (t: ToolId) => MEASURE_TYPES.has(t) || t === 'radius-3pt';
 
 /** Corners of a viewport rectangle: top-left, top-right, bottom-right, bottom-left. */
