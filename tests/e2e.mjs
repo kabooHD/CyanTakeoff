@@ -606,6 +606,28 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.locator('.ml-table-wrap').focus();
   await page.keyboard.press('F3');
   assert(await page.locator('.search-hit.active').innerText() !== '' , 'F3 moves to the next result');
+  // Check Options: Highlight Checked puts a Highlight on every checked result; Clear empties the list.
+  const rowsBefore = await page.locator('.ml-table tbody tr:not(.reply-row)').count();
+  await page.getByLabel('Check options').selectOption('highlight');
+  await page.waitForFunction((k) => document.querySelectorAll('.ml-table tbody tr:not(.reply-row)').length === k, rowsBefore + n);
+  assert(true, `Highlight Checked adds one Highlight per result (${n})`);
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction((k) => document.querySelectorAll('.ml-table tbody tr:not(.reply-row)').length === k, rowsBefore);
+  // Search Markups: the query is looked up in subjects, labels and comments.
+  await page.locator('.search-scope label', { hasText: 'Markups' }).locator('input').check();
+  await page.locator('.search-scope label', { hasText: /^\s*Pages/ }).locator('input').uncheck();
+  await page.getByLabel('Search text').fill('Count');
+  await page.getByLabel('Search text').press('Enter');
+  await page.waitForFunction(() => /\d+ results?/.test(document.querySelector('.search-panel')?.textContent ?? ''));
+  assert(await page.locator('.search-hit button[data-kind="markup"]').count() >= 1, 'Search Markups finds the Count markup by subject');
+  await page.locator('.search-hit button[data-kind="markup"]').first().click();
+  await page.waitForTimeout(300);
+  assert((await page.locator('.ml-table tbody tr.selected').first().innerText()).includes('Count'), 'clicking a markup result selects the markup');
+  await page.locator('.search-actions').getByRole('button', { name: 'Clear' }).click();
+  assert(await page.locator('.search-hit').count() === 0, 'Clear empties the results');
+  await page.locator('.search-scope label', { hasText: /^\s*Pages/ }).locator('input').check();
+  await page.locator('.search-scope label', { hasText: 'Markups' }).locator('input').uncheck();
+  await page.evaluate(() => document.activeElement?.blur?.());
   await page.keyboard.press('Alt+1');
 }
 

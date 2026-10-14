@@ -446,6 +446,18 @@ point to pick the one that holds the number). Ours: numbers in the text of
 text markups, in the label (drawn in the middle) of other shapes; groups
 not yet.
 
+## Text search (Search panel, Alt+1 / Ctrl+F)
+Options: Match case, Whole words; what is searched: Pages (the page
+text), Markups (subject, label, comment; a result selects the markup),
+Form Fields (name and value), File Properties (Title, Author, Subject,
+Keywords...). Results are listed with the page label and context; each
+has a checkbox. Select All / Select None, Check Options (Hyperlink
+Checked: a web address or page number; Mark for Redaction; Apply Count
+Measurement to Checked: one Count per page; Highlight / Underline /
+Squiggly / Strikethrough Checked) act on checked results found in the
+page text; Replace Checked rewrites them; Clear empties the list. Ours:
+no Recents/Folder/Set locations.
+
 ## VisualSearch (Search panel, Alt+1 / Ctrl+F > Visual)
 Get Rectangle: drag around a symbol; a preview shows what will be looked
 for. Search in the current page, document, all open documents (also Sets,

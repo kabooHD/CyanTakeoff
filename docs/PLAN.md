@@ -227,6 +227,9 @@ filling, image signatures, redaction and OCR.
   and Export Drawing Log (CSV/PDF)
 - [x] Thumbnails toolbar: Cut/Copy/Paste Pages, Re-Label, Export/Email/Print
   Pages, Labels (Page Label, Page Scale), size slider
+- [x] Search panel: Markups / Form Fields / File Properties scopes, Select All,
+  Check Options (Hyperlink, Redaction, Count, Highlight, Underline, Squiggly,
+  Strikethrough), Clear
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData
