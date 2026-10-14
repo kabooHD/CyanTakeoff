@@ -256,4 +256,6 @@ export interface Toggles {
   replyIndicators?: boolean;
   /** Form > Highlight Fields off: form fields drawn without their blue tint. */
   noFieldHighlight?: boolean;
+  /** View > Synchronize Document: both panes of a split view show the same page index. */
+  syncDoc?: boolean;
 }

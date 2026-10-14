@@ -54,6 +54,9 @@ const BASE_MAX_PIXELS = LIMITS.base;
 /** Pages other than the active one, in continuous / side-by-side views. */
 const TILE_MAX_PIXELS = LIMITS.tile;
 
+/** The scrolling element of each split pane (Synchronize Page). */
+const paneScrollers: (HTMLDivElement | null)[] = [null, null];
+
 /** Imperative hooks for menus/toolbar (fit page etc.). */
 export const viewerApi = {
   fitPage: () => {},
@@ -104,6 +107,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const page = doc.loaded.pages[Math.min(pageIdx, doc.loaded.pages.length - 1)];
   const zoom = zoomRaw || 1;
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Synchronize Page: the active pane's scroll position is mirrored to the other pane.
+  useEffect(() => { const el = scrollRef.current; paneScrollers[pane] = el; return () => { if (paneScrollers[pane] === el) paneScrollers[pane] = null; }; }, [pane]);
   const baseRef = useRef<HTMLCanvasElement>(null);
   const detailRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
@@ -297,6 +302,10 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const scrollIdle = useRef(0);
   const reach = useRef('');
   const onScroll = () => {
+    if (split && s.toggles.sync && isActivePane) {
+      const other = paneScrollers[pane ? 0 : 1], el = scrollRef.current;
+      if (other && el && (other.scrollLeft !== el.scrollLeft || other.scrollTop !== el.scrollTop)) { other.scrollLeft = el.scrollLeft; other.scrollTop = el.scrollTop; }
+    }
     clearTimeout(scrollIdle.current);
     scrollIdle.current = window.setTimeout(() => setScrollTick((n) => n + 1), 120);
     if (multi) {

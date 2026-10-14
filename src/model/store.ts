@@ -207,6 +207,8 @@ interface AppState {
   rotateView(delta: 90 | -90): void;
   splitView(dir: 'h' | 'v'): void;
   unsplit(): void;
+  /** Toggle Split (Ctrl+I): vertical <-> horizontal (splits vertically when there is no split). */
+  toggleSplit(): void;
   focusPane(pane: 0 | 1): void;
   setTool(tool: ToolId, opts?: { locked?: boolean; preset?: ToolPreset | null }): void;
   addMarkup(m: Omit<Markup, 'id' | 'author' | 'created' | 'modified' | 'status' | 'label' | 'comment'> & Partial<Markup>): Markup;
@@ -519,22 +521,36 @@ export const useApp = create<AppState>((set, get) => {
     setPage: (page) => get().setViewPage(get().split ? get().activePane : 0, page),
     setZoom: (zoom) => get().setViewZoom(get().split ? get().activePane : 0, zoom),
     setViewPage(pane, page, keep) {
-      const { split, docs } = get();
+      const { split, docs, toggles } = get();
+      const clampTo = (id: string, p: number) => { const d = docs.find((x) => x.id === id); return d ? Math.max(0, Math.min(d.loaded.pages.length - 1, p)) : 0; };
+      // Synchronize Document (Revu): the other pane follows to the same page index.
+      const follow = split && toggles.syncDoc;
       if (pane === 1 && split) {
-        const d = docs.find((x) => x.id === split.docId);
-        if (d) set({ split: { ...split, page: Math.max(0, Math.min(d.loaded.pages.length - 1, page)) } });
+        set({
+          split: { ...split, page: clampTo(split.docId, page) },
+          ...(follow ? { docs: docs.map((d) => (d.id === split.mainDocId ? { ...d, page: clampTo(d.id, page) } : d)) } : {}),
+        });
         if (!keep) withDoc(() => ({ selection: [] }));
         return;
       }
       const id = split ? split.mainDocId : get().activeId;
-      set({ docs: docs.map((d) => (d.id === id ? { ...d, page: Math.max(0, Math.min(d.loaded.pages.length - 1, page)), selection: keep ? d.selection : [] } : d)) });
+      set({
+        docs: docs.map((d) => (d.id === id ? { ...d, page: clampTo(d.id, page), selection: keep ? d.selection : [] } : d)),
+        ...(follow ? { split: { ...split, page: clampTo(split.docId, page) } } : {}),
+      });
     },
     setViewZoom(pane, zoom) {
       const z = Math.max(0.02, Math.min(64, zoom));
-      const { split, docs } = get();
-      if (pane === 1 && split) { set({ split: { ...split, zoom: z } }); return; }
+      const { split, docs, toggles } = get();
+      // Synchronize Page (Revu): both panes share the zoom (the Viewer mirrors the scroll).
+      const both = split && toggles.sync;
+      if (pane === 1 && split && !both) { set({ split: { ...split, zoom: z } }); return; }
       const id = split ? split.mainDocId : get().activeId;
-      set({ docs: docs.map((d) => (d.id === id ? { ...d, zoom: z } : d)) });
+      set({ docs: docs.map((d) => (d.id === id ? { ...d, zoom: z } : d)), ...(both ? { split: { ...split, zoom: z } } : {}) });
+    },
+    toggleSplit() {
+      const { split } = get();
+      if (split) set({ split: { ...split, dir: split.dir === 'v' ? 'h' : 'v' } }); else get().splitView('v');
     },
     split: null,
     splitRatio: 0.5,

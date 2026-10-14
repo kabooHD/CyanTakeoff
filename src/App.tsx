@@ -207,7 +207,7 @@ export function App() {
         case 'Ctrl+2': return run(() => s.splitView('v'));
         case 'Ctrl+Shift+2': case 'Ctrl+Shift+@': return run(s.unsplit);
         case 'Ctrl+1': return run(() => s.split && s.focusPane(s.activePane ? 0 : 1));
-        case 'Ctrl+I': return run(() => (s.split ? s.unsplit() : s.splitView('v')));
+        case 'Ctrl+I': return run(s.toggleSplit);
         case 'Shift+F3': return run(() => nextHit(-1));
         case 'Alt+P': return right('properties');
         case 'Alt+X': return right('toolchest');

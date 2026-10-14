@@ -2117,6 +2117,27 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await viewItem('Show Cover Page in Side-by-Side');
     await page.keyboard.press('Control+4');
     await page.waitForTimeout(300);
+    // Split view: Synchronize Document keeps both panes on the same page; Toggle Split flips the direction; Unsplit.
+    const pageNo = async () => Number((await page.locator('.statusbar').innerText()).match(/\((\d+) of/)[1]);
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Control+2');
+    await page.waitForTimeout(400);
+    assert(await page.locator('.viewer-wrap').count() === 2, 'Split Vertical shows two panes');
+    await viewItem('Synchronize Document');
+    await page.keyboard.press('Control+ArrowRight');
+    await page.waitForTimeout(300);
+    const p1 = await pageNo();
+    await page.keyboard.press('Control+1'); // Switch pane
+    await page.waitForTimeout(300);
+    assert(p1 === 2 && await pageNo() === 2, `Synchronize Document moves the other pane to the same page (${p1}, ${await pageNo()})`);
+    await viewItem('Synchronize Document');
+    await page.keyboard.press('Control+i');
+    await page.waitForTimeout(300);
+    assert(await page.locator('.viewer-wrap').count() === 2, 'Toggle Split keeps two panes (direction flipped)');
+    await page.keyboard.press('Control+Shift+2');
+    await page.waitForTimeout(300);
+    assert(await page.locator('.viewer-wrap').count() === 1, 'Unsplit returns to one pane');
+    await page.keyboard.press('Home');
     if (!hadThumbs) await page.keyboard.press('Alt+t');
   }
 }

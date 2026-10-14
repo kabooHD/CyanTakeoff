@@ -153,7 +153,8 @@ filling, image signatures, redaction and OCR.
 - [x] View modes: Single Page, Continuous, Side by Side, Continuous Side by
   Side (Ctrl+4 to Ctrl+7), Rotate View (Ctrl+Shift+Plus/Minus), Show Cover
   Page in Side-by-Side, Dark Mode, Disable Line Weights, Always Show Reply
-  Indicators
+  Indicators, split view menu (Toggle Split, Switch, Unsplit) with
+  Synchronize Document / Page
 - [x] Undo across page operations (the last 10 per document)
 - [x] Compare: alignment points and vector comparison
 - [x] Forms editor: create, rename and delete fields

@@ -131,6 +131,14 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Rotate View Clockwise', shortcut: 'Ctrl+Shift+Plus', disabled: noDoc, action: () => s.rotateView(90) },
       { label: 'Rotate View Counterclockwise', shortcut: 'Ctrl+Shift+Minus', disabled: noDoc, action: () => s.rotateView(-90) },
       { sep: true },
+      { label: 'Split Vertical', shortcut: 'Ctrl+2', disabled: noDoc, checked: s.split?.dir === 'v', action: () => s.splitView('v') },
+      { label: 'Split Horizontal', shortcut: 'Ctrl+H', disabled: noDoc, checked: s.split?.dir === 'h', action: () => s.splitView('h') },
+      { label: 'Toggle Split', shortcut: 'Ctrl+I', disabled: noDoc, action: s.toggleSplit },
+      { label: 'Switch', shortcut: 'Ctrl+1', disabled: !s.split, action: () => s.focusPane(s.activePane ? 0 : 1) },
+      { label: 'Unsplit', shortcut: 'Ctrl+Shift+2', disabled: !s.split, action: s.unsplit },
+      { label: 'Synchronize Document', checked: !!s.toggles.syncDoc, action: () => s.toggle('syncDoc') },
+      { label: 'Synchronize Page', checked: s.toggles.sync, action: () => s.toggle('sync') },
+      { sep: true },
       { label: 'Previous View', shortcut: 'Alt+Left', disabled: !viewHistory.canBack, action: () => stepView(-1, viewerApi.centerOn) },
       { label: 'Next View', shortcut: 'Alt+Right', disabled: !viewHistory.canForward, action: () => stepView(1, viewerApi.centerOn) },
       { sep: true },
@@ -376,7 +384,7 @@ const TOGGLES: { key: keyof Toggles; label: string; title: string }[] = [
   { key: 'content', label: 'Content', title: 'Snap to Content: line endpoints and lines in the drawing (Ctrl+Shift+F8)' },
   { key: 'markup', label: 'Markup', title: 'Snap to Markup (Ctrl+Shift+F7)' },
   { key: 'reuse', label: 'Reuse', title: 'Reuse Markup Tools: keep the tool after placing a markup, until Esc or right-click' },
-  { key: 'sync', label: 'Sync', title: 'Sync views in split view (coming with split view)' },
+  { key: 'sync', label: 'Sync', title: 'Synchronize Page: both panes of a split view share zoom and scrolling' },
 ];
 
 export function StatusBar() {

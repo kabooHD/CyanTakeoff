@@ -75,6 +75,11 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
   another), Side by Side (Ctrl+6, pages 1-2, 3-4... as pairs), Continuous
   Side by Side (Ctrl+7). Markups can be drawn on any page shown. Show
   Cover Page in Side-by-Side keeps page 1 alone (pairs 2-3, 4-5...).
+- Split view: Split Vertical (Ctrl+2) / Horizontal (Ctrl+H), Toggle Split
+  (Ctrl+I, flips the direction), Switch (Ctrl+1, the other pane), Unsplit
+  (Ctrl+Shift+2), Balance (Shift+F12). Synchronize Document keeps both
+  panes on the same page index; Synchronize Page (the Sync toggle) shares
+  zoom and scrolling.
 - View toggles: Dark Mode (dark chrome), Disable Line Weights (ours: markup
   lines one screen pixel at any zoom; the drawing itself keeps its line
   weights), Always Show Reply Indicators (a bubble with the reply count on
