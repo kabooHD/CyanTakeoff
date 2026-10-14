@@ -30,6 +30,8 @@ import { SequenceDialog } from './ui/SequenceDialog';
 import { QuantityLinkDialog } from './ui/QuantityLink';
 import { AutoMarkDialog } from './ui/AutoMark';
 import { StampDialog } from './ui/HeaderFooter';
+import { PasswordPrompt, SecurityDialog, useSecurityDialog } from './ui/Security';
+import { ReduceDialog } from './ui/ReduceSize';
 import { SheetsDialog } from './ui/Sheets';
 import { PrefsDialogs } from './ui/Prefs';
 import { SignatureDialog } from './ui/Signature';
@@ -73,6 +75,7 @@ export function App() {
         case 'Ctrl+Shift+S': return run(() => s.save(true));
         case 'Ctrl+F4': case 'Ctrl+W': return run(() => d && s.closeDoc(d.id));
         case 'Ctrl+P': return run(() => d && openPrint());
+        case 'Ctrl+L': return run(() => d && useSecurityDialog.setState({ open: true }));
         case 'Ctrl+Shift+W': return run(() => s.docs.forEach((x) => s.closeDoc(x.id)));
         // Edit
         case 'Ctrl+Z': return run(s.undo);
@@ -232,6 +235,9 @@ export function App() {
       <QuantityLinkDialog />
       <AutoMarkDialog />
       <StampDialog />
+      <SecurityDialog />
+      <PasswordPrompt />
+      <ReduceDialog />
       <SpellContentDialog />
       <SheetsDialog />
       <PrefsDialogs />

@@ -12,6 +12,7 @@ import { parsePageRange } from '../model/measure';
 import { DEFAULT_PRINT, PAPER_SIZES, layoutSheets, printOrder, renderScale, type PrintOptions, type Sheet } from '../model/print';
 import { loadForRender } from '../pdf/document';
 import { layerShown } from './layersView';
+import { PERM, allowed } from '../pdf/crypt';
 
 type Range = 'all' | 'current' | 'custom';
 type Content = 'both' | 'document' | 'markups';
@@ -20,7 +21,11 @@ const DEFAULTS: PrintSettings = { ...DEFAULT_PRINT, content: 'both', dim: false,
 const LS = 'cyantakeoff:print';
 
 export const usePrintDialog = create<{ open: boolean }>(() => ({ open: false }));
-export const openPrint = () => usePrintDialog.setState({ open: true });
+export const openPrint = () => {
+  const s = useApp.getState(), d = s.docs.find((x) => x.id === s.activeId);
+  if (d && !allowed(d.security, PERM.print)) { s.setStatus('Printing is not allowed by this file\'s security settings.'); return; }
+  usePrintDialog.setState({ open: true });
+};
 
 function loadSettings(): PrintSettings {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(LS) ?? '{}') }; } catch { return DEFAULTS; }

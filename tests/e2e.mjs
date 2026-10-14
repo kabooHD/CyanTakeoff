@@ -1596,6 +1596,67 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.evaluate(() => document.activeElement?.blur());
 }
 
+// XFDF export/import, Security (password to open), Reduce File Size.
+{
+  const menu = async (m, item) => {
+    await page.locator('.menubar-item > button', { hasText: new RegExp(`^${m}$`) }).click();
+    await page.getByRole('menuitem', { name: item, exact: true }).click();
+  };
+  const total = async () => Number((await page.getByText(/ of \d+ markups/).innerText()).match(/of (\d+)/)[1]);
+  await page.locator('.doc-tab').first().click();
+  const n0 = await total();
+  const [x] = await Promise.all([page.waitForEvent('download'), menu('File', 'Export Markups (XFDF)')]);
+  const xfdf = `${OUT}/markups.xfdf`;
+  await x.saveAs(xfdf);
+  assert(readFileSync(xfdf, 'utf8').includes('<annots>'), 'Export Markups writes XFDF');
+  const tabs = await page.locator('.doc-tab').count();
+  await menu('File', 'Open Sample Drawing');
+  await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs);
+  await page.waitForTimeout(800);
+  const fresh = await total();
+  const [fc] = await Promise.all([page.waitForEvent('filechooser'), menu('File', 'Import Markups (XFDF)…')]);
+  await fc.setFiles(xfdf);
+  await page.getByText(/Imported \d+ markup/).waitFor({ timeout: 20000 });
+  await page.waitForTimeout(500);
+  const got = await total();
+  if (got !== fresh + n0) console.log('subjects:', (await page.locator('.ml-table tbody tr td:first-child').allInnerTexts()).join(','));
+  assert(got === fresh + n0, `Import Markups brings them all into a clean copy (${fresh} + ${n0} = ${got})`);
+
+  // Security: a password to open, applied on save.
+  await page.keyboard.press('Control+l');
+  const sd = page.locator('[role=dialog][aria-label="Security"]');
+  await sd.locator('[aria-label="Security method"]').selectOption('password');
+  await sd.locator('[aria-label="Open password"]').fill('secret');
+  await sd.locator('[aria-label="Confirm open password"]').fill('secret');
+  await sd.locator('[aria-label="Permissions password"]').fill('boss');
+  await sd.getByRole('button', { name: 'OK' }).click();
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
+  const locked = `${OUT}/protected.pdf`;
+  await dl.saveAs(locked);
+  await page.waitForTimeout(1000);
+  assert(readFileSync(locked).toString('latin1').includes('/Encrypt'), 'the saved file is encrypted');
+  const tabs2 = await page.locator('.doc-tab').count();
+  const chooser = await ctrlO();
+  await chooser.setFiles(locked);
+  const pw = page.locator('[aria-label="Document password"]');
+  await pw.waitFor({ timeout: 20000 });
+  await pw.fill('wrong');
+  await pw.press('Enter');
+  await page.getByText('Wrong password. Try again.').waitFor();
+  await pw.fill('secret');
+  await pw.press('Enter');
+  await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs2, { timeout: 20000 });
+  await page.waitForTimeout(800);
+  assert(await total() === fresh + n0, 'the protected file opens with its password, markups intact');
+  await page.screenshot({ path: `${OUT}/security.png` });
+
+  // Reduce File Size on it (Undo restores).
+  await menu('File', 'Reduce File Size…');
+  await page.locator('[role=dialog][aria-label="Reduce File Size"]').getByRole('button', { name: 'OK' }).click();
+  await page.getByText(/Reduced .*→|already compact/).waitFor({ timeout: 30000 });
+  assert(true, `Reduce File Size: ${await page.getByText(/Reduced .*→|already compact/).innerText()}`);
+}
+
 // Print (Ctrl+P): sheets are prepared in the page, then the browser's print dialog opens.
 {
   await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });

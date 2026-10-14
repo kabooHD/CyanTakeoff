@@ -5,7 +5,7 @@ import type { Toggles, ToolId } from '../model/types';
 import { TOOLS, toolById } from '../tools/tools';
 import { Icon } from './icons';
 import { MenuList, type MenuItem } from './ContextMenu';
-import { allColumns, exportSummaryCsv, exportSummaryPdf, exportSummaryXlsx, openFile, openSample } from './actions';
+import { allColumns, exportSummaryCsv, exportSummaryPdf, exportSummaryXlsx, openFile, openSample, exportMarkupsXfdf, importMarkupsXfdf } from './actions';
 import { viewerApi } from './Viewer';
 import { combineFiles, openPagesDialog } from './PagesDialog';
 import { openCompare } from './Compare';
@@ -14,6 +14,8 @@ import { addBookmark } from './BookmarksPanel';
 import { checkSpelling, useSpellContent } from './Spell';
 import { useQuantityLink } from './QuantityLink';
 import { removeStamps, useStampDialog } from './HeaderFooter';
+import { useSecurityDialog } from './Security';
+import { useReduceDialog } from './ReduceSize';
 import { stepView, viewHistory } from './Rulers';
 import { openSignDialog } from './DigitalSignature';
 import { useFormsDialog } from './FormsEditor';
@@ -62,6 +64,10 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Save As…', shortcut: 'Ctrl+Shift+S', disabled: noDoc, action: () => s.save(true) },
       { sep: true },
       { label: 'Export Markups Summary (CSV)', disabled: noDoc, action: () => exportSummaryCsv() },
+      { label: 'Import Markups (XFDF)…', disabled: noDoc, action: () => importMarkupsXfdf() },
+      { label: 'Export Markups (XFDF)', disabled: noDoc, action: () => exportMarkupsXfdf() },
+      { sep: true },
+      { label: 'Reduce File Size…', disabled: noDoc, action: () => useReduceDialog.setState({ open: true }) },
       { sep: true },
       { label: 'Print…', shortcut: 'Ctrl+P', disabled: noDoc, action: openPrint },
     ],
@@ -124,6 +130,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Remove Header & Footer', disabled: noDoc, action: () => removeStamps('Header') },
       { label: 'Watermark…', disabled: noDoc, action: () => useStampDialog.setState({ open: 'watermark' }) },
       { label: 'Remove Watermark', disabled: noDoc, action: () => removeStamps('Watermark') },
+      { label: 'Security…', shortcut: 'Ctrl+L', disabled: noDoc, action: () => useSecurityDialog.setState({ open: true }) },
       { sep: true },
       { label: 'Slip Sheet…', disabled: noDoc, action: () => openPagesDialog('slip-sheet') },
       { label: 'Page Labels…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'labels' }) },

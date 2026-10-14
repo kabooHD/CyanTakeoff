@@ -199,7 +199,14 @@ filling, image signatures, redaction and OCR.
   time, file name, Bates), Bates Numbering (prefix/start/digits/suffix),
   Watermark (text, font, colour, opacity, rotation, behind/in front); page
   ranges, preview; written as pagination artifacts and removable
-- [ ] Password protection, Reduce file size, XFDF import/export
+- [x] Password security: open RC4/AES-128/AES-256 protected files (password
+  prompt; permissions honoured when opened with the open password), saving
+  keeps the same passwords; Security (Ctrl+L) sets/removes AES-256
+  passwords and permissions (checked with pdf.js and pypdf)
+- [x] Reduce File Size (unused objects, compression, thumbnails, private
+  data, metadata, JPEG downsampling by placed dpi, object streams)
+- [x] XFDF export/import of markups (standard XFDF plus our measurement data
+  in a namespaced element; Revu measurements round-trip)
 - [ ] Edit Text / Edit Content
 - [ ] Touch and pen support
 

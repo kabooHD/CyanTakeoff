@@ -454,3 +454,5 @@ button.active { background: #d6e4fa; }
 .hf-grid label { display: flex; flex-direction: column; gap: 2px; }
 .hf-grid textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 12px; }
 .stamp-preview { background: #f4f4f4; margin: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+.perm-list { display: flex; flex-direction: column; gap: 2px; }
+.error { color: #c00; }

@@ -1,10 +1,11 @@
 import { anchorOf, spaceAt } from '../model/spaces';
-import { activeDoc, useApp, type DocState } from '../model/store';
+import { activeDoc, serialize, useApp, type DocState } from '../model/store';
 import { areaLabel, measure, unitLabel, volumeLabel } from '../model/measure';
 import type { CustomColumn, Markup } from '../model/types';
 import { displayValue, isNumericColumn, numericValue } from '../model/columns';
 import { buildXlsx } from '../model/xlsx';
 import { buildSummaryPdf } from '../pdf/summary';
+import { pickFile } from './toolActions';
 
 type Picker = (o: unknown) => Promise<FileSystemFileHandle[]>;
 
@@ -164,4 +165,31 @@ export async function exportSummaryPdf(markups: Markup[], columns: SummaryColumn
   const a = Object.assign(document.createElement('a'), { href: url, download: d.name.replace(/\.pdf$/i, '') + ' - Markups Summary.pdf' });
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+// ---------- XFDF markups exchange ----------
+
+/** File > Export Markups (XFDF). */
+export async function exportMarkupsXfdf() {
+  const d = activeDoc();
+  if (!d) return;
+  const { PDFDocument } = await import('pdf-lib');
+  const { exportXfdf } = await import('../pdf/xfdf');
+  const doc = await PDFDocument.load(await serialize(d), { updateMetadata: false });
+  const xml = exportXfdf(doc, d.name);
+  const url = URL.createObjectURL(new Blob([xml], { type: 'application/vnd.adobe.xfdf' }));
+  Object.assign(document.createElement('a'), { href: url, download: d.name.replace(/\.pdf$/i, '') + '.xfdf' }).click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  useApp.getState().setStatus(`Exported markups to ${d.name.replace(/\.pdf$/i, '')}.xfdf`);
+}
+
+/** File > Import Markups (XFDF): adds them to the active document (same-named markups are replaced). */
+export async function importMarkupsXfdf(file?: File) {
+  const f = file ?? await pickFile('.xfdf,.xml,application/vnd.adobe.xfdf');
+  if (!f) return;
+  const xml = await f.text();
+  const { importXfdf } = await import('../pdf/xfdf');
+  let n = 0;
+  const ok = await useApp.getState().transformDoc((lib) => { n = importXfdf(lib, xml); }, 'Markups imported');
+  if (ok) useApp.getState().setStatus(`Imported ${n} markup${n === 1 ? '' : 's'} from ${f.name}`);
 }

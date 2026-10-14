@@ -12,6 +12,8 @@ import type { RulerUnit } from './rulers';
 import type { HatchDef, LineStyleDef } from './lineStyles';
 import type { LayerSet } from '../pdf/layers';
 import type { Bookmark } from '../pdf/bookmarks';
+import { PERM, PasswordRequired, allowed, encryptPdf, looksEncrypted, openEncrypted, type NewSecurity, type Security } from '../pdf/crypt';
+import { askPassword } from './prompts';
 import { hasSignatures, incrementalUpdate, loadForUpdate } from '../pdf/incremental';
 import type { ViewMode, ViewRotation } from './layout';
 import type {
@@ -72,6 +74,9 @@ export interface DocState {
   /** Bookmarks (Bookmarks panel), and whether they changed since opening. */
   bookmarks: Bookmark[];
   dirtyBookmarks: boolean;
+  /** Password security the file was opened with (it is kept when saving), and a change to apply on save. */
+  security?: Security | null;
+  securityChange?: NewSecurity | 'remove' | null;
   /** View state, not saved: which layers are shown. */
   layerVisible: Record<string, boolean>;
   /** Revu's Markup Layer: new markups go on it. */
@@ -393,7 +398,32 @@ export const useApp = create<AppState>((set, get) => {
     async openBytes(bytes, name, handle) {
       set({ busy: true, status: `Opening ${name}…` });
       try {
+        // Password-protected: ask for the password, then work on a decrypted copy.
+        let security: Security | null = null;
+        if (looksEncrypted(bytes)) {
+          let pw = '', retry = false, plain: Uint8Array | null = null;
+          for (;;) {
+            try {
+              const r = await openEncrypted(bytes, pw);
+              security = r.security;
+              plain = await r.doc.save({ useObjectStreams: false });
+              break;
+            } catch (e) {
+              if (!(e instanceof PasswordRequired)) {
+                if (/Not an encrypted/.test(String(e))) break;
+                throw e;
+              }
+              set({ busy: false });
+              const answer = await askPassword(name, retry || e.retry);
+              set({ busy: true });
+              if (answer === null) { set({ status: `${name}: not opened (password required)` }); return; }
+              pw = answer; retry = true;
+            }
+          }
+          if (plain) bytes = plain;
+        }
         const loaded = await openPdf(bytes);
+        if (security && !allowed(security, PERM.annotate)) loaded.readOnly = true;
         const markups = loaded.markups.map((m) =>
           MEASURE_TYPES.has(m.type) && !m.scale
             ? { ...m, scale: scaleAt(loaded.calibrations[m.page], loaded.viewports[m.page], m.points[0]) ?? undefined }
@@ -412,8 +442,10 @@ export const useApp = create<AppState>((set, get) => {
           formValues: {},
           page: 0, zoom: 0, selection: [], undo: [], redo: [], dirty: false,
           ...layerState(loaded), bookmarks: loaded.bookmarks, dirtyBookmarks: false,
+          security, securityChange: null,
         };
-        set((s) => ({ docs: [...s.docs, doc], activeId: doc.id, status: loaded.readOnly ? `${name} opened read-only (file could not be parsed for editing)` : `Opened ${name}` }));
+        const why = security && loaded.readOnly ? 'the file\'s permissions do not allow markups' : 'file could not be parsed for editing';
+        set((s) => ({ docs: [...s.docs, doc], activeId: doc.id, status: loaded.readOnly ? `${name} opened read-only (${why})` : `Opened ${name}${security ? ' (password protected)' : ''}` }));
       } catch (e) {
         console.error(e);
         set({ status: `Could not open ${name}: ${(e as Error).message}` });
@@ -765,6 +797,10 @@ export const useApp = create<AppState>((set, get) => {
       set({ busy: true, status: `Saving ${d.name}…` });
       try {
         const bytes = await serialize(d);
+        // Encrypt what is written: the security it was opened with, or the new one.
+        const change = d.securityChange;
+        const out = change === 'remove' ? bytes : change ? await encryptPdf(bytes, change) : d.security ? await encryptPdf(bytes, d.security) : bytes;
+        const security = change === 'remove' ? null : change ? (await openEncrypted(out, change.ownerPassword || change.userPassword)).security : d.security ?? null;
         let handle = saveAs ? undefined : d.fileHandle;
         let name = d.name;
         const w = window as unknown as { showSaveFilePicker?: (o: unknown) => Promise<FileSystemFileHandle> };
@@ -775,11 +811,11 @@ export const useApp = create<AppState>((set, get) => {
         }
         if (handle) {
           const ws = await handle.createWritable();
-          await ws.write(bytes as unknown as BlobPart);
+          await ws.write(out as unknown as BlobPart);
           await ws.close();
           name = handle.name;
         } else {
-          const url = URL.createObjectURL(new Blob([bytes as unknown as BlobPart], { type: 'application/pdf' }));
+          const url = URL.createObjectURL(new Blob([out as unknown as BlobPart], { type: 'application/pdf' }));
           const a = Object.assign(document.createElement('a'), { href: url, download: d.name });
           a.click();
           setTimeout(() => URL.revokeObjectURL(url), 10_000);
@@ -797,8 +833,9 @@ export const useApp = create<AppState>((set, get) => {
             spaces: loaded.spaces, dirtySpaces: new Set(), columns: loaded.columns, dirtyColumns: false, formValues: {},
             page, zoom, selection: [], undo: [], redo: [], dirty: false,
             ...layerState(loaded, x), bookmarks: loaded.bookmarks, dirtyBookmarks: false,
+            security, securityChange: null,
           } : x),
-          status: `Saved ${name}`,
+          status: `Saved ${name}${security ? ' (password protected)' : ''}`,
         }));
       } catch (e) {
         console.error(e);

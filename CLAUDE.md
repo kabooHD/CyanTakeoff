@@ -95,7 +95,10 @@ spell check (F7, src/ui/Spell.tsx, nspell + dictionary-en served from /dict/);
 VisualSearch (src/model/visualSearch.ts matcher, src/ui/VisualSearch.tsx);
 Sequences (src/model/sequence.ts, src/ui/SequenceDialog.tsx); Quantity Link
 (src/ui/QuantityLink.tsx, cell writes in src/model/xlsxEdit.ts); Header &
-Footer, Bates, Watermark (src/pdf/stamps.ts, src/ui/HeaderFooter.tsx); CyanTakeoff (=Revu)
+Footer, Bates, Watermark (src/pdf/stamps.ts, src/ui/HeaderFooter.tsx);
+password security (src/pdf/crypt.ts: R2-R6 decrypt, AES-256 encrypt;
+src/ui/Security.tsx), Reduce File Size (src/pdf/reduce.ts), XFDF
+(src/pdf/xfdf.ts); CyanTakeoff (=Revu)
 and Batch menus; form filling (AcroForm inputs saved into the form) and
 field creation (Tools > field tools, X = signature field, Forms Editor
 Ctrl+Shift+F), image
