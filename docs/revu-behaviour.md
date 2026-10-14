@@ -775,7 +775,11 @@ folders, manual correlation and saved .bcx batches).
   markup off the drawing and the printout until turned off. Saved Filters
   (with Filter List on): Clear All, Save Filter, apply or delete a saved
   set. Sorting by Subject, Author, Status, Layer, Space, Label, Color or
-  Units groups the rows under collapsible headings. Columns also: X, Y,
+  Units groups the rows under collapsible headings. Summary menu also:
+  Import Markups (XFDF) / Export Markups (XFDF) (ours: no FDF/BAX),
+  Capture Summary (a PDF with every embedded photo) and Export Capture
+  Media (a .zip of the photos, named after the markups). Columns also:
+  Legend (the legends listing the markup), Page Index, Lock, Units, X, Y,
   X/Y Center, Document Width/Height (inches from the lower left), Width
   and Height (real-world, at the markup's scale).
 - Summary (Summary ▾ > Summary…, Batch > Summary…): Columns tab (pick

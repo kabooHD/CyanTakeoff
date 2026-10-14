@@ -1,3 +1,4 @@
+import { legendsOf } from '../model/captureExport';
 import { statusLabel } from '../model/statusModels';
 import { anchorOf, spaceAt } from '../model/spaces';
 import { activeDoc, serialize, useApp, type DocState } from '../model/store';
@@ -85,6 +86,7 @@ export const SUMMARY_COLUMNS: SummaryColumn[] = [
   { key: 'created', label: 'Creation Date', value: (m) => new Date(m.created).toLocaleString() },
   { key: 'checkmark', label: 'Checkmark', value: (m) => (m.checked ? '✓' : '') },
   { key: 'lock', label: 'Lock', value: (m) => (m.locked ? 'Locked' : '') },
+  { key: 'legend', label: 'Legend', value: (m, d) => legendsOf(m, d.markups) },
   { key: 'pageIndex', label: 'Page Index', value: (m) => m.page + 1, numeric: true, noTotal: true },
   { key: 'status', label: 'Status', value: (m) => statusLabel(m) },
   { key: 'layer', label: 'Layer', value: (m, d) => (m.layer ? d.layers?.layers[m.layer]?.name ?? '' : '') },

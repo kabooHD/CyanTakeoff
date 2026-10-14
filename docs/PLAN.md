@@ -243,6 +243,8 @@ filling, image signatures, redaction and OCR.
 - [x] Markup Summary dialog: Columns, Filter & Sort, Output (PDF/CSV/XML/
   Excel/Print, totals, ID columns, units, replies, append and hyperlink,
   page breaks, thumbnails)
+- [x] Markups List: Import/Export XFDF entries, Capture Summary, Export
+  Capture Media, Legend column
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

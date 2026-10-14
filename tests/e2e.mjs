@@ -1787,6 +1787,19 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.locator('[aria-label="Add photo"]').setInputFiles(`${OUT}/01-start.png`);
   await page.locator('.capture-thumb img').waitFor({ timeout: 10000 });
   assert(await page.locator('.capture-thumb').count() === 1, 'Add Photo puts the picture in the markup\'s Capture section');
+  // Export Capture Media (.zip) and Capture Summary (PDF) from the Summary menu.
+  {
+    await page.getByRole('button', { name: 'Summary ▾' }).click();
+    const [zd] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export Capture Media (.zip)' }).click()]);
+    await zd.saveAs(`${OUT}/capture-media.zip`);
+    const { unzipSync } = await import('fflate');
+    const names = Object.keys(unzipSync(readFileSync(`${OUT}/capture-media.zip`)));
+    assert(names.length === 1 && /\.(png|jpg)$/i.test(names[0]), `Export Capture Media zips the photo (${names.join()})`);
+    await page.getByRole('button', { name: 'Summary ▾' }).click();
+    const [pd] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Capture Summary (PDF)' }).click()]);
+    await pd.saveAs(`${OUT}/capture-summary.pdf`);
+    assert((await PDFDocument.load(readFileSync(`${OUT}/capture-summary.pdf`))).getPageCount() >= 1, 'Capture Summary makes a PDF report');
+  }
   await page.getByRole('button', { name: 'Columns ▾' }).click();
   await page.locator('.ml-columns-menu label', { hasText: 'Capture' }).locator('input').check();
   await page.mouse.move(5, 5);

@@ -46,7 +46,7 @@ export async function drawSummary(doc: PDFDocument, t: SummaryTable): Promise<nu
   const pageRefs = doc.getPages().map((p) => p.ref);
   // Thumbnails are embedded up front (embedding is asynchronous).
   const images = new Map<Uint8Array, Awaited<ReturnType<PDFDocument['embedPng']>>>();
-  for (const sec of sections) for (const th of sec.thumbs ?? []) if (th && !images.has(th)) { try { images.set(th, await doc.embedPng(th)); } catch { /* a bad thumbnail is skipped */ } }
+  for (const sec of sections) for (const th of sec.thumbs ?? []) if (th && !images.has(th)) { try { images.set(th, th[0] === 0xff && th[1] === 0xd8 ? await doc.embedJpg(th) : await doc.embedPng(th)); } catch { /* a bad thumbnail is skipped */ } }
   let page: PDFPage | null = null, y = 0, pageNo = 0;
   const pagesMade: PDFPage[] = [];
   const newPage = (heading?: string) => {

@@ -4,7 +4,8 @@ import { anchorOf } from '../model/spaces';
 import { useApp, useActiveDoc } from '../model/store';
 import type { CustomColumn, Markup } from '../model/types';
 import { StatusSelect } from './StatusModels';
-import { allColumns, exportSummaryCsv, exportSummaryPdf, exportSummaryXlsx, type SummaryColumn } from './actions';
+import { allColumns, exportMarkupsXfdf, exportSummaryCsv, exportSummaryPdf, exportSummaryXlsx, importMarkupsXfdf, type SummaryColumn } from './actions';
+import { captureSummary, exportCaptureMedia } from './captureExport';
 import { ManageColumns } from './ManageColumns';
 import { Icon } from './icons';
 import { ContextMenu, type MenuItem } from './ContextMenu';
@@ -183,6 +184,12 @@ export function MarkupsList() {
               <button onClick={() => { setExportOpen(false); exportSummaryXlsx(rows.map((r) => r.m), columns); }}>Excel (.xlsx)</button>
               <button onClick={() => { setExportOpen(false); exportSummaryPdf(rows.map((r) => r.m), columns); }}>PDF report</button>
               <button onClick={() => { setExportOpen(false); exportSummaryCsv(rows.map((r) => r.m), columns); }}>CSV</button>
+              <div className="menu-sep" />
+              <button onClick={() => { setExportOpen(false); importMarkupsXfdf(); }}>Import Markups (XFDF)…</button>
+              <button onClick={() => { setExportOpen(false); exportMarkupsXfdf(); }}>Export Markups (XFDF)</button>
+              <div className="menu-sep" />
+              <button disabled={!doc?.markups.some((m) => m.capture?.length)} onClick={() => { setExportOpen(false); if (doc) captureSummary(doc, rows.map((r) => r.m)); }}>Capture Summary (PDF)</button>
+              <button disabled={!doc?.markups.some((m) => m.capture?.length)} onClick={() => { setExportOpen(false); if (doc) exportCaptureMedia(doc, rows.map((r) => r.m)); }}>Export Capture Media (.zip)</button>
             </div>
           )}
         </span>
