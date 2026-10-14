@@ -347,9 +347,12 @@ markups and form fields one word at a time in context: Ignore Once, Ignore
 All (this run), Add to Dictionary, Change, Change All. Markup Spelling
 Mistakes checks the PDF's own text over a page range and puts a Squiggly
 markup (chosen colour) under each mistake, optionally with the suggestions
-in its comment. Ours: the dictionary is English (Hunspell); words added
-are kept in the browser; codes like A-101 and web/email addresses are
-skipped.
+in its comment. Revu sets the language in Preferences > Spelling. Ours:
+Hunspell dictionaries for English (US/UK), French, German, Spanish,
+Italian, Dutch, Portuguese, Polish, Swedish and Danish, chosen in either
+dialog (remembered; the browser's language to start); words added are kept
+in the browser and apply in every language; codes like A-101 and web/email
+addresses are skipped.
 
 ## Line styles and hatch patterns
 A line style is one or more lines, each offset from the middle (-10..10),

@@ -185,7 +185,9 @@ filling, image signatures, redaction and OCR.
 - [x] Spell check: underline while typing (browser), Check Spelling (F7)
   through markup text, comments, replies and text fields (Ignore Once/All,
   Add to Dictionary, Change/Change All), Markup Spelling Mistakes on PDF
-  text (Squiggly markups, suggestions in the comment); English dictionary
+  text (Squiggly markups, suggestions in the comment); 11 dictionaries
+  (English US/UK, French, German, Spanish, Italian, Dutch, Portuguese,
+  Polish, Swedish, Danish)
 - [x] VisualSearch (Search panel > Visual): Get Rectangle, sensitivity,
   multiple rotations, Filter by Color, current page/document/all open documents, result
   thumbnails; Count / Highlight / Mark for Redaction on checked results

@@ -3,8 +3,10 @@
 // text of every markup (text, comments, replies) and text form field, with
 // Ignore Once / Ignore All / Add to Dictionary / Change / Change All; Markup
 // Spelling Mistakes puts a Squiggly markup under each misspelled word of the
-// PDF's own text. Dictionary: Hunspell English (dictionary-en), loaded on
-// first use from /dict/; words added go to a personal dictionary.
+// PDF's own text. Dictionaries: Hunspell (wooorm/dictionaries), 11
+// languages loaded on first use from /dict/; words added go to a personal
+// dictionary. The language is chosen in either dialog (Revu: Preferences >
+// Spelling) and remembered.
 import { useEffect, useState } from 'react';
 import { create } from 'zustand';
 import type NSpell from 'nspell';
@@ -14,30 +16,65 @@ import { replaceAll, replaceAt, words } from '../model/spellText';
 import { toolById } from '../tools/tools';
 import { pageText } from './toolActions';
 
-const LS = 'cyantakeoff:dictionary';
-let speller: Promise<NSpell> | null = null;
+const LS = 'cyantakeoff:dictionary', LANG_LS = 'cyantakeoff:spell-language';
+const spellers = new Map<string, Promise<NSpell>>();
+
+/** Languages whose dictionaries are served under /dict (see vite.config.ts). */
+export const SPELL_LANGUAGES: { code: string; name: string }[] = [
+  { code: 'en', name: 'English (US)' }, { code: 'en-gb', name: 'English (UK)' }, { code: 'fr', name: 'French' }, { code: 'de', name: 'German' },
+  { code: 'es', name: 'Spanish' }, { code: 'it', name: 'Italian' }, { code: 'nl', name: 'Dutch' }, { code: 'pt', name: 'Portuguese' },
+  { code: 'pl', name: 'Polish' }, { code: 'sv', name: 'Swedish' }, { code: 'da', name: 'Danish' },
+];
+
+/** The remembered language, or the browser's when we have it, else English. */
+export function spellLanguage(): string {
+  try { const v = localStorage.getItem(LANG_LS); if (v && SPELL_LANGUAGES.some((l) => l.code === v)) return v; } catch { /* storage unavailable */ }
+  const nav = (navigator.language || 'en').toLowerCase();
+  if (nav === 'en-gb') return 'en-gb';
+  const two = nav.slice(0, 2);
+  return SPELL_LANGUAGES.some((l) => l.code === two) ? two : 'en';
+}
+export function setSpellLanguage(code: string) {
+  try { localStorage.setItem(LANG_LS, code); } catch { /* storage unavailable */ }
+}
 
 const personal = (): string[] => { try { return JSON.parse(localStorage.getItem(LS) ?? '[]'); } catch { return []; } };
 
-export function loadSpeller(): Promise<NSpell> {
-  speller ??= (async () => {
-    const base = import.meta.env.BASE_URL;
-    const [{ default: nspell }, aff, dic] = await Promise.all([
-      import('nspell'),
-      fetch(`${base}dict/en.aff`).then((r) => r.text()),
-      fetch(`${base}dict/en.dic`).then((r) => r.text()),
-    ]);
-    const sp = nspell(aff, dic);
-    for (const w of personal()) sp.add(w);
-    return sp;
-  })();
-  speller.catch(() => { speller = null; });
-  return speller;
+export function loadSpeller(lang = spellLanguage()): Promise<NSpell> {
+  let sp = spellers.get(lang);
+  if (!sp) {
+    sp = (async () => {
+      const base = import.meta.env.BASE_URL;
+      const [{ default: nspell }, aff, dic] = await Promise.all([
+        import('nspell'),
+        fetch(`${base}dict/${lang}.aff`).then((r) => r.text()),
+        fetch(`${base}dict/${lang}.dic`).then((r) => r.text()),
+      ]);
+      const s = nspell(aff, dic);
+      for (const w of personal()) s.add(w);
+      return s;
+    })();
+    spellers.set(lang, sp);
+    sp.catch(() => spellers.delete(lang));
+  }
+  return sp;
 }
 
 export async function addToDictionary(word: string) {
-  (await loadSpeller()).add(word);
   try { localStorage.setItem(LS, JSON.stringify([...new Set([...personal(), word])])); } catch { /* storage unavailable */ }
+  // Personal words apply in every language.
+  for (const sp of spellers.values()) (await sp.catch(() => null))?.add(word);
+}
+
+/** Language select for the spell dialogs. */
+function LanguageSelect({ value, onChange }: { value: string; onChange: (code: string) => void }) {
+  return (
+    <div className="form-row"><span>Language</span>
+      <select aria-label="Spelling language" value={value} onChange={(e) => { setSpellLanguage(e.target.value); onChange(e.target.value); }}>
+        {SPELL_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
+      </select>
+    </div>
+  );
 }
 
 // ---------- the text to check ----------
@@ -126,6 +163,7 @@ export function SpellDialog() {
   const text = d && tg ? textOf(d, tg) : '';
   const close = () => useSpell.setState({ open: false, issue: null });
   const next = (off: number) => { if (iss) { useSpell.setState({ from: { t: iss.t, off } }); findNext(); } };
+  const restart = () => { useSpell.setState({ issue: null, done: false, from: { t: 0, off: 0 } }); findNext().catch((e) => useApp.getState().setStatus(`Spell check unavailable: ${(e as Error).message}`)); };
   const change = (all: boolean) => {
     if (!iss || !tg || !d) return;
     const by = choice.trim();
@@ -140,6 +178,7 @@ export function SpellDialog() {
       <div className="modal spell-dialog" role="dialog" aria-label="Check Spelling" onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') close(); }}>
         <div className="modal-title">Check Spelling</div>
         <div className="scale-dialog">
+          <LanguageSelect value={spellLanguage()} onChange={restart} />
           {st.done || !iss ? (
             <p>{st.done ? 'Spell check complete.' : 'Checking…'}</p>
           ) : (
@@ -212,6 +251,7 @@ export function SpellContentDialog() {
   const [sugg, setSugg] = useState(true);
   const [range, setRange] = useState<'all' | 'current' | 'custom'>('all');
   const [custom, setCustom] = useState('1');
+  const [lang, setLang] = useState(spellLanguage);
   if (!open || !d) return null;
   const close = () => useSpellContent.setState({ open: false });
   const ok = async () => {
@@ -225,6 +265,7 @@ export function SpellContentDialog() {
       <div className="modal" role="dialog" aria-label="Markup Spelling Mistakes" onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') close(); }}>
         <div className="modal-title">Markup Spelling Mistakes</div>
         <div className="scale-dialog">
+          <LanguageSelect value={lang} onChange={setLang} />
           <div className="form-row"><span>Color</span><input type="color" aria-label="Squiggly colour" value={color} onChange={(e) => setColor(e.target.value)} /></div>
           <div className="form-row"><label><input type="checkbox" checked={sugg} onChange={(e) => setSugg(e.target.checked)} /> Place suggestions in comment</label></div>
           <div className="form-row"><span>Pages</span>

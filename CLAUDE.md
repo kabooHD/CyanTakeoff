@@ -94,7 +94,7 @@ Bookmarks editing incl. Action dialog (src/ui/BookmarksPanel.tsx, src/pdf/bookma
 AutoMark (src/ui/AutoMark.tsx); line
 styles and hatch patterns (src/model/lineStyles.ts, src/ui/LineStyles.tsx;
 AutoCAD .pat import in src/model/pat.ts);
-spell check (F7, src/ui/Spell.tsx, nspell + dictionary-en served from /dict/);
+spell check (F7, src/ui/Spell.tsx, nspell + 11 Hunspell dictionaries served from /dict/);
 VisualSearch (src/model/visualSearch.ts matcher, src/ui/VisualSearch.tsx);
 Sequences (src/model/sequence.ts, src/ui/SequenceDialog.tsx); Quantity Link
 (src/ui/QuantityLink.tsx, cell writes in src/model/xlsxEdit.ts); Header &

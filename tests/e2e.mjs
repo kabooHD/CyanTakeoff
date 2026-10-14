@@ -1483,6 +1483,20 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await md.getByRole('button', { name: 'OK' }).click();
   await page.getByText(/Markup Spelling Mistakes: /).waitFor({ timeout: 20000 });
   assert(true, `Markup Spelling Mistakes ran (${await page.getByText(/Markup Spelling Mistakes: /).innerText()})`);
+  // Another language: the French dictionary loads from /dict/.
+  await page.locator('.menubar-item > button', { hasText: /^Edit$/ }).click();
+  await page.getByRole('menuitem', { name: 'Markup Spelling Mistakes…' }).click();
+  await md.locator('[aria-label="Spelling language"]').selectOption('fr');
+  await md.locator('[aria-label="Pages"]').selectOption('current');
+  const frReq = page.waitForResponse((r) => r.url().endsWith('/dict/fr.dic') && r.ok(), { timeout: 30000 });
+  await md.getByRole('button', { name: 'OK' }).click();
+  await frReq;
+  await page.getByText(/Markup Spelling Mistakes: /).waitFor({ timeout: 30000 });
+  assert(true, 'Markup Spelling Mistakes in French loads the French dictionary');
+  await page.locator('.menubar-item > button', { hasText: /^Edit$/ }).click();
+  await page.getByRole('menuitem', { name: 'Markup Spelling Mistakes…' }).click();
+  await md.locator('[aria-label="Spelling language"]').selectOption('en');
+  await md.getByRole('button', { name: 'Cancel' }).click();
 }
 
 // VisualSearch: Get Rectangle around a door swing on A-101, find the others, count them.
