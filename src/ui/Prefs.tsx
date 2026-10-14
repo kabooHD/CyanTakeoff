@@ -6,14 +6,16 @@ import { useApp } from '../model/store';
 import { comboFromEvent } from '../tools/tools';
 import { allCommands, effectiveCombo, usersOf } from './commands';
 import { pickFile } from './toolActions';
+import { DEFAULT_PREFS, type Prefs } from '../model/prefs';
 
-export const usePrefsDialog = create<{ open: 'keys' | 'profiles' | null }>(() => ({ open: null }));
+export const usePrefsDialog = create<{ open: 'keys' | 'profiles' | 'prefs' | null }>(() => ({ open: null }));
 const close = () => usePrefsDialog.setState({ open: null });
 
 export function PrefsDialogs() {
   const open = usePrefsDialog((x) => x.open);
   if (open === 'keys') return <KeysDialog />;
   if (open === 'profiles') return <ProfilesDialog />;
+  if (open === 'prefs') return <PreferencesDialog />;
   return null;
 }
 
@@ -147,6 +149,97 @@ function ProfilesDialog() {
           <span className="spacer" />
           <button className="primary" onClick={close}>Close</button>
         </div>
+      </div>
+    </Frame>
+  );
+}
+
+// ---------- Preferences (Ctrl+K) ----------
+
+const SECTIONS = ['General', 'Navigation', 'Markup', 'Sketch', 'Forms', 'Signature'] as const;
+type Section = typeof SECTIONS[number];
+
+function PreferencesDialog() {
+  const s = useApp();
+  const p = s.prefs;
+  const [section, setSection] = useState<Section>('General');
+  const set = (patch: Partial<Prefs>) => s.setPrefs(patch);
+  const check = (key: keyof Prefs, label: string, hint?: string) => (
+    <label className="pref-row" title={hint}><input type="checkbox" checked={!!p[key]} onChange={(e) => set({ [key]: e.target.checked } as Partial<Prefs>)} /> {label}</label>
+  );
+  const select = <K extends keyof Prefs>(key: K, label: string, options: [Prefs[K] & string, string][]) => (
+    <label className="pref-row"><span>{label}</span>
+      <select aria-label={label} value={p[key] as string} onChange={(e) => set({ [key]: e.target.value } as Partial<Prefs>)}>
+        {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
+    </label>
+  );
+  const body: Record<Section, React.ReactNode> = {
+    General: (
+      <>
+        <label className="pref-row"><span>User</span><input aria-label="User" value={s.author} onChange={(e) => s.setAuthor(e.target.value)} /></label>
+        <label className="pref-row"><span>Theme</span>
+          <select aria-label="Theme" value={s.toggles.darkMode ? 'dark' : 'light'} onChange={(e) => { if ((e.target.value === 'dark') !== !!s.toggles.darkMode) s.toggle('darkMode'); }}>
+            <option value="light">Light</option><option value="dark">Dark</option>
+          </select>
+        </label>
+        {select('tabTruncation', 'Tab truncation', [['end', 'Cut long names at the end'], ['start', 'Cut long names at the start']])}
+        {check('showRecentOnStartup', 'Show recent files on startup', 'Opens the File Access panel when no document is open')}
+        <label className="pref-row"><input type="checkbox" checked={!!s.toggles.crosshair} onChange={() => s.toggle('crosshair')} /> Show full-screen crosshair</label>
+      </>
+    ),
+    Navigation: (
+      <>
+        {select('wheelSingle', 'Single page mode: mouse wheel', [['zoom', 'Zooms'], ['scroll', 'Scrolls']])}
+        {select('wheelContinuous', 'Continuous mode: mouse wheel', [['zoom', 'Zooms'], ['scroll', 'Scrolls']])}
+        {check('reverseWheel', 'Reverse mouse wheel when zooming')}
+        <label className="pref-row"><span>Sensitivity</span><input aria-label="Wheel sensitivity" type="range" min={1} max={10} value={p.wheelSensitivity} onChange={(e) => set({ wheelSensitivity: Number(e.target.value) })} /> {p.wheelSensitivity}</label>
+        <p className="muted small">Ctrl+wheel always zooms and Shift+wheel always scrolls. Synchronize Views is in the View menu.</p>
+      </>
+    ),
+    Markup: (
+      <>
+        {check('dynamicDefaults', 'Dynamically set as default properties', 'A property changed on a markup becomes the default of its tool')}
+        <label className="pref-row"><input type="checkbox" checked={!!s.toggles.reuse} onChange={() => s.toggle('reuse')} /> Reuse tools</label>
+        {check('autosizeText', 'Autosize text box and callout markups')}
+        {check('showAuthorDate', 'Show author and date when hovering a markup')}
+        {check('copyHighlightedText', 'Copy highlighted text into markup comment')}
+        {select('snapshotDpi', 'Snapshot resolution', [[72 as never, '72 dpi'], [144 as never, '144 dpi'], [216 as never, '216 dpi'], [300 as never, '300 dpi']])}
+        {check('includeMarkupsInSnapshots', 'Include markups in snapshots')}
+      </>
+    ),
+    Sketch: (
+      <>
+        {select('sketchRotation', 'Rotation input', [['page', 'Relative to the page'], ['relative', 'Relative to the connected line']])}
+        {select('ellipseMode', 'Ellipse mode', [['size', 'Width and height'], ['radius', 'Radius']])}
+      </>
+    ),
+    Forms: (
+      <>
+        <label className="pref-row"><span>Highlight colour</span><input aria-label="Field highlight colour" type="color" value={p.fieldHighlightColor} onChange={(e) => set({ fieldHighlightColor: e.target.value })} /></label>
+        <label className="pref-row"><span>Highlight opacity</span><input aria-label="Field highlight opacity" type="range" min={0} max={100} value={p.fieldHighlightOpacity} onChange={(e) => set({ fieldHighlightOpacity: Number(e.target.value) })} /> {p.fieldHighlightOpacity}%</label>
+        <label className="pref-row"><input type="checkbox" checked={!s.toggles.noFieldHighlight} onChange={() => s.toggle('noFieldHighlight')} /> Highlight fields</label>
+      </>
+    ),
+    Signature: (
+      <>
+        {select('hashAlgorithm', 'Algorithm', [['sha256', 'SHA-256'], ['sha384', 'SHA-384'], ['sha512', 'SHA-512']])}
+        <p className="muted small">Digital IDs are chosen when signing (.pfx / .p12); trusted identities are managed in the Signatures panel.</p>
+      </>
+    ),
+  };
+  return (
+    <Frame title="Preferences" wide>
+      <div className="prefs-dialog">
+        <div className="prefs-nav" role="tablist">
+          {SECTIONS.map((x) => <button key={x} role="tab" aria-selected={section === x} className={section === x ? 'active' : ''} onClick={() => setSection(x)}>{x}</button>)}
+        </div>
+        <div className="prefs-body">{body[section]}</div>
+      </div>
+      <div className="modal-actions">
+        <button onClick={() => { if (confirm('Reset every preference to its default?')) s.setPrefs(DEFAULT_PREFS); }}>Reset</button>
+        <span className="spacer" />
+        <button className="primary" onClick={close}>Close</button>
       </div>
     </Frame>
   );

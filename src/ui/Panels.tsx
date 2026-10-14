@@ -349,7 +349,7 @@ function Properties() {
       </Row>
       <Row label="Author"><input value={m.author} readOnly /></Row>
       <Row label="Date"><input value={new Date(m.modified).toLocaleString()} readOnly /></Row>
-      <StyleEditor style={m.style} type={m.type} onChange={(p) => upd((x) => ({ style: { ...x.style, ...p } }))} />
+      <StyleEditor style={m.style} type={m.type} onChange={(p) => { upd((x) => ({ style: { ...x.style, ...p } })); if (s.prefs.dynamicDefaults && s.toolDefaults[m.type]) s.setToolDefault(m.type, p); }} />
       {m.type === 'legend' && m.legend && (
         <>
           <div className="prop-section">Legend</div>

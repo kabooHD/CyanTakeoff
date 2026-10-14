@@ -70,6 +70,7 @@ const TEXTUAL = new Set(['textbox', 'callout', 'typewriter', 'cloudplus']);
 
 export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
   const replyIndicators = useApp((st) => !!st.toggles.replyIndicators);
+  const showAuthorDate = useApp((st) => st.prefs.showAuthorDate);
   const st = m.style;
   const P = m.points;
   // Line style: simple ones are a dash pattern; others (parallel lines, text) are drawn along the outline.
@@ -301,6 +302,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
   const hatchColor = st.fill ?? st.color;
   return (
     <g data-id={m.id}>
+      {showAuthorDate && <title>{`${m.subject}${m.author ? ` · ${m.author}` : ''}${m.modified ? ` · ${new Date(m.modified).toLocaleString()}` : ''}${m.comment ? `\n${m.comment}` : ''}`}</title>}
       {hatchArea && st.hatch && (
         <>
           <defs>

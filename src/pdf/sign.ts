@@ -59,9 +59,13 @@ export async function certificateInfo(p12: Uint8Array, password: string): Promis
   return { name: cn(cert.subject), issuer: cn(cert.issuer), notAfter: cert.validity.notAfter };
 }
 
+export type HashAlgo = 'sha256' | 'sha384' | 'sha512';
+
 export interface SignOptions {
   p12: Uint8Array;
   password: string;
+  /** Digest algorithm (Preferences > Signature); SHA-256 by default. */
+  hash?: HashAlgo;
   reason?: string;
   location?: string;
   /** Visible signature: page index and rectangle in PDF space. Omit for an invisible signature. */
@@ -79,15 +83,15 @@ export interface SignOptions {
 }
 
 /** RFC 3161 TimeStampReq for a SHA-256 hash of `data`, asking for the TSA's certificate. */
-export async function timestampRequest(data: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
+export async function timestampRequest(data: Uint8Array<ArrayBuffer>, algo: HashAlgo = 'sha256'): Promise<Uint8Array> {
   const forge = await loadForge();
   const a = forge.asn1, U = a.Class.UNIVERSAL, T = a.Type;
-  const hash = toBinary(new Uint8Array(await crypto.subtle.digest('SHA-256', data)));
+  const hash = toBinary(new Uint8Array(await crypto.subtle.digest(HASH[OID[algo]], data)));
   const nonce = toBinary(crypto.getRandomValues(new Uint8Array(8))).replace(/^[\x80-\xff]/, '\x01');
   const req = a.create(U, T.SEQUENCE, true, [
     a.create(U, T.INTEGER, false, '\x01'),
     a.create(U, T.SEQUENCE, true, [
-      a.create(U, T.SEQUENCE, true, [a.create(U, T.OID, false, a.oidToDer(OID.sha256).getBytes()), a.create(U, T.NULL, false, '')]),
+      a.create(U, T.SEQUENCE, true, [a.create(U, T.OID, false, a.oidToDer(OID[algo]).getBytes()), a.create(U, T.NULL, false, '')]),
       a.create(U, T.OCTETSTRING, false, hash),
     ]),
     a.create(U, T.INTEGER, false, nonce),
@@ -204,7 +208,7 @@ export async function signPdf(pdf: Uint8Array, opts: SignOptions): Promise<Uint8
   p7.addCertificate(cert);
   chain.forEach((c) => p7.addCertificate(c));
   p7.addSigner({
-    key, certificate: cert, digestAlgorithm: forge.pki.oids.sha256,
+    key, certificate: cert, digestAlgorithm: forge.pki.oids[opts.hash ?? 'sha256'],
     authenticatedAttributes: [
       { type: forge.pki.oids.contentType, value: forge.pki.oids.data },
       { type: forge.pki.oids.messageDigest },
@@ -220,7 +224,7 @@ export async function signPdf(pdf: Uint8Array, opts: SignOptions): Promise<Uint8
     const si = kids(signerInfos[signerInfos.length - 1])[0];
     const siKids = kids(si);
     const sigValue = fromBinary(siKids[siKids.length - 1].value as string);
-    const req = await timestampRequest(sigValue);
+    const req = await timestampRequest(sigValue, opts.hash ?? 'sha256');
     const resp = a.fromDer(toBinary(opts.fetchTimestamp ? await opts.fetchTimestamp(req) : await postTimestamp(opts.tsa!, req)));
     const [status, token] = kids(resp);
     const code = (kids(status)[0]?.value as string ?? '\x02').charCodeAt(0);

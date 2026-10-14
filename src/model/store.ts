@@ -1,3 +1,4 @@
+import { withDefaults, type Prefs } from './prefs';
 import { create } from 'zustand';
 import { useStatusModels } from './statusModels';
 import { rememberFile } from './recent';
@@ -253,6 +254,9 @@ interface AppState {
   customLineStyles: LineStyleDef[];
   customHatches: HatchDef[];
   setView(p: Partial<Pick<AppState, 'dimLevel' | 'rulerUnit' | 'customLineStyles' | 'customHatches'>>): void;
+  /** Revu > Preferences (Ctrl+K). */
+  prefs: Prefs;
+  setPrefs(p: Partial<Prefs>): void;
   setPanels(p: Partial<Pick<AppState, 'left' | 'right' | 'markupsList'>>): void;
   setAuthor(a: string): void;
   /** Add a markup as a tool (to the first set, or `setId`). */
@@ -307,7 +311,7 @@ function savePrefs(s: AppState) {
       toolDefaults: s.toolDefaults, toggles: s.toggles, author: s.author,
       toolSets: s.toolSets, customKeys: s.customKeys, recentTools: s.recentTools, savedScales: s.savedScales, toolChest: s.toolChest,
       left: s.left, right: s.right, markupsList: s.markupsList, dimLevel: s.dimLevel, rulerUnit: s.rulerUnit,
-      customLineStyles: s.customLineStyles, customHatches: s.customHatches,
+      customLineStyles: s.customLineStyles, customHatches: s.customHatches, prefs: s.prefs,
     }));
   } catch { /* storage unavailable */ }
 }
@@ -422,6 +426,8 @@ export const useApp = create<AppState>((set, get) => {
     customLineStyles: prefs.customLineStyles ?? [],
     customHatches: prefs.customHatches ?? [],
     setView(p) { set(p); savePrefs(get()); },
+    prefs: withDefaults((prefs as { prefs?: Partial<Prefs> }).prefs),
+    setPrefs(p) { set({ prefs: { ...get().prefs, ...p } }); savePrefs(get()); },
     left: prefs.left === undefined ? 'thumbnails' : prefs.left,
     right: prefs.right === undefined ? 'properties' : prefs.right,
     markupsList: prefs.markupsList ?? true,

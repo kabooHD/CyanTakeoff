@@ -35,7 +35,7 @@ import { PasswordPrompt, SecurityDialog, useSecurityDialog } from './ui/Security
 import { ReduceDialog } from './ui/ReduceSize';
 import { SheetsDialog } from './ui/Sheets';
 import { TagDialogs } from './ui/Tags';
-import { PrefsDialogs } from './ui/Prefs';
+import { PrefsDialogs, usePrefsDialog } from './ui/Prefs';
 import { SignatureDialog } from './ui/Signature';
 import { runApplyRedactions } from './ui/redactUi';
 import { DocPropertiesDialog, useDocProps } from './ui/DocProperties';
@@ -74,6 +74,8 @@ export function App() {
 
   const darkMode = useApp((s) => !!s.toggles.darkMode);
   useEffect(() => { document.documentElement.dataset.theme = darkMode ? 'dark' : 'light'; }, [darkMode]);
+  // Preferences > Show recent files on startup.
+  useEffect(() => { const st = useApp.getState(); if (st.prefs.showRecentOnStartup && !st.docs.length) st.setPanels({ left: 'files' }); }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isEditable(e.target)) return;
@@ -116,6 +118,7 @@ export function App() {
         case 'Shift+F12': return run(balanceSplit);
         case 'Shift+Z': return run(() => d && s.setTool(s.tool === 'zoom' ? 'select' : 'zoom'));
         case 'F4': return run(() => s.toggle('navBar'));
+        case 'Ctrl+K': return run(() => usePrefsDialog.setState({ open: 'prefs' }));
         case 'Ctrl+Shift+S': return run(() => s.save(true));
         case 'Ctrl+F4': case 'Ctrl+W': return run(() => d && s.closeDoc(d.id));
         case 'Ctrl+P': return run(() => d && openPrint());

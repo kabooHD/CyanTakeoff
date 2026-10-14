@@ -750,6 +750,24 @@ folders, manual correlation and saved .bcx batches).
   and Height (real-world, at the markup's scale).
 - Summary: CSV, XML, PDF or print, with Columns and Filter & Sort tabs.
 
+## Preferences (Ctrl+K)
+- General: User (author of new markups), Theme (Light/Dark), tab
+  truncation (end or start of long names), Show recent files on startup
+  (File Access panel), full-screen crosshair.
+- Navigation: what the mouse wheel does in single page and in continuous
+  mode (zoom or scroll; Ctrl+wheel always zooms, Shift+wheel always
+  scrolls), reverse wheel, sensitivity.
+- Markup: Dynamically set as default (a property changed on a markup
+  becomes the tool's default), Reuse tools, Autosize text box and callout
+  markups after typing, author and date on hover, Copy highlighted text
+  into markup comment, snapshot resolution, Include markups in snapshots.
+- Sketch: rotation input relative to the page or to the connected line;
+  ellipse by width/height or by radius.
+- Forms: field highlight colour and opacity, Highlight fields.
+- Signature: digest algorithm (SHA-256 default, SHA-384, SHA-512).
+- Not ours: language, startup mode, 3D mouse, keyboard accelerators,
+  scrollbars, digital ID folders (browsers choose files per signature).
+
 ## Preferences (Measure)
 - Automatically split Count measurements by Space; Dynamic Fill settings
   (DPI, fill/boundary size, speed, colours, edge sensitivity); legacy

@@ -232,6 +232,8 @@ filling, image signatures, redaction and OCR.
   Strikethrough), Clear
 - [x] Properties panel document mode: File Properties, Custom Properties,
   File Attachments
+- [x] Preferences dialog (Ctrl+K): General, Navigation, Markup, Sketch,
+  Forms, Signature
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

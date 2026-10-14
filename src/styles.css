@@ -351,7 +351,7 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
 
 /* Form fields */
 .form-layer { position: absolute; inset: 0; }
-.form-field { position: absolute; box-sizing: border-box; margin: 0; padding: 0 2px; border: 1px solid #7aa7e8; background: rgba(204, 224, 255, 0.55); font-family: Helvetica, Arial, sans-serif; color: #000; }
+.form-field { position: absolute; box-sizing: border-box; margin: 0; padding: 0 2px; border: 1px solid #7aa7e8; background: var(--field-bg, rgba(204, 224, 255, 0.55)); font-family: Helvetica, Arial, sans-serif; color: #000; }
 .form-field:focus { outline: 2px solid var(--accent); background: rgba(255, 255, 255, 0.9); }
 /* Form > Highlight Fields off */
 .form-layer.no-highlight .form-field { background: transparent; border-color: transparent; }
@@ -578,3 +578,13 @@ label.button, a.button { display: inline-block; padding: 2px 8px; border: 1px so
 .doc-props .custom-add { display: flex; gap: 4px; }
 .doc-props .custom-add input { flex: 1; min-width: 0; }
 .doc-props .attachment-row > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Preferences */
+.prefs-dialog { display: flex; gap: 12px; min-height: 260px; }
+.prefs-nav { display: flex; flex-direction: column; gap: 2px; min-width: 110px; border-right: 1px solid var(--border, #ddd); padding-right: 8px; }
+.prefs-nav button { text-align: left; border: 0; background: none; padding: 5px 8px; cursor: pointer; border-radius: 3px; color: inherit; }
+.prefs-nav button.active { background: var(--accent-soft); }
+.prefs-body { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 320px; }
+.pref-row { display: flex; align-items: center; gap: 8px; }
+.pref-row > span:first-child { width: 190px; }
+.doc-tab span.cut-start { direction: rtl; text-align: left; }

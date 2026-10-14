@@ -70,6 +70,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
 
   const menus: Record<string, MenuItem[]> = {
     CyanTakeoff: [
+      { label: 'Preferences…', shortcut: 'Ctrl+K', action: () => usePrefsDialog.setState({ open: 'prefs' }) },
       { label: 'Keyboard Shortcuts…', action: () => usePrefsDialog.setState({ open: 'keys' }) },
       { label: 'Profiles…', action: () => usePrefsDialog.setState({ open: 'profiles' }) },
       { label: 'Author Name…', action: () => { const a = prompt('Author name for new markups', s.author); if (a) s.setAuthor(a); } },
@@ -376,7 +377,7 @@ export function DocTabs() {
       {s.docs.map((d) => (
         <div key={d.id} className={`doc-tab ${d.id === s.activeId ? 'active' : ''}`} onClick={() => s.setActive(d.id)}
           onAuxClick={(e) => e.button === 1 && s.closeDoc(d.id)} title={d.name}>
-          <span>{d.name}{d.dirty ? ' *' : ''}</span>
+          <span className={s.prefs.tabTruncation === 'start' ? 'cut-start' : ''}>{d.name}{d.dirty ? ' *' : ''}</span>
           <button className="tab-close" onClick={(e) => { e.stopPropagation(); s.closeDoc(d.id); }} title="Close"><Icon name="close" size={12} /></button>
         </div>
       ))}

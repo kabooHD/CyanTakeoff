@@ -15,6 +15,9 @@ import { cancelPicking, pickAlignPoint, pickingPrompt, useCompareDialog } from '
 import { STAMPS, downloadBase64, loadImage, pageText, pickFile, readAsDataUrl, snapshot, textRectsIn } from './toolActions';
 import { applyCutout, ellipsePolygon } from '../model/cutouts';
 import { expandGroups } from '../model/arrange';
+import { rgbaOf, wheelZoomFactor } from '../model/prefs';
+import { autosizedBox, withBox } from '../model/textBox';
+import { textWidth } from './quickCommands';
 import { attachCapture, captureMenuItems, shrinkPhoto } from './Capture';
 import { openCameraFor } from './Camera';
 import { arrangeItems } from './arrangeMenu';
@@ -413,10 +416,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   useEffect(() => {
     const el = scrollRef.current!;
     const onWheel = (e: WheelEvent) => {
-      if (e.shiftKey || e.ctrlKey) return;
+      const st = useApp.getState();
+      const f = wheelZoomFactor(st.prefs, st.viewMode !== 'single' && st.viewMode !== 'side', e);
+      if (f === null) return; // the page scrolls
       e.preventDefault();
       const r = el.getBoundingClientRect();
-      zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+      zoomAt(f, e.clientX - r.left, e.clientY - r.top);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
@@ -697,7 +702,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     setDraft(null);
     if (!pdfPage) return;
     // Snapshot includes the markups; Snapshot Content (Shift+G) only the drawing (Revu).
-    const url = await snapshot(pdfPage, a, b, 3, content ? null : markups);
+    const url = await snapshot(pdfPage, a, b, s.prefs.snapshotDpi / 72, content || !s.prefs.includeMarkupsInSnapshots ? null : markups);
     const r = bounds([a, b]);
     const t = new Date().toISOString();
     const m: Markup = {
@@ -1322,7 +1327,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     const ts = useApp.getState().textSel;
     if (ts && ts.docId === doc.id && ts.page === pageIdx) {
       const rectPts = ts.rects.flat();
-      const make = (type: MarkupType) => () => { finish(type, rectPts); useApp.setState({ textSel: null }); };
+      // Preferences > Copy highlighted text into markup comment.
+      const make = (type: MarkupType) => () => { finish(type, rectPts, s.prefs.copyHighlightedText ? { comment: ts.text } : {}); useApp.setState({ textSel: null }); };
       setMenu({ x: e.clientX, y: e.clientY, items: [
         { label: 'Copy Text', shortcut: 'Ctrl+C', action: () => copyText() },
         { sep: true },
@@ -1652,6 +1658,10 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
               if (text !== (editingMarkup.text ?? '')) {
                 s.updateMarkups([editingMarkup.id], (m) => m.type === 'typewriter'
                   ? { text, points: typewriterBox(m.points[0], text, m.style.fontSize) } : { text });
+                // Preferences > Autosize text box and callout markups.
+                if (s.prefs.autosizeText && (editingMarkup.type === 'textbox' || editingMarkup.type === 'callout')) {
+                  s.updateMarkups([editingMarkup.id], (m) => { const box = autosizedBox({ ...m, text }, textWidth); return box ? withBox(m, box) : {}; });
+                }
               }
               setEditing(null);
             }} />
@@ -1849,7 +1859,7 @@ function FormLayer({ doc, pageIdx, zoom, interactive }: { doc: DocState; pageIdx
   const s = useApp();
   const items = doc.loaded.fields.flatMap((f) => f.widgets.filter((w) => w.page === pageIdx).map((w, i) => ({ f, w, i })));
   return (
-    <div className={`form-layer ${s.toggles.noFieldHighlight ? 'no-highlight' : ''}`} style={{ pointerEvents: 'none' }}>
+    <div className={`form-layer ${s.toggles.noFieldHighlight ? 'no-highlight' : ''}`} style={{ pointerEvents: 'none', '--field-bg': rgbaOf(s.prefs.fieldHighlightColor, s.prefs.fieldHighlightOpacity) } as React.CSSProperties}>
       {items.map(({ f, w, i }) => {
         const [x0, y0, x1, y1] = w.rect;
         const style: React.CSSProperties = { left: x0 * zoom, top: y0 * zoom, width: (x1 - x0) * zoom, height: (y1 - y0) * zoom, fontSize: Math.max(8, Math.min(14, (y1 - y0) * 0.65)) * zoom, pointerEvents: interactive && !f.readOnly ? 'auto' : 'none' };

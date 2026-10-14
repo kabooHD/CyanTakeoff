@@ -39,7 +39,7 @@ export async function signActive(p: Pending, place: { page?: number; rect?: [num
   const app = useApp.getState();
   useDigitalSign.setState({ pending: null });
   const ok = await app.transformDoc(
-    (_lib, bytes) => signPdf(bytes, { p12: p.p12, password: p.password, reason: p.reason || undefined, location: p.location || undefined, tsa: p.tsa || undefined, certify: p.certify, ...place }),
+    (_lib, bytes) => signPdf(bytes, { p12: p.p12, password: p.password, reason: p.reason || undefined, location: p.location || undefined, tsa: p.tsa || undefined, certify: p.certify, hash: app.prefs.hashAlgorithm, ...place }),
     `${p.certify ? 'Certified' : 'Signed'} by ${p.signer.name}. Save (Ctrl+S) to write the signed file.`,
   );
   if (ok) useDigitalSign.setState((x) => ({ tick: x.tick + 1 }));
@@ -51,7 +51,7 @@ async function signAll(p: Pending, active: DocState) {
   let n = 0;
   for (const d of targets(active, true)) {
     const ok = await app.transformDoc(
-      (_lib, bytes) => signPdf(bytes, { p12: p.p12, password: p.password, reason: p.reason || undefined, location: p.location || undefined, tsa: p.tsa || undefined, certify: p.certify }),
+      (_lib, bytes) => signPdf(bytes, { p12: p.p12, password: p.password, reason: p.reason || undefined, location: p.location || undefined, tsa: p.tsa || undefined, certify: p.certify, hash: app.prefs.hashAlgorithm }),
       `Signed by ${p.signer.name}`, undefined, undefined, d.id,
     );
     if (ok) n++;

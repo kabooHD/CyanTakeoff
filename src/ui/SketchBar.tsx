@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { MarkupType, Pt, Scale } from '../model/types';
 import { nextPoint, parseLengthInput, sketchEllipse, sketchPt, sketchRectangle, type SketchKind } from '../model/sketch';
 import { unitLabel } from '../model/measure';
+import { useApp } from '../model/store';
 
 export function SketchBar({ kind, points, scale, onPoint, onCommit, onFinish, onCancel }: {
   kind: SketchKind; points: Pt[]; scale: Scale | null;
@@ -16,7 +17,7 @@ export function SketchBar({ kind, points, scale, onPoint, onCommit, onFinish, on
   const [len, setLen] = useState('');
   const [wid, setWid] = useState('');
   const [rot, setRot] = useState('0');
-  const [relative, setRelative] = useState(false);
+  const [relative, setRelative] = useState(() => useApp.getState().prefs.sketchRotation === 'relative');
   const [lastAngle, setLastAngle] = useState(0);
   const lenRef = useRef<HTMLInputElement>(null);
   const shape = kind === 'rectangle' || kind === 'ellipse';
@@ -33,7 +34,9 @@ export function SketchBar({ kind, points, scale, onPoint, onCommit, onFinish, on
       if (kind === 'rectangle') {
         onCommit(r % 360 ? 'polygon' : 'rectangle', r % 360 ? sketchRectangle(anchor, pw, ph, r) : [anchor, { x: anchor.x + pw, y: anchor.y + ph }]);
       } else {
-        onCommit(r % 360 ? 'polygon' : 'ellipse', r % 360 ? sketchEllipse(anchor, pw, ph, r) : [anchor, { x: anchor.x + pw, y: anchor.y + ph }]);
+        // Preferences > Sketch > Ellipse mode: Radius doubles the typed values.
+        const k = useApp.getState().prefs.ellipseMode === 'radius' ? 2 : 1;
+        onCommit(r % 360 ? 'polygon' : 'ellipse', r % 360 ? sketchEllipse(anchor, pw * k, ph * k, r) : [anchor, { x: anchor.x + pw * k, y: anchor.y + ph * k }]);
       }
       return;
     }

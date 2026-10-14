@@ -664,6 +664,39 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await ib.getByRole('button', { name: 'Cancel' }).click();
 }
 
+// Preferences (Ctrl+K): Navigation > the mouse wheel scrolls instead of zooming in single page mode.
+{
+  const zoomOf = async () => Number((await page.locator('.sb-zoom').first().innerText()).replace('%', ''));
+  const setWheel = async (v) => {
+    await page.keyboard.press('Control+k');
+    const pd = page.getByRole('dialog', { name: 'Preferences' });
+    await pd.waitFor();
+    await pd.getByRole('tab', { name: 'Navigation' }).click();
+    await pd.getByLabel('Single page mode: mouse wheel').selectOption(v);
+    await pd.getByRole('button', { name: 'Close' }).click();
+    await pd.waitFor({ state: 'hidden' });
+  };
+  await page.keyboard.press('Control+k');
+  const pd = page.getByRole('dialog', { name: 'Preferences' });
+  await pd.waitFor();
+  assert(await pd.getByLabel('User').inputValue() !== '', 'Preferences > General shows the user name');
+  await pd.getByRole('button', { name: 'Close' }).click();
+  await setWheel('scroll');
+  const b = await svg.boundingBox();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  const z0 = await zoomOf();
+  await page.mouse.wheel(0, -300);
+  await page.waitForTimeout(300);
+  assert(await zoomOf() === z0, 'with the wheel set to scroll, a wheel turn does not zoom');
+  await setWheel('zoom');
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  await page.mouse.wheel(0, -300);
+  await page.waitForTimeout(300);
+  assert(await zoomOf() !== z0, 'set back to zoom, the wheel zooms again');
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(300);
+}
+
 // Flags panel (Window > Flags): the Flag markup placed earlier is a linked flag; Add makes an unlinked one with its own action.
 {
   await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click();
@@ -1643,7 +1676,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.getByRole('button', { name: 'Columns ▾' }).click();
   await page.locator('.ml-columns-menu label', { hasText: 'Capture' }).locator('input').check();
   await page.mouse.move(5, 5);
-  const cell = page.locator('.ml-table tbody tr').first().locator('.capture-cell');
+  const cell = page.locator('.ml-table tbody tr.selected').first().locator('.capture-cell');
   assert((await cell.innerText()).includes('📷 1'), 'the Capture column counts the photos');
   await cell.dblclick();
   const cp = page.locator('[role=dialog][aria-label="Capture"]');
