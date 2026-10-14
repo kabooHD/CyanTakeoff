@@ -314,7 +314,16 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
     }
     case 'stamp': {
       const b = bounds(P);
-      o.poly(rectCorners({ x: b.minX, y: b.minY }, { x: b.maxX, y: b.maxY }), true); o.add('S');
+      if (m.stampBorder === 'rounded') {
+        const r = Math.min(6, b.w / 4, b.h / 4), k = 0.5523;
+        o.moveTo({ x: b.minX + r, y: b.minY });
+        o.lineTo({ x: b.maxX - r, y: b.minY }); o.curveTo({ x: b.maxX - r + r * k, y: b.minY }, { x: b.maxX, y: b.minY + r - r * k }, { x: b.maxX, y: b.minY + r });
+        o.lineTo({ x: b.maxX, y: b.maxY - r }); o.curveTo({ x: b.maxX, y: b.maxY - r + r * k }, { x: b.maxX - r + r * k, y: b.maxY }, { x: b.maxX - r, y: b.maxY });
+        o.lineTo({ x: b.minX + r, y: b.maxY }); o.curveTo({ x: b.minX + r - r * k, y: b.maxY }, { x: b.minX, y: b.maxY - r + r * k }, { x: b.minX, y: b.maxY - r });
+        o.lineTo({ x: b.minX, y: b.minY + r }); o.curveTo({ x: b.minX, y: b.minY + r - r * k }, { x: b.minX + r - r * k, y: b.minY }, { x: b.minX + r, y: b.minY });
+        o.add('h S');
+      } else if (m.stampBorder !== 'none') { o.poly(rectCorners({ x: b.minX, y: b.minY }, { x: b.maxX, y: b.maxY }), true); o.add('S'); }
+      else { o.grow({ x: b.minX, y: b.minY }); o.grow({ x: b.maxX, y: b.maxY }); }
       const text = m.text ?? '';
       const size = Math.min(b.h * 0.42, (b.w * 1.6) / Math.max(4, text.length));
       const c = { x: b.minX + b.w / 2, y: b.minY + b.h / 2 };
@@ -573,6 +582,7 @@ function ctData(m: Markup, P: Pt[]): CTData {
     comment: measure(m) || m.type === 'cloudplus' || m.type === 'stamp' ? m.comment || undefined : undefined,
     text: m.type === 'stamp' || m.type === 'cloudplus' ? m.text : undefined,
     subtitle: m.type === 'stamp' ? m.subtitle : undefined,
+    stampBorder: m.type === 'stamp' ? m.stampBorder : undefined,
     groupId: m.groupId,
     slope: m.slope,
     rise: m.rise,

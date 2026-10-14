@@ -45,6 +45,7 @@ export interface CTData {
   label?: string;
   /** Stamp subtitle as placed. */
   subtitle?: string;
+  stampBorder?: Markup['stampBorder'];
   status?: MarkupStatus;
   statusModel?: string;
   statusBy?: string;
@@ -316,6 +317,7 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
       } else {
         text = ct.text ?? '';
         if (ct.subtitle !== undefined) extra = { subtitle: ct.subtitle };
+        if (ct.stampBorder) extra = { ...extra, stampBorder: ct.stampBorder };
       }
       break;
     }

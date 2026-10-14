@@ -210,6 +210,8 @@ export interface Markup {
   link?: { uri?: string; page?: number; file?: string; dest?: string };
   /** Stamp: the small line under the title (default: author and date). */
   subtitle?: string;
+  /** Stamp: its border (default: a rounded rectangle). */
+  stampBorder?: 'none' | 'rect' | 'rounded';
   /** Markups sharing a group id move and select together (Revu Group). */
   groupId?: string;
   /** Locked markups cannot be moved, resized or deleted (Revu Lock). */

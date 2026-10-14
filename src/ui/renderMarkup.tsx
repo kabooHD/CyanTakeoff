@@ -174,7 +174,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
       const b = bounds(P);
       const fs = Math.min(b.h * 0.42, (b.w * 1.6) / Math.max(4, (m.text ?? '').length));
       shape = <g>
-        <rect x={b.minX} y={b.minY} width={b.w} height={b.h} rx={6} fill="none" stroke={st.color} strokeWidth={st.width} strokeOpacity={st.opacity} />
+        <rect x={b.minX} y={b.minY} width={b.w} height={b.h} rx={m.stampBorder === 'rect' ? 0 : 6} fill="none" stroke={m.stampBorder === 'none' ? 'none' : st.color} strokeWidth={st.width} strokeOpacity={st.opacity} />
         <text x={b.minX + b.w / 2} y={b.minY + b.h * 0.48} textAnchor="middle" dominantBaseline="middle" fontSize={fs}
           fontWeight="bold" fill={st.color} fillOpacity={st.opacity} fontFamily="Helvetica, Arial, sans-serif">{m.text}</text>
         <text x={b.minX + b.w / 2} y={b.minY + b.h * 0.82} textAnchor="middle" dominantBaseline="middle" fontSize={Math.max(5, fs * 0.38)}

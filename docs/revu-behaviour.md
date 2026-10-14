@@ -641,10 +641,19 @@ Print Spaces.
   /CTFlatContent); Revu cannot unflatten our files, nor we Revu's.
 
 ## Stamps, statuses, actions, Offset, Camera, Replace
-- Stamp tool: standard stamps plus custom ones (Manage Stamps): text
-  stamps with a title, a subtitle template ({Author}, {Date}, {Time},
-  {DateTime}) and a colour, or image stamps. Export/import a stamp file to
-  share them.
+- Stamp tool: standard stamps plus custom ones (Manage Stamps). Create
+  Stamp: Subject (name), Template (Blank, Text, Text with Border, Text
+  with Date and Border, Text with Rounded Border), Width and Height in
+  inches, Title, Subtitle with dynamic text inserted from a menu (User,
+  File, FileName, Path; Date, Day, Month, Month3, MonthName, Year, Year2;
+  Time, Hour, Minutes, Seconds; {Author} and {DateTime} too), border,
+  opacity, colour; the dynamic text is filled in when the stamp is
+  placed. Each stamp can be saved as a PDF file of its size (as Revu keeps
+  stamps), and Import Stamp (PDF) turns a stamp file's first page into an
+  image stamp. Image stamps from PNG/JPEG; export/import a JSON stamp file
+  to share a set. Ours: no stamp editor with markup tools, no blend mode
+  or rotation on the stamp definition (Layout rotation applies after
+  placing).
 - Status: the Review model (None, Accepted, Rejected, Cancelled,
   Completed) cannot be changed. Manage Status adds models (e.g. Valve)
   with states that can recolour the markup and put text into a text box

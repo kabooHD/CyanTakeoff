@@ -245,6 +245,8 @@ filling, image signatures, redaction and OCR.
   page breaks, thumbnails)
 - [x] Markups List: Import/Export XFDF entries, Capture Summary, Export
   Capture Media, Legend column
+- [x] Stamps: Create Stamp (templates, size, border, opacity), dynamic text
+  tokens, PDF export, Import Stamp (PDF)
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

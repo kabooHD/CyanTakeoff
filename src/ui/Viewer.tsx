@@ -684,8 +684,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       finish('image', [{ x: p.x - c.w / 2, y: p.y - c.h / 2 }, { x: p.x + c.w / 2, y: p.y + c.h / 2 }], { image: c.image, subject: c.name });
       return;
     }
-    const m = finish('stamp', [p], { subtitle: c.subtitle, subject: c.name, text: c.title });
-    if (c.color) s.updateMarkups([m.id], (x) => ({ style: { ...x.style, color: c.color! } }), { history: false });
+    const m = finish('stamp', [{ x: p.x - c.w / 2, y: p.y - c.h / 2 }, { x: p.x + c.w / 2, y: p.y + c.h / 2 }], { subtitle: c.subtitle, subject: c.name, text: c.title, stampBorder: c.border });
+    s.updateMarkups([m.id], (x) => ({ style: { ...x.style, color: c.color ?? x.style.color, opacity: c.opacity ?? x.style.opacity } }), { history: false });
   };
   const placeAttachment = async (p: Pt) => {
     const f = await pickFile();

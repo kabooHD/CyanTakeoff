@@ -3095,10 +3095,23 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.locator('.menubar-item > button', { hasText: /^Tools$/ }).click();
   await page.getByRole('menuitem', { name: 'Manage Stamps…' }).click();
   const sd = page.locator('[role=dialog][aria-label="Stamps"]');
-  await sd.getByRole('button', { name: 'New Text Stamp' }).click();
+  await sd.getByRole('button', { name: 'Create Stamp…' }).click();
   await sd.getByLabel('Stamp name').fill('Field Checked');
+  await sd.getByLabel('Stamp template').selectOption('dateBorder');
   await sd.getByLabel('Stamp title').fill('FIELD CHECKED');
+  await sd.getByLabel('Dynamic text').selectOption('Year');
+  assert((await sd.getByLabel('Stamp subtitle').inputValue()) === '{Date}{Year}', 'the template seeds the subtitle and the dynamic text menu appends a token');
+  await sd.getByLabel('Stamp width').fill('3');
   await sd.getByRole('button', { name: 'Save Stamp' }).click();
+  // Export the stamp as a PDF file, and import that file as a new (image) stamp.
+  const [stampPdf] = await Promise.all([page.waitForEvent('download'), sd.getByRole('button', { name: 'PDF' }).first().click()]);
+  await stampPdf.saveAs(`${OUT}/field-checked-stamp.pdf`);
+  assert((await PDFDocument.load(readFileSync(`${OUT}/field-checked-stamp.pdf`))).getPage(0).getWidth() === 216, 'a stamp exports as a PDF of its size (3 in wide)');
+  const [sfc] = await Promise.all([page.waitForEvent('filechooser'), sd.getByRole('button', { name: 'Import Stamp (PDF)…' }).click()]);
+  await sfc.setFiles(`${OUT}/field-checked-stamp.pdf`);
+  await sd.locator('.space-row', { hasText: 'field-checked-stamp' }).waitFor({ timeout: 15000 });
+  assert(true, 'Import Stamp (PDF) makes an image stamp from the file');
+  await sd.locator('.space-row', { hasText: 'field-checked-stamp' }).getByRole('button', { name: 'Delete' }).click();
   await sd.getByRole('button', { name: 'Close' }).click();
   const n1 = await rows();
   await page.locator('.menubar-item > button', { hasText: /^Tools$/ }).click();
@@ -3108,6 +3121,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.mouse.click(box.x + 600, box.y + 150);
   await page.waitForTimeout(200);
   assert(await rows() === n1 + 1 && (await page.locator('.ml-table tbody').innerText()).includes('Field Checked'), 'a custom stamp is placed with its name as subject');
+  assert((await page.locator('.markup-layer').evaluate((el) => el.textContent ?? '')).includes(String(new Date().getFullYear())), 'the dynamic text is filled in when the stamp is placed');
   await page.screenshot({ path: `${OUT}/custom-stamp.png` });
 
   // Camera: without a camera the dialog offers a photo instead.
