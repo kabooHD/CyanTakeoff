@@ -1,13 +1,18 @@
 // OCR (Revu Ctrl+Shift+O): recognise text on scanned pages and add it to
 // the PDF as invisible text, so the drawing becomes searchable and its text
 // selectable. Uses tesseract.js with assets served from /ocr/.
-import { StandardFonts, type PDFDocument } from 'pdf-lib';
+import type { PDFDocument } from 'pdf-lib';
+import { GLYPHLESS_WIDTH, glyphlessFont, glyphlessHex } from '../pdf/glyphless';
+import { addFont, appendContent } from '../pdf/editText';
 import type { DocState } from '../model/store';
 
 /** Languages whose data is served under /ocr/lang (see vite.config.ts). */
 export const OCR_LANGUAGES: { code: string; name: string }[] = [
   { code: 'eng', name: 'English' }, { code: 'fra', name: 'French' }, { code: 'deu', name: 'German' }, { code: 'spa', name: 'Spanish' },
   { code: 'ita', name: 'Italian' }, { code: 'por', name: 'Portuguese' }, { code: 'nld', name: 'Dutch' },
+  { code: 'pol', name: 'Polish' }, { code: 'tur', name: 'Turkish' }, { code: 'rus', name: 'Russian' }, { code: 'ukr', name: 'Ukrainian' },
+  { code: 'ell', name: 'Greek' }, { code: 'ara', name: 'Arabic' }, { code: 'heb', name: 'Hebrew' },
+  { code: 'chi_sim', name: 'Chinese (Simplified)' }, { code: 'chi_tra', name: 'Chinese (Traditional)' }, { code: 'jpn', name: 'Japanese' }, { code: 'kor', name: 'Korean' },
 ];
 
 export interface OcrWord { text: string; x0: number; y0: number; x1: number; y1: number; confidence: number }
@@ -54,18 +59,25 @@ async function recognisePage(d: DocState, pageIdx: number, langs: string[], onPr
 
 /** Add recognised words to `lib` as invisible, searchable text (fitted to each word box). */
 export async function addTextLayer(lib: PDFDocument, pageIdx: number, words: OcrWord[]) {
-  const font = await lib.embedFont(StandardFonts.Helvetica);
-  const page = lib.getPage(pageIdx);
+  // Any script: the glyphless font's codes are the text's UTF-16 units (ToUnicode maps them back).
+  const name = addFont(lib, pageIdx, glyphlessFont(lib));
+  const f = (v: number) => +v.toFixed(3);
+  const ops: string[] = ['q', 'BT', '3 Tr']; // render mode 3: invisible, still searchable and selectable
   for (const w of words) {
-    const text = w.text.replace(/[^\x20-\x7e -ÿ]/g, '');
+    let text = w.text.replace(/[\u0000-\u001f]/g, '').trim();
     if (!text) continue;
+    // Page content is in visual order: right-to-left words (Arabic, Hebrew) are written reversed,
+    // and readers put them back in reading order.
+    if (/[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufeff]/.test(text)) text = [...text].reverse().join('');
     const h = w.y1 - w.y0;
-    // Size so the word spans its box (Helvetica is narrower or wider than the scan's font).
-    const atH = Math.max(1, h * 0.95);
-    const size = Math.max(1, Math.min(atH * 1.6, (atH * (w.x1 - w.x0)) / Math.max(1e-6, font.widthOfTextAtSize(text, atH))));
-    // Invisible but selectable and searchable: fully transparent fill.
-    page.drawText(text, { x: w.x0, y: w.y0 + h * 0.15, size, font, opacity: 0 });
+    const size = Math.max(1, h * 0.95);
+    // Stretch the run so it spans the word's box (every character is half an em wide).
+    const natural = text.length * (GLYPHLESS_WIDTH / 1000) * size;
+    const tz = Math.max(1, Math.min(1000, (100 * (w.x1 - w.x0)) / Math.max(1e-6, natural)));
+    ops.push(`/${name} ${f(size)} Tf`, `${f(tz)} Tz`, `1 0 0 1 ${f(w.x0)} ${f(w.y0 + h * 0.15)} Tm`, `${glyphlessHex(text)} Tj`);
   }
+  ops.push('ET', 'Q');
+  if (ops.length > 5) appendContent(lib, pageIdx, ops.join('\n'));
 }
 
 /** OCR the given pages; returns the words per page. */

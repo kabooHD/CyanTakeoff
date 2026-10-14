@@ -36,14 +36,14 @@ export function reuseCodes(oldText: string, codes: number[], text: string): numb
   return out;
 }
 
-function appendContent(doc: PDFDocument, pageIdx: number, ops: string) {
+export function appendContent(doc: PDFDocument, pageIdx: number, ops: string) {
   const page = doc.getPage(pageIdx), ctx = doc.context;
   const cur = page.node.get(N('Contents'));
   const list = cur instanceof PDFArray ? cur.asArray() : cur ? [cur] : [];
   page.node.set(N('Contents'), ctx.obj([...list, ctx.register(ctx.stream(ops))]));
 }
 
-function addFont(doc: PDFDocument, pageIdx: number, ref: unknown): string {
+export function addFont(doc: PDFDocument, pageIdx: number, ref: unknown): string {
   const page = doc.getPage(pageIdx);
   page.node.normalize();
   const res = page.node.Resources()!;

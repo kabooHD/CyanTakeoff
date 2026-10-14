@@ -12,8 +12,8 @@ const OCR_FILES: Record<string, string> = {
   'ocr/core/tesseract-core-lstm.wasm.js': 'node_modules/tesseract.js-core/tesseract-core-lstm.wasm.js',
   'ocr/core/tesseract-core-simd-lstm.wasm.js': 'node_modules/tesseract.js-core/tesseract-core-simd-lstm.wasm.js',
   'ocr/core/tesseract-core-relaxedsimd-lstm.wasm.js': 'node_modules/tesseract.js-core/tesseract-core-relaxedsimd-lstm.wasm.js',
-  // Latin-script languages (the invisible text layer is written in WinAnsi); keep in step with OCR_LANGUAGES in src/ui/ocr.ts.
-  ...Object.fromEntries(['eng', 'fra', 'deu', 'spa', 'ita', 'por', 'nld'].map((l) => [
+  // OCR languages; keep in step with OCR_LANGUAGES in src/ui/ocr.ts (any script: the text layer uses a Unicode glyphless font).
+  ...Object.fromEntries(['eng', 'fra', 'deu', 'spa', 'ita', 'por', 'nld', 'pol', 'tur', 'rus', 'ukr', 'ell', 'ara', 'heb', 'chi_sim', 'chi_tra', 'jpn', 'kor'].map((l) => [
     `ocr/lang/${l}.traineddata.gz`, `node_modules/@tesseract.js-data/${l}/4.0.0_best_int/${l}.traineddata.gz`,
   ])),
   // Spell check dictionary (Hunspell English, MIT/BSD), loaded on first use.
