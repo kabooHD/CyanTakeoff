@@ -611,6 +611,15 @@ Print Spaces.
 - Filter List adds an "All" filter row above the columns; Clear All.
 - Click a header to sort, again to reverse; Subject / page sorts tie-break
   on creation date.
+- Right-click a row: Copy Cell, Properties, Edit Action, Add to My Tools,
+  Set Status, Layer, Copy, Delete, Reply, Check / Clear All Checkmarks,
+  Create Legend, arrange commands. Hide Markups (toolbar) takes every
+  markup off the drawing and the printout until turned off. Saved Filters
+  (with Filter List on): Clear All, Save Filter, apply or delete a saved
+  set. Sorting by Subject, Author, Status, Layer, Space, Label, Color or
+  Units groups the rows under collapsible headings. Columns also: X, Y,
+  X/Y Center, Document Width/Height (inches from the lower left), Width
+  and Height (real-world, at the markup's scale).
 - Summary: CSV, XML, PDF or print, with Columns and Filter & Sort tabs.
 
 ## Preferences (Measure)

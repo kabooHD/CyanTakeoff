@@ -258,4 +258,6 @@ export interface Toggles {
   noFieldHighlight?: boolean;
   /** View > Synchronize Document: both panes of a split view show the same page index. */
   syncDoc?: boolean;
+  /** Markups List > Hide Markups: every markup off the drawing and the printout, until turned off. */
+  hideMarkups?: boolean;
 }

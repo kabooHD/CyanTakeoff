@@ -7,11 +7,21 @@ import { StatusSelect } from './StatusModels';
 import { allColumns, exportSummaryCsv, exportSummaryPdf, exportSummaryXlsx, type SummaryColumn } from './actions';
 import { ManageColumns } from './ManageColumns';
 import { Icon } from './icons';
+import { ContextMenu, type MenuItem } from './ContextMenu';
+import { markupMenuItems } from './markupMenu';
+
+/** Saved filter sets (Revu's Saved Filters), kept in the browser. */
+interface SavedFilter { name: string; filters: Record<string, string>; search: string }
+const SF_LS = 'cyantakeoff:markups-list-filters';
+const loadSaved = (): SavedFilter[] => { try { return JSON.parse(localStorage.getItem(SF_LS) ?? '[]'); } catch { return []; } };
+const storeSaved = (l: SavedFilter[]) => { try { localStorage.setItem(SF_LS, JSON.stringify(l)); } catch { /* storage unavailable */ } };
+/** Columns whose sort groups the list under section headings (Revu groups under the sorted value). */
+const GROUPED = new Set(['subject', 'author', 'status', 'layer', 'space', 'label', 'color', 'units']);
 
 const NO_TOTAL = new Set(['depth', 'angle', 'slope']);
 /** Columns that sort by creation date when values tie (Revu does this for Subject and page). */
 const TIE_BY_DATE = new Set(['subject', 'page']);
-const DEFAULT_HIDDEN = ['label', 'angle', 'depth', 'units', 'slope', 'created', 'lock', 'pageIndex'];
+const DEFAULT_HIDDEN = ['label', 'angle', 'depth', 'units', 'slope', 'created', 'lock', 'pageIndex', 'x', 'y', 'xCenter', 'yCenter', 'docWidth', 'docHeight', 'width', 'height'];
 const LS = 'cyantakeoff:markups-list';
 
 interface Layout { order: string[]; hidden: string[] }
@@ -37,6 +47,9 @@ export function MarkupsList() {
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 }>({ key: 'page', dir: 1 });
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [saved, setSaved] = useState<SavedFilter[]>(loadSaved);
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [showFilters, setShowFilters] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [layout, setLayoutState] = useState(loadLayout);
@@ -138,6 +151,23 @@ export function MarkupsList() {
         </div>
         <button className={showFilters ? 'on' : ''} onClick={() => { setShowFilters(!showFilters); if (showFilters) setFilters({}); }}
           title="Filter List: filter each column">Filter List</button>
+        {showFilters && (
+          <select aria-label="Saved Filters" value="" title="Saved Filters" onChange={(e) => {
+            const v = e.target.value;
+            if (v === 'clear') { setFilters({}); setSearch(''); }
+            else if (v === 'save') { const name = prompt('Filter name', 'My filter'); if (name) { const next = [...saved.filter((f) => f.name !== name), { name, filters, search }]; setSaved(next); storeSaved(next); } }
+            else if (v.startsWith('del:')) { const next = saved.filter((f) => f.name !== v.slice(4)); setSaved(next); storeSaved(next); }
+            else if (v.startsWith('use:')) { const f = saved.find((x) => x.name === v.slice(4)); if (f) { setFilters(f.filters); setSearch(f.search); } }
+          }}>
+            <option value="">Saved Filters…</option>
+            <option value="clear">Clear All</option>
+            <option value="save">Save Filter…</option>
+            {saved.map((f) => <option key={f.name} value={`use:${f.name}`}>{f.name}</option>)}
+            {saved.map((f) => <option key={`d${f.name}`} value={`del:${f.name}`}>Delete "{f.name}"</option>)}
+          </select>
+        )}
+        <button className={s.toggles.hideMarkups ? 'on' : ''} aria-pressed={!!s.toggles.hideMarkups} onClick={() => s.toggle('hideMarkups')}
+          title="Hide Markups: take every markup off the drawing and the printout until turned off">Hide Markups</button>
         <input className="ml-filter" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <span className="muted">{rows.length} of {all.length} markup{all.length === 1 ? '' : 's'}</span>
         <span className="spacer" />
@@ -186,10 +216,31 @@ export function MarkupsList() {
             )}
           </thead>
           <tbody>
-            {rows.map(({ m, v }) => (
+            {rows.map(({ m, v }, ri) => {
+              const group = GROUPED.has(sort.key) ? String(v[sort.key] || '(none)') : null;
+              const newGroup = group !== null && (ri === 0 || String(rows[ri - 1].v[sort.key] || '(none)') !== group);
+              const hiddenInGroup = group !== null && collapsed.has(group);
+              return (
               <Fragment key={m.id}>
-              <tr className={`${sel.has(m.id) ? 'selected' : ''} ${m.hidden ? 'hidden-markup' : ''}`} title={m.hidden ? 'Hidden (Edit > Show)' : undefined}
-                onClick={(e) => goTo(m, e.ctrlKey || e.metaKey)}>
+              {newGroup && (
+                <tr className="ml-section" onClick={() => setCollapsed((c) => { const n = new Set(c); if (n.has(group!)) n.delete(group!); else n.add(group!); return n; })}>
+                  <td colSpan={columns.length}><span className="bm-toggle">{collapsed.has(group!) ? '▸' : '▾'}</span> {group} <span className="muted small">({rows.filter((r) => String(r.v[sort.key] || '(none)') === group).length})</span></td>
+                </tr>
+              )}
+              {!hiddenInGroup && <tr className={`${sel.has(m.id) ? 'selected' : ''} ${m.hidden ? 'hidden-markup' : ''}`} title={m.hidden ? 'Hidden (Edit > Show)' : undefined}
+                onClick={(e) => goTo(m, e.ctrlKey || e.metaKey)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  if (!doc) return;
+                  if (!sel.has(m.id)) s.select([m.id]);
+                  const ids = sel.has(m.id) ? [...sel] : [m.id];
+                  const cell = (e.target as HTMLElement).closest('td')?.textContent ?? '';
+                  setMenu({ x: e.clientX, y: e.clientY, items: [
+                    { label: 'Copy Cell', action: () => { void navigator.clipboard?.writeText(cell); } },
+                    { sep: true },
+                    ...markupMenuItems(doc, m, ids),
+                  ] });
+                }}>
                 {columns.map((c) => (
                   <td key={c.key} className={c.numeric ? 'num' : ''}>
                     {c.key === 'color' ? <span className="color-chip" style={{ background: m.style.color }} />
@@ -203,8 +254,8 @@ export function MarkupsList() {
                         : v[c.key]}
                   </td>
                 ))}
-              </tr>
-              {(m.replies ?? []).map((r) => (
+              </tr>}
+              {!hiddenInGroup && (m.replies ?? []).map((r) => (
                 <tr key={r.id} className="reply-row">
                   {columns.map((c, i) => (
                     <td key={c.key}>
@@ -232,7 +283,8 @@ export function MarkupsList() {
                 </tr>
               )}
               </Fragment>
-            ))}
+              );
+            })}
           </tbody>
           {rows.length > 0 && (
             <tfoot>
@@ -250,6 +302,7 @@ export function MarkupsList() {
           )}
         </table>
       </div>
+    {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
     </div>
   );
 }

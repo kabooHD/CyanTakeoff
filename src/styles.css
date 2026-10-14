@@ -513,3 +513,7 @@ button.active { background: #d6e4fa; }
 
 /* Hidden markups (Edit > Hide) stay listed, greyed. */
 .ml-table tr.hidden-markup td { opacity: 0.45; font-style: italic; }
+
+/* Markups List section headings (sorted by a grouping column) and the Hide Markups button */
+.ml-table tr.ml-section td { background: var(--chrome-2); font-weight: 600; cursor: pointer; }
+.ml-toolbar button.on, .markups-list button.on { background: var(--accent-soft); border-color: var(--accent); }

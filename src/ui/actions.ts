@@ -7,6 +7,11 @@ import { displayValue, isNumericColumn, numericValue } from '../model/columns';
 import { buildXlsx } from '../model/xlsx';
 import { buildSummaryPdf } from '../pdf/summary';
 import { pickFile } from './toolActions';
+import { placeColumns } from '../model/listColumns';
+import { scaleAt } from '../model/measure';
+
+/** Position and size columns (inches from the page's lower left; real-world size at the markup's scale). */
+const place = (m: Markup, d: DocState) => placeColumns(m.points, d.loaded.pages[m.page]?.height ?? 0, m.scale ?? scaleAt(d.calibrations[m.page], d.viewports[m.page], m.points[0]));
 
 type Picker = (o: unknown) => Promise<FileSystemFileHandle[]>;
 
@@ -92,6 +97,14 @@ export const SUMMARY_COLUMNS: SummaryColumn[] = [
   { key: 'depth', label: 'Depth', value: (m) => m.depth ?? '', numeric: true },
   { key: 'slope', label: 'Slope', value: (m) => (m.slope ? `${m.slope.value}${m.slope.unit === 'pitch' ? '/12' : m.slope.unit === 'degree' ? '°' : '%'}` : '') },
   { key: 'units', label: 'Units', value: (m) => unitsOf(m) },
+  { key: 'x', label: 'X', value: (m, d) => place(m, d).x, numeric: true, noTotal: true },
+  { key: 'y', label: 'Y', value: (m, d) => place(m, d).y, numeric: true, noTotal: true },
+  { key: 'xCenter', label: 'X Center', value: (m, d) => place(m, d).xCenter, numeric: true, noTotal: true },
+  { key: 'yCenter', label: 'Y Center', value: (m, d) => place(m, d).yCenter, numeric: true, noTotal: true },
+  { key: 'docWidth', label: 'Document Width', value: (m, d) => place(m, d).docWidth, numeric: true, noTotal: true },
+  { key: 'docHeight', label: 'Document Height', value: (m, d) => place(m, d).docHeight, numeric: true, noTotal: true },
+  { key: 'width', label: 'Width', value: (m, d) => place(m, d).width ?? '', numeric: true, noTotal: true },
+  { key: 'height', label: 'Height', value: (m, d) => place(m, d).height ?? '', numeric: true, noTotal: true },
 ];
 
 function round(v: number | undefined) {

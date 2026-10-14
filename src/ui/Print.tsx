@@ -115,6 +115,8 @@ export interface PrintJob { d: DocState; sheets: Sheet[] }
 /** Build the print sheets in the page and open the browser's print dialog. */
 export async function printSheets(jobs: PrintJob[], o: PrintSettings) {
   const s = useApp.getState();
+  // Markups List > Hide Markups also keeps them off the paper (Revu).
+  if (s.toggles.hideMarkups && o.content !== 'document') o = { ...o, content: 'document' };
   cleanup();
   useApp.setState({ busy: true });
   const sources: Sources[] = [];

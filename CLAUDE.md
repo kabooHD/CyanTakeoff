@@ -77,7 +77,8 @@ Underline/Squiggly and text Highlight, Image, Snapshot, Hyperlink, File
 Attachment, Eraser); Group/Ungroup, Arrange, Lock, Align, Flip, Format
 Painter, Lasso; Spaces (Revu /BSISpaces, panel, Space column); slope, rise/drop, wall area;
 custom columns incl. formulas; Summary to Excel (.xlsx), CSV or PDF report;
-Legends; Markups List replies, Checkmark/Lock/Creation Date columns, arrow
+Legends; Markups List replies, Checkmark/Lock/Creation Date/position columns, right-click menu
+(src/ui/markupMenu.ts), Hide Markups, Saved Filters, section grouping, arrow
 keys and jump-to-markup; Search (Ctrl+F); split view (Ctrl+2/Ctrl+H); undo/redo of page operations; view modes (single, continuous, side by side, cover page, Dark Mode, line-weight and reply-indicator toggles,
 continuous side by side: Ctrl+4..7) and Rotate View (Ctrl+Shift+Plus/Minus); page operations (insert,
 blank, delete, extract, replace keeping markups, rotate, reorder by

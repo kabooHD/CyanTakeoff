@@ -1717,6 +1717,37 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.locator('.doc-tab').first().click();
     await page.waitForTimeout(300);
   }
+  // Markups List: right-click menu, Hide Markups, saved filters, grouping.
+  {
+    await page.keyboard.press('Escape');
+    const firstRow = page.locator('.ml-table tbody tr:not(.reply-row):not(.ml-section)').first();
+    await firstRow.click({ button: 'right' });
+    assert(await page.getByRole('menuitem', { name: 'Reply' }).count() === 1 && await page.getByRole('menuitem', { name: 'Copy Cell' }).count() === 1, 'the Markups List has a right-click menu');
+    await page.keyboard.press('Escape');
+    const drawn = await page.locator('.page .markup-layer [data-id]').count();
+    await page.getByRole('button', { name: 'Hide Markups' }).click();
+    await page.waitForTimeout(300);
+    assert(drawn > 0 && await page.locator('.page .markup-layer [data-id]').count() === 0, `Hide Markups takes every markup off the drawing (${drawn} -> 0)`);
+    await page.getByRole('button', { name: 'Hide Markups' }).click();
+    await page.waitForTimeout(300);
+    assert(await page.locator('.page .markup-layer [data-id]').count() === drawn, 'Hide Markups off shows them again');
+    await page.getByRole('button', { name: 'Filter List' }).click();
+    page.once('dialog', (dl) => dl.accept('Test filter'));
+    await page.locator('[aria-label="Saved Filters"]').selectOption('save');
+    await page.waitForTimeout(200);
+    assert((await page.locator('[aria-label="Saved Filters"] option').allInnerTexts()).some((t) => t === 'Test filter'), 'Save Filter keeps a named filter set');
+    await page.locator('[aria-label="Saved Filters"]').selectOption('del:Test filter');
+    await page.getByRole('button', { name: 'Filter List' }).click();
+    await page.locator('.ml-table thead th', { hasText: /^Subject/ }).first().click();
+    await page.waitForTimeout(200);
+    const sections = await page.locator('.ml-table tr.ml-section').count();
+    assert(sections >= 1, `sorting by Subject groups the rows under headings (${sections})`);
+    await page.locator('.ml-table tr.ml-section').first().click();
+    await page.waitForTimeout(200);
+    await page.locator('.ml-table tr.ml-section').first().click();
+    await page.locator('.ml-table thead th', { hasText: /^Page Label/ }).first().click();
+    await page.waitForTimeout(200);
+  }
   // File exports: Export Text, Publish as Uncompressed; Edit > Undo History.
   {
     const [td] = await Promise.all([page.waitForEvent('download'), menu('File', 'Export Text')]);
