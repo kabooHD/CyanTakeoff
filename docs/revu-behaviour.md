@@ -622,6 +622,18 @@ Print Spaces.
 - Search > Replace Checked: replaces the checked results in the drawing's
   text (as Edit Text does).
 
+## Flags panel (Window > Flags)
+Flags are for jumping to pages and places. Linked flags are Flag markups
+(Shift+F; title and colour follow the markup, click jumps to it; the
+markup's action is edited with Edit Action). Unlinked flags (Add) exist
+only in the panel, default to the page's label as title, and carry one
+of six actions: Jump to Page (with zoom), Jump to Place, Jump to Space,
+Snapshot View (an area picked on the page), Hyperlink, Open (an open
+file). Toolbar: Flag, Add, Delete, Action, Properties (title, colour,
+bold/italic for unlinked flags). Flags on the active page span the
+panel's full width; thumbnails show ⚑ on flagged pages. Ours: unlinked
+flags are kept in the PDF catalog (/CTFlags); no drag reordering yet.
+
 ## Help > Find Tools + Commands
 A search box over every menu item and tool: type part of the name, pick
 with the arrow keys, Enter runs it (disabled items are greyed). Each row

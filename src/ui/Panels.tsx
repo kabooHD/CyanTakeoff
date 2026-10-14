@@ -4,6 +4,8 @@ import { updateTool, useSequenceDialog } from './SequenceDialog';
 import { HatchSelect, LineStyleSelect } from './LineStyles';
 import { LayersPanel } from './LayersPanel';
 import { LinksPanel } from './LinksPanel';
+import { FlagsPanel } from './FlagsPanel';
+import { flaggedPages } from '../model/flags';
 import { StatusSelect } from './StatusModels';
 import { FileAccessPanel } from './FileAccess';
 import { layerIds } from '../pdf/layers';
@@ -37,7 +39,7 @@ import { legendKey } from '../model/legend';
 export function SideTabs({ side }: { side: 'left' | 'right' }) {
   const s = useApp();
   const tabs = side === 'left'
-    ? [{ id: 'thumbnails', label: 'Thumbnails' }, { id: 'bookmarks', label: 'Bookmarks' }, { id: 'spaces', label: 'Spaces' }, { id: 'search', label: 'Search' }, { id: 'sets', label: 'Sets' }, { id: 'signatures', label: 'Signatures' }, { id: 'layers', label: 'Layers' }, { id: 'links', label: 'Links' }, { id: 'files', label: 'File Access' }] as const
+    ? [{ id: 'thumbnails', label: 'Thumbnails' }, { id: 'bookmarks', label: 'Bookmarks' }, { id: 'spaces', label: 'Spaces' }, { id: 'search', label: 'Search' }, { id: 'sets', label: 'Sets' }, { id: 'signatures', label: 'Signatures' }, { id: 'layers', label: 'Layers' }, { id: 'links', label: 'Links' }, { id: 'flags', label: 'Flags' }, { id: 'files', label: 'File Access' }] as const
     : [{ id: 'properties', label: 'Properties' }, { id: 'toolchest', label: 'Tool Chest' }, { id: 'measurements', label: 'Measurements' }] as const;
   const cur = side === 'left' ? s.left : s.right;
   return (
@@ -73,6 +75,7 @@ export function LeftPanel() {
   if (s.left === 'search') return <PanelFrame title="Search" onClose={close}>{doc ? <SearchPanel doc={doc} /> : null}</PanelFrame>;
   if (s.left === 'files') return <PanelFrame title="File Access" onClose={close}><FileAccessPanel /></PanelFrame>;
   if (s.left === 'links') return <PanelFrame title="Links" onClose={close}>{doc ? <LinksPanel doc={doc} /> : null}</PanelFrame>;
+  if (s.left === 'flags') return <PanelFrame title="Flags" onClose={close}>{doc ? <FlagsPanel doc={doc} /> : null}</PanelFrame>;
   if (s.left === 'layers') return <PanelFrame title="Layers" onClose={close}>{doc ? <LayersPanel doc={doc} /> : null}</PanelFrame>;
   if (s.left === 'spaces') return <PanelFrame title="Spaces" onClose={close}>{doc ? <SpacesPanel doc={doc} /> : null}</PanelFrame>;
   return s.left === 'thumbnails'
@@ -120,10 +123,11 @@ function Thumb({ doc, index, selected, onClick }: { doc: DocState; index: number
     return () => { cancelled = true; };
   }, [visible, doc.loaded.pdf, index, p.width]);
   const count = doc.markups.filter((m) => m.page === index).length;
+  const flagged = flaggedPages(doc.markups, doc.loaded.flags).has(index);
   return (
     <div className={`thumb ${doc.page === index ? 'active' : ''} ${selected ? 'selected' : ''}`} aria-selected={selected} onClick={onClick}>
       <canvas ref={ref} style={{ width: w, height: h }} />
-      <div className="thumb-label">{p.label}{count ? <span className="thumb-count">{count}</span> : null}</div>
+      <div className="thumb-label">{p.label}{count ? <span className="thumb-count">{count}</span> : null}{flagged ? <span className="thumb-flag" title="This page has a flag">⚑</span> : null}</div>
     </div>
   );
 }

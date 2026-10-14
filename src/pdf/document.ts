@@ -1,5 +1,7 @@
 // The legacy build includes polyfills, so older (e.g. managed corporate) browsers work.
 import { readPlaces, type Place } from './places';
+import { readFlags } from './flags';
+import type { UnlinkedFlag } from '../model/flags';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { PDFDocument } from 'pdf-lib';
@@ -48,6 +50,8 @@ export interface LoadedDoc {
   bookmarks: Bookmark[];
   /** Named destinations (Revu Places). */
   places: Place[];
+  /** Unlinked flags of the Flags panel (ours, /CTFlags). */
+  flags: UnlinkedFlag[];
 }
 
 export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
@@ -138,6 +142,7 @@ export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
     pageLayers: lib ? layersOnPages(lib) : [],
     bookmarks: lib ? readBookmarks(lib) : [],
     places: lib ? readPlaces(lib) : [],
+    flags: lib ? readFlags(lib) : [],
   };
 }
 

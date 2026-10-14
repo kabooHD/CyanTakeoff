@@ -546,3 +546,13 @@ label.button, a.button { display: inline-block; padding: 2px 8px; border: 1px so
 .command-path { font-size: 11px; color: var(--muted, #777); }
 
 .batch-pairs { max-height: 140px; overflow-y: auto; border: 1px solid var(--border, #ccc); padding: 4px 8px; margin: 6px 0; }
+
+/* Flags panel */
+.flags-panel .panel-toolbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 6px; }
+.flags-list .flag-row { width: 78%; }
+.flags-list .flag-row.on-page { width: auto; }
+.flags-list .flag-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flag-edit { display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; border-top: 1px solid var(--border, #ccc); }
+.flag-edit label { display: flex; align-items: center; gap: 6px; }
+.flag-edit input[type=text], .flag-edit input:not([type]) { flex: 1; min-width: 0; }
+.thumb-flag { margin-left: 4px; color: var(--accent); }

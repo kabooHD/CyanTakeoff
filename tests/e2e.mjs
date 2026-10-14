@@ -642,6 +642,45 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await ib.getByRole('button', { name: 'Cancel' }).click();
 }
 
+// Flags panel (Window > Flags): the Flag markup placed earlier is a linked flag; Add makes an unlinked one with its own action.
+{
+  await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click();
+  await page.getByRole('menuitem', { name: 'Flags' }).click();
+  const fp = page.locator('.flags-panel');
+  await fp.waitFor();
+  const rows = () => fp.locator('.flag-row');
+  const n0 = await rows().count();
+  assert(n0 >= 1 && (await rows().first().innerText()).includes('🔗'), 'the Flags panel lists the Flag markup as a linked flag');
+  const pageLabel = (await page.locator('.statusbar').innerText()).match(/Page (\S+)/)?.[1];
+  await fp.getByRole('button', { name: 'Add' }).click();
+  await page.waitForFunction((n) => document.querySelectorAll('.flags-panel .flag-row').length === n + 1, n0);
+  const added = rows().filter({ hasText: /^(?!.*🔗)/ }).last();
+  assert(!(await added.innerText()).includes('🔗'), 'Add makes an unlinked flag');
+  await fp.getByRole('button', { name: 'Properties' }).click();
+  await fp.getByLabel('Flag title').fill('Cover');
+  await page.waitForTimeout(300);
+  assert((await rows().allInnerTexts()).some((t) => t.startsWith('Cover') || t.includes('Cover')), `the title edit renames the flag (${pageLabel})`);
+  await fp.getByRole('button', { name: 'Action' }).click();
+  await fp.getByLabel('Flag action').selectOption('uri');
+  await fp.getByLabel('Flag URL').waitFor();
+  await fp.getByLabel('Flag URL').fill('https://example.com');
+  await fp.getByLabel('Flag action').selectOption('page');
+  await page.waitForTimeout(200);
+  const windowPanel = async (name) => { await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click(); await page.getByRole('menuitem', { name }).click(); };
+  await windowPanel('Thumbnails');
+  await page.locator('.thumb').first().waitFor();
+  await page.locator('.thumb-flag').first().waitFor({ timeout: 5000 });
+  assert(await page.locator('.thumb-flag').count() >= 1, 'thumbnails show a flag indicator on flagged pages');
+  await windowPanel('Flags');
+  await fp.waitFor();
+  await rows().filter({ hasText: 'Cover' }).first().click();
+  await fp.getByRole('button', { name: 'Delete' }).click();
+  await page.waitForFunction((n) => document.querySelectorAll('.flags-panel .flag-row').length === n, n0);
+  assert(true, 'Delete removes the unlinked flag');
+  await page.screenshot({ path: `${OUT}/flags.png` });
+  await windowPanel('Thumbnails');
+}
+
 // Page operations (Document menu / Revu shortcuts): insert blank, rotate, delete, flatten.
 {
   const pagesOf = async () => Number((await page.locator('.statusbar').innerText()).match(/of (\d+)\)/)[1]);

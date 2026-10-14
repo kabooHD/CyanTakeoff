@@ -221,6 +221,8 @@ filling, image signatures, redaction and OCR.
 - [x] Measurements panel menu: Show Measurement Tools, Snap Orthogonal,
   Snap to Content, Highlight Viewports
 - [x] Help > Find Tools + Commands (search box over menus and tools)
+- [x] Flags panel (linked Flag markups, unlinked flags with actions, thumbnail
+  indicator)
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData
