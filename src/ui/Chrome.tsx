@@ -5,6 +5,7 @@ import type { Toggles, ToolId } from '../model/types';
 import { TOOLS, toolById } from '../tools/tools';
 import { useLinkUrls } from './ReviewText';
 import { usePageSetup } from './PageSetup';
+import { exportFormData, importFormData, mergeFormData, migrateTypewrittenText, resetForm } from './FormData';
 import { Icon } from './icons';
 import { MenuList, type MenuItem } from './ContextMenu';
 import { allColumns, exportSummaryCsv, exportSummaryPdf, exportSummaryXlsx, openFile, openSample, exportMarkupsXfdf, importMarkupsXfdf } from './actions';
@@ -200,6 +201,14 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { sep: true },
       ...toolItems('form'),
       { label: 'Forms Editor…', shortcut: 'Ctrl+Shift+F', disabled: noDoc, action: () => useFormsDialog.setState({ editor: true }) },
+      { label: 'Import Form Data…', disabled: noDoc, action: () => importFormData() },
+      { label: 'Export Form Data (FDF)', disabled: noDoc, action: () => exportFormData('fdf') },
+      { label: 'Export Form Data (XML)', disabled: noDoc, action: () => exportFormData('xml') },
+      { label: 'Export Form Data (CSV)', disabled: noDoc, action: () => exportFormData('csv') },
+      { label: 'Merge Form Data (CSV)', disabled: noDoc, action: () => mergeFormData('csv') },
+      { label: 'Reset Form', disabled: noDoc, action: resetForm },
+      { label: 'Highlight Fields', checked: !s.toggles.noFieldHighlight, action: () => s.toggle('noFieldHighlight') },
+      { label: 'Migrate Typewritten Text', disabled: noDoc, action: migrateTypewrittenText },
     ],
     Measure: [
       { label: 'Set Scale…', disabled: noDoc, action: () => doc && s.openScaleDialog({ page: doc.page }) },

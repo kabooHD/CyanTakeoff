@@ -126,8 +126,9 @@ src/ui/SketchBar.tsx), Camera (src/ui/Camera.tsx),
 Replace Checked (src/ui/Search.tsx); low-end machine pass (src/model/device.ts: undo
 memory budget, cold undo snapshots, canvas limits; docs/perf.md); CyanTakeoff (=Revu)
 and Batch menus; form filling (AcroForm inputs saved into the form) and
-field creation (Tools > field tools, X = signature field, Forms Editor
-Ctrl+Shift+F), image
+field creation (Tools > field tools incl. Button, X = signature field, Forms Editor
+Ctrl+Shift+F; form data import/export/merge/reset/migrate in src/model/formData.ts,
+src/ui/FormData.tsx), image
 signatures (draw/type, reusable), digital signatures (src/pdf/sign.ts:
 .pfx/.p12, PKCS#7 detached, incremental updates in src/pdf/incremental.ts;
 trust list src/model/trust.ts with chain checks, RFC 3161 timestamps;

@@ -151,6 +151,11 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
   Box, Signature Field; Revu default shortcut X adds a signature field):
   drag the box, then name the field. Radio buttons sharing a name form one
   group. Forms Editor (Ctrl+Shift+F) renames, re-options and deletes fields.
+- Form data (Tools > Form): Import Data (FDF; ours also XFDF/XML and CSV),
+  Export Data as FDF, XML (XFDF fields) or CSV, Merge Data (one CSV row per
+  open document), Reset (clears every field), Highlight Fields (the blue
+  tint), Migrate Typewritten Text (Typewriter markups inside a text field
+  become its value and are removed), Button fields with a caption.
 
 ## Compare
 - Compare Documents: pick the original and revised document/page; the

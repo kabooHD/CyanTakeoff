@@ -108,6 +108,7 @@ export const TOOLS: ToolDef[] = [
   { id: 'form-dropdown', name: 'Dropdown', group: 'form', interaction: 'box', subject: '' },
   { id: 'form-list', name: 'List Box', group: 'form', interaction: 'box', subject: '' },
   { id: 'form-signature', name: 'Signature Field', group: 'form', shortcut: 'X', interaction: 'box', subject: '' },
+  { id: 'form-button', name: 'Button', group: 'form', interaction: 'box', subject: '' },
 ];
 
 export const toolById = (id: ToolId) => TOOLS.find((t) => t.id === id)!;

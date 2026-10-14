@@ -217,6 +217,9 @@ filling, image signatures, redaction and OCR.
 - [x] XFDF export/import of markups (standard XFDF plus our measurement data
   in a namespaced element; Revu measurements round-trip; stamp artwork in
   <appearance>)
+- [x] Form data: Import (FDF/XFDF/CSV), Export (FDF/XML/CSV), Merge Data over
+  open documents, Reset, Highlight Fields, Migrate Typewritten Text, Button
+  fields
 - [x] Number Pages (styles, prefix, start, range), Create Page Labels from
   Bookmarks, Page Setup (media size, auto scale/percent, alignment, offset;
   annotations and scales follow)

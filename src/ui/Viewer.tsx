@@ -1819,7 +1819,7 @@ function FormLayer({ doc, pageIdx, zoom, interactive }: { doc: DocState; pageIdx
   const s = useApp();
   const items = doc.loaded.fields.flatMap((f) => f.widgets.filter((w) => w.page === pageIdx).map((w, i) => ({ f, w, i })));
   return (
-    <div className="form-layer" style={{ pointerEvents: 'none' }}>
+    <div className={`form-layer ${s.toggles.noFieldHighlight ? 'no-highlight' : ''}`} style={{ pointerEvents: 'none' }}>
       {items.map(({ f, w, i }) => {
         const [x0, y0, x1, y1] = w.rect;
         const style: React.CSSProperties = { left: x0 * zoom, top: y0 * zoom, width: (x1 - x0) * zoom, height: (y1 - y0) * zoom, fontSize: Math.max(8, Math.min(14, (y1 - y0) * 0.65)) * zoom, pointerEvents: interactive && !f.readOnly ? 'auto' : 'none' };

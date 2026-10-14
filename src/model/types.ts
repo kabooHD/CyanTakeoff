@@ -45,7 +45,7 @@ export type MarkupType =
   | 'redaction';
 
 export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cutout' | 'ellipse-cutout' | 'viewport' | 'radius-3pt' | 'dynamic-fill' | 'snapshot' | 'eraser' | 'lasso' | 'space' | 'redact-text' | 'visual-pick' | 'region-pick' | 'edit-text' | 'erase-content' | 'cut-content' | 'review-text' | 'sketch-polygon' | 'sketch-polyline' | 'sketch-rectangle' | 'sketch-ellipse' | 'select-text' | 'snapshot-content'
-  | 'form-text' | 'form-checkbox' | 'form-radio' | 'form-dropdown' | 'form-list' | 'form-signature';
+  | 'form-text' | 'form-checkbox' | 'form-radio' | 'form-dropdown' | 'form-list' | 'form-signature' | 'form-button';
 
 /** A hole subtracted from an Area or Volume measurement. Ellipse: two opposite corners. */
 /** Polygon cutouts may have curved edges (`handles`, as on markups). */
@@ -254,4 +254,6 @@ export interface Toggles {
   noLineWeights?: boolean;
   /** View > Always Show Reply Indicators: a bubble on markups that have replies. */
   replyIndicators?: boolean;
+  /** Form > Highlight Fields off: form fields drawn without their blue tint. */
+  noFieldHighlight?: boolean;
 }

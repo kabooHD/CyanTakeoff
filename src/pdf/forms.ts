@@ -70,7 +70,7 @@ export function writeFields(doc: PDFDocument, values: Record<string, FieldValue>
 
 // ---------------- Forms editor: create, rename, delete fields ----------------
 
-export type NewFieldType = 'text' | 'checkbox' | 'radio' | 'dropdown' | 'list' | 'signature';
+export type NewFieldType = 'text' | 'checkbox' | 'radio' | 'dropdown' | 'list' | 'signature' | 'button';
 
 export interface FieldSpec {
   type: NewFieldType;
@@ -83,6 +83,8 @@ export interface FieldSpec {
   multiline?: boolean;
   /** Radio: the value this button sets (buttons sharing a name form one group). */
   option?: string;
+  /** Button: its caption. */
+  caption?: string;
 }
 
 const box = (r: FieldSpec['rect']) => ({ x: Math.min(r[0], r[2]), y: Math.min(r[1], r[3]), width: Math.abs(r[2] - r[0]), height: Math.abs(r[3] - r[1]) });
@@ -124,6 +126,11 @@ export function createField(doc: PDFDocument, spec: FieldSpec) {
       const f = form.createOptionList(spec.name);
       f.addOptions(spec.options ?? []);
       f.addToPage(page, at);
+      break;
+    }
+    case 'button': {
+      const b = form.createButton(spec.name);
+      b.addToPage(spec.caption ?? spec.name, page, { ...at, borderWidth: 1 });
       break;
     }
     case 'signature': {

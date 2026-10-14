@@ -880,6 +880,24 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const form = filled.getForm();
   assert(form.getTextField('inspector').getText() === 'Sam Rivera' && form.getCheckBox('passed').isChecked()
     && form.getDropdown('trade').getSelected()[0] === 'Plumbing' && form.getRadioGroup('priority').getSelected() === 'high', 'form values saved into the PDF form');
+  // Form data: Export (FDF), Reset, Import back; Highlight Fields.
+  {
+    const toolsItem = async (name) => { await page.keyboard.press('Escape'); await page.getByRole('button', { name: 'Tools', exact: true }).click(); await page.getByRole('menuitem', { name }).click(); await page.waitForTimeout(300); };
+    const [xd] = await Promise.all([page.waitForEvent('download'), toolsItem('Export Form Data (FDF)')]);
+    const fdfPath = `${OUT}/form.fdf`;
+    await xd.saveAs(fdfPath);
+    const fdf = readFileSync(fdfPath, 'utf8');
+    assert(fdf.startsWith('%FDF-1.2') && fdf.includes('/T (inspector) /V (Sam Rivera)') && fdf.includes('/T (passed) /V /Yes'), 'Export Form Data writes the values as FDF');
+    await toolsItem('Reset Form');
+    assert(await page.getByLabel('inspector').inputValue() === '' && !(await page.getByLabel('passed').isChecked()), 'Reset Form clears the fields');
+    const [ifc] = await Promise.all([page.waitForEvent('filechooser'), toolsItem('Import Form Data…')]);
+    await ifc.setFiles(fdfPath);
+    await page.getByText(/Imported \d+ field values/).waitFor({ timeout: 10000 });
+    assert(await page.getByLabel('inspector').inputValue() === 'Sam Rivera' && await page.getByLabel('passed').isChecked(), 'Import Form Data fills the fields from the FDF');
+    await toolsItem('Highlight Fields');
+    assert(await page.locator('.form-layer.no-highlight').count() >= 1, 'Highlight Fields off removes the field tint');
+    await toolsItem('Highlight Fields');
+  }
 
   // Forms editor: create fields by dragging their box, rename/delete them, fill and save.
   const drag = async (fx0, fy0, fx1, fy1) => {

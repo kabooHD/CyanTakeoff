@@ -10,10 +10,10 @@ import { createField, deleteField, renameField, setFieldOptions, uniqueFieldName
 
 const KIND: Partial<Record<ToolId, NewFieldType>> = {
   'form-text': 'text', 'form-checkbox': 'checkbox', 'form-radio': 'radio',
-  'form-dropdown': 'dropdown', 'form-list': 'list', 'form-signature': 'signature',
+  'form-dropdown': 'dropdown', 'form-list': 'list', 'form-signature': 'signature', 'form-button': 'button',
 };
-const BASE: Record<NewFieldType, string> = { text: 'Text', checkbox: 'Check Box', radio: 'Radio', dropdown: 'Dropdown', list: 'List Box', signature: 'Signature' };
-const TITLE: Record<NewFieldType, string> = { text: 'Text Field', checkbox: 'Check Box', radio: 'Radio Button', dropdown: 'Dropdown', list: 'List Box', signature: 'Signature Field' };
+const BASE: Record<NewFieldType, string> = { text: 'Text', checkbox: 'Check Box', radio: 'Radio', dropdown: 'Dropdown', list: 'List Box', signature: 'Signature', button: 'Button' };
+const TITLE: Record<NewFieldType, string> = { text: 'Text Field', checkbox: 'Check Box', radio: 'Radio Button', dropdown: 'Dropdown', list: 'List Box', signature: 'Signature Field', button: 'Button' };
 
 export const useFormsDialog = create<{ draft: Omit<FieldSpec, 'name'> | null; editor: boolean }>(() => ({ draft: null, editor: false }));
 
@@ -62,11 +62,12 @@ function NewFieldForm({ doc, draft }: { doc: DocState; draft: Omit<FieldSpec, 'n
   const [option, setOption] = useState(() => uniqueFieldName(group?.options ?? [], 'Choice'));
   const [options, setOptions] = useState('');
   const [multiline, setMultiline] = useState(false);
+  const [caption, setCaption] = useState('Button');
   const close = () => useFormsDialog.setState({ draft: null });
   const clash = names.includes(name.trim()) && !(draft.type === 'radio' && group);
   const ok = async () => {
     close();
-    const spec: FieldSpec = { ...draft, name: name.trim(), option: option.trim(), options: lines(options), multiline };
+    const spec: FieldSpec = { ...draft, name: name.trim(), option: option.trim(), options: lines(options), multiline, caption: caption.trim() || name.trim() };
     await s.transformDoc((lib) => createField(lib, spec), `${TITLE[draft.type]} "${spec.name}" added`);
   };
   return (
@@ -78,6 +79,9 @@ function NewFieldForm({ doc, draft }: { doc: DocState; draft: Omit<FieldSpec, 'n
         </div>
         {draft.type === 'radio' && (
           <div className="form-row"><span>Value</span><input aria-label="Button value" value={option} onChange={(e) => setOption(e.target.value)} /></div>
+        )}
+        {draft.type === 'button' && (
+          <div className="form-row"><span>Caption</span><input aria-label="Button caption" value={caption} onChange={(e) => setCaption(e.target.value)} /></div>
         )}
         {draft.type === 'text' && (
           <div className="form-row"><label><input type="checkbox" checked={multiline} onChange={(e) => setMultiline(e.target.checked)} /> Multi-line</label></div>
