@@ -23,11 +23,12 @@ export interface PrintSettings extends PrintOptions { content: Content; dim: boo
 const DEFAULTS: PrintSettings = { ...DEFAULT_PRINT, content: 'both', dim: false, dpi: 150 };
 const LS = 'cyantakeoff:print';
 
-export const usePrintDialog = create<{ open: boolean }>(() => ({ open: false }));
-export const openPrint = () => {
+export const usePrintDialog = create<{ open: boolean; range?: Range }>(() => ({ open: false }));
+/** `range` presets the page range (Thumbnails > Print Pages uses 'selected'). */
+export const openPrint = (range?: Range) => {
   const s = useApp.getState(), d = s.docs.find((x) => x.id === s.activeId);
   if (d && !allowed(d.security, PERM.print)) { s.setStatus('Printing is not allowed by this file\'s security settings.'); return; }
-  usePrintDialog.setState({ open: true });
+  usePrintDialog.setState({ open: true, range });
 };
 
 function loadSettings(): PrintSettings {
@@ -182,7 +183,7 @@ export function PrintDialog() {
 
 function PrintForm({ d }: { d: DocState }) {
   const [o, setO] = useState<PrintSettings>(loadSettings);
-  const [range, setRange] = useState<Range>('all');
+  const [range, setRange] = useState<Range>(() => usePrintDialog.getState().range ?? 'all');
   const [custom, setCustom] = useState(`1-${d.loaded.pages.length}`);
   const [sheet, setSheet] = useState(0);
   const thumbSel = useThumbSel((x) => x.sel[d.id]);

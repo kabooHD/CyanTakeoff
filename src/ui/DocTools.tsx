@@ -270,17 +270,22 @@ function DeskewDialog({ d }: { d: DocState }) {
 
 /** Send the document: the system share sheet with the file where the browser has one, else download and an email draft. */
 export async function emailDocument() {
-  const s = useApp.getState(), d = activeDoc();
+  const d = activeDoc();
   if (!d) return;
-  const bytes = await serialize(d);
-  const file = new File([bytes as BlobPart], d.name, { type: 'application/pdf' });
+  await emailBytes(await serialize(d), d.name);
+}
+
+/** Share a PDF by email: the system share sheet when it takes files, else a download plus a mailto draft. */
+export async function emailBytes(bytes: Uint8Array, name: string) {
+  const s = useApp.getState();
+  const file = new File([bytes as BlobPart], name, { type: 'application/pdf' });
   const nav = navigator as Navigator & { canShare?: (x: object) => boolean };
   if (nav.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: d.name }); return; } catch (e) { if ((e as Error).name === 'AbortError') return; }
+    try { await navigator.share({ files: [file], title: name }); return; } catch (e) { if ((e as Error).name === 'AbortError') return; }
   }
-  download(bytes, d.name);
-  location.href = `mailto:?subject=${encodeURIComponent(d.name)}&body=${encodeURIComponent(`Please find ${d.name} attached.`)}`;
-  s.setStatus(`${d.name} was downloaded; attach it to the email that opened.`);
+  download(bytes, name);
+  location.href = `mailto:?subject=${encodeURIComponent(name)}&body=${encodeURIComponent(`Please find ${name} attached.`)}`;
+  s.setStatus(`${name} was downloaded; attach it to the email that opened.`);
 }
 
 /** Save a compressed copy (images resampled to 150 dpi, unused data removed); the open document is unchanged. */

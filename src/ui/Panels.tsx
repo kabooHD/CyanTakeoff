@@ -31,7 +31,17 @@ import { SetsPanel } from './Sheets';
 import { pickFile } from './toolActions';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { openPagesDialog } from './PagesDialog';
-import { deletePages, movePage, rotatePages } from '../pdf/pages';
+import { deletePages, extractPages, movePage, rotatePages, writePageLabels } from '../pdf/pages';
+import { PDFDocument } from 'pdf-lib';
+import { serialize } from '../model/store';
+import { copyPages, hasPageClipboard, pastePages } from './pageClipboard';
+import { copyPageToSnapshot } from './textCommands';
+import { useApplyStamp } from './ApplyStamp';
+import { useColorProcess } from './ColorProcess';
+import { useSheetsDialog } from './Sheets';
+import { openPrint } from './Print';
+import { emailBytes } from './DocTools';
+import { exportSummaryCsv } from './actions';
 import { legendKey } from '../model/legend';
 
 // ---------------- side tab strips ----------------
@@ -100,11 +110,11 @@ const NO_PAGES: number[] = [];
 export const selectedPages = (d: DocState): number[] =>
   (useThumbSel.getState().sel[d.id] ?? []).filter((i) => i < d.loaded.pages.length).sort((a, b) => a - b);
 
-function Thumb({ doc, index, selected, onClick }: { doc: DocState; index: number; selected: boolean; onClick: (e: React.MouseEvent) => void }) {
+function Thumb({ doc, index, selected, onClick, w = 130, labels }: { doc: DocState; index: number; selected: boolean; onClick: (e: React.MouseEvent) => void; w?: number; labels: ThumbLabels }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
   const p = doc.loaded.pages[index];
-  const w = 130, h = (p.height / p.width) * w;
+  const h = (p.height / p.width) * w;
   useEffect(() => {
     const io = new IntersectionObserver(([e]) => e.isIntersecting && setVisible(true));
     io.observe(ref.current!);
@@ -127,13 +137,26 @@ function Thumb({ doc, index, selected, onClick }: { doc: DocState; index: number
   return (
     <div className={`thumb ${doc.page === index ? 'active' : ''} ${selected ? 'selected' : ''}`} aria-selected={selected} onClick={onClick}>
       <canvas ref={ref} style={{ width: w, height: h }} />
-      <div className="thumb-label">{p.label}{count ? <span className="thumb-count">{count}</span> : null}{flagged ? <span className="thumb-flag" title="This page has a flag">⚑</span> : null}</div>
+      {labels.label && <div className="thumb-label">{p.label}{count ? <span className="thumb-count">{count}</span> : null}{flagged ? <span className="thumb-flag" title="This page has a flag">⚑</span> : null}</div>}
+      {labels.scale && <div className="thumb-scale muted small" title="Page scale (double-click to set)" onDoubleClick={(e) => { e.stopPropagation(); useApp.getState().openScaleDialog({ page: index }); }}>{doc.calibrations[index]?.label ?? 'Scale Not Set'}</div>}
     </div>
   );
 }
 
+interface ThumbLabels { label: boolean; scale: boolean }
+/** Thumbnails panel settings (Labels menu, size slider), kept per browser. */
+export const useThumbPrefs = create<{ labels: ThumbLabels; size: number }>(() => {
+  try { const v = JSON.parse(localStorage.getItem('ct-thumbs') ?? 'null'); if (v?.labels && v.size) return v; } catch { /* fresh */ }
+  return { labels: { label: true, scale: false }, size: 130 };
+});
+const setThumbPrefs = (p: Partial<{ labels: ThumbLabels; size: number }>) => {
+  useThumbPrefs.setState(p);
+  try { localStorage.setItem('ct-thumbs', JSON.stringify(useThumbPrefs.getState())); } catch { /* storage unavailable */ }
+};
+
 function Thumbnails({ doc }: { doc: DocState }) {
   const s = useApp();
+  const { labels, size } = useThumbPrefs();
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [drag, setDrag] = useState<number | null>(null);
   const sel = useThumbSel((x) => x.sel[doc.id] ?? NO_PAGES);
@@ -148,25 +171,89 @@ function Thumbnails({ doc }: { doc: DocState }) {
     setSel([index]);
     s.setPage(index);
   };
-  const onMenu = (e: React.MouseEvent, index: number) => {
-    e.preventDefault();
-    s.setPage(index);
-    const rot = (d: 90 | -90) => s.transformDoc((lib) => rotatePages(lib, [index], d), d > 0 ? 'Rotated clockwise' : 'Rotated counterclockwise');
-    setMenu({ x: e.clientX, y: e.clientY, items: [
-      { label: 'Insert Pages…', action: () => openPagesDialog('insert') },
+  /** The pages a command works on: the selection, else the current page. */
+  const target = () => (sel.length ? [...sel].sort((a, b) => a - b) : [doc.page]);
+  const relabel = () => {
+    const i = doc.page;
+    const v = prompt('Page label', doc.loaded.pages[i].label);
+    if (v === null) return;
+    const labels = doc.loaded.pages.map((p, k) => (k === i ? v.trim() : p.label));
+    s.transformDoc((lib) => writePageLabels(lib, labels), `Page ${i + 1} labelled "${v.trim()}"`);
+  };
+  const exportPages = async () => {
+    const pages = target();
+    const lib = await PDFDocument.load(await serialize(doc), { updateMetadata: false });
+    const bytes = await (await extractPages(lib, pages)).save();
+    const href = URL.createObjectURL(new Blob([bytes as unknown as BlobPart], { type: 'application/pdf' }));
+    Object.assign(document.createElement('a'), { href, download: `${doc.name.replace(/\.pdf$/i, '')} - pages ${pages.map((p) => p + 1).join(',')}.pdf`.slice(0, 120) }).click();
+    setTimeout(() => URL.revokeObjectURL(href), 10_000);
+    s.setStatus(`Exported ${pages.length} page${pages.length === 1 ? '' : 's'}`);
+  };
+  const emailPages = async () => {
+    const pages = target();
+    const lib = await PDFDocument.load(await serialize(doc), { updateMetadata: false });
+    const bytes = await (await extractPages(lib, pages)).save();
+    await emailBytes(bytes, `${doc.name.replace(/\.pdf$/i, '')} - pages ${pages.map((p) => p + 1).join(',')}.pdf`);
+  };
+  const printPages = () => { if (!sel.length) setSel([doc.page]); openPrint('selected'); };
+  const commands = (index: number): MenuItem[] => {
+    const rot = (d: 90 | -90) => s.transformDoc((lib) => rotatePages(lib, target(), d), d > 0 ? 'Rotated clockwise' : 'Rotated counterclockwise');
+    const n = target().length;
+    const some = n === 1 ? '' : ` (${n})`;
+    return [
+      { label: 'Page Setup…', action: () => usePageSetup.setState({ open: 'setup' }) },
+      { sep: true },
+      { label: `Cut Pages${some}`, disabled: doc.loaded.pages.length < 2, action: () => copyPages(doc, target(), true) },
+      { label: `Copy Pages${some}`, action: () => copyPages(doc, target()) },
+      { label: 'Copy Page to Snapshot', shortcut: 'Ctrl+Alt+C', action: () => copyPageToSnapshot() },
+      { label: 'Paste Pages', disabled: !hasPageClipboard(), action: () => pastePages(index) },
+      { label: 'Apply Stamp…', action: () => useApplyStamp.setState({ open: true }) },
+      { sep: true },
       { label: 'Insert Blank Page…', action: () => openPagesDialog('insert-blank') },
-      { label: 'Number Pages…', action: () => usePageSetup.setState({ open: 'number' }) },
-      { label: 'Create Page Labels from Bookmarks…', action: () => usePageSetup.setState({ open: 'bookmarks' }) },
+      { label: 'Insert Pages…', action: () => openPagesDialog('insert') },
       { label: 'Extract Pages…', action: () => openPagesDialog('extract') },
       { label: 'Replace Pages…', action: () => openPagesDialog('replace') },
-      { label: 'Delete Page', disabled: doc.loaded.pages.length < 2, action: () => s.transformDoc((lib) => deletePages(lib, [index]), 'Page deleted') },
-      { sep: true },
+      { label: `Delete Page${some}`, disabled: doc.loaded.pages.length <= n, action: () => s.transformDoc((lib) => deletePages(lib, target()), `Deleted ${n} page${n === 1 ? '' : 's'}`) },
       { label: 'Rotate Clockwise', shortcut: 'Shift+Alt+Plus', action: () => rot(90) },
       { label: 'Rotate Counterclockwise', shortcut: 'Shift+Alt+Minus', action: () => rot(-90) },
+      { sep: true },
+      { label: 'Number Pages…', action: () => usePageSetup.setState({ open: 'number' }) },
+      { label: 'Create Page Labels from Bookmarks…', action: () => usePageSetup.setState({ open: 'bookmarks' }) },
+      { label: 'Re-Label…', action: relabel },
+      { label: 'Set Scale…', action: () => s.openScaleDialog({ page: index }) },
+      { sep: true },
+      { label: `Export Pages${some}`, action: exportPages },
+      { label: `Email Pages${some}`, action: emailPages },
+      { label: `Print Pages${some}…`, action: printPages },
+      { label: 'Repair PDF…', action: () => useColorProcess.setState({ open: 'repair' }) },
+      { label: 'Flatten…', action: () => openPagesDialog('flatten') },
+      { label: 'Markup Summary (CSV)', action: () => exportSummaryCsv() },
+    ];
+  };
+  const onMenu = (e: React.MouseEvent, index: number) => {
+    e.preventDefault();
+    if (!sel.includes(index)) { s.setPage(index); setSel([index]); } else s.setPage(index);
+    setMenu({ x: e.clientX, y: e.clientY, items: commands(index) });
+  };
+  const openToolbarMenu = (e: React.MouseEvent) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setMenu({ x: r.left, y: r.bottom, items: commands(doc.page) });
+  };
+  const openLabelsMenu = (e: React.MouseEvent) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setMenu({ x: r.left, y: r.bottom, items: [
+      { label: 'Page Label', checked: labels.label, action: () => setThumbPrefs({ labels: { ...labels, label: !labels.label } }) },
+      { label: 'Page Scale', checked: labels.scale, action: () => setThumbPrefs({ labels: { ...labels, scale: !labels.scale } }) },
     ] });
   };
   return (
     <div className="thumbs">
+      <div className="panel-toolbar thumbs-toolbar">
+        <button title="Page commands" aria-label="Thumbnails menu" onClick={openToolbarMenu}>Thumbnails ▾</button>
+        <button title="Show page labels and scales under the thumbnails" aria-label="Labels menu" onClick={openLabelsMenu}>Labels ▾</button>
+        <button title="Create Page Labels from the title block or bookmarks" onClick={() => useSheetsDialog.setState({ open: 'labels' })}>Create Page Label</button>
+        <input type="range" aria-label="Thumbnail size" min={70} max={260} step={10} value={size} onChange={(e) => setThumbPrefs({ size: Number(e.target.value) })} title="Thumbnail size" />
+      </div>
       {doc.loaded.pages.map((p) => (
         <div key={`${doc.id}-${p.index}`} draggable onDragStart={(e) => { setDrag(p.index); e.dataTransfer.effectAllowed = 'move'; }}
           onDragOver={(e) => { if (drag !== null) e.preventDefault(); }}
@@ -177,7 +264,7 @@ function Thumbnails({ doc }: { doc: DocState }) {
           }}
           onDragEnd={() => setDrag(null)}
           onContextMenu={(e) => onMenu(e, p.index)}>
-          <Thumb doc={doc} index={p.index} selected={sel.includes(p.index)} onClick={(e) => click(e, p.index)} />
+          <Thumb doc={doc} index={p.index} selected={sel.includes(p.index)} onClick={(e) => click(e, p.index)} w={size} labels={labels} />
         </div>
       ))}
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}

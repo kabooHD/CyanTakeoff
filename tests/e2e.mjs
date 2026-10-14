@@ -690,6 +690,44 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.getByRole('dialog', { name: 'Insert Blank Page' }).getByRole('button', { name: 'OK' }).click();
   await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n + 1})`), n0);
   assert(await pagesOf() === n0 + 1, 'Insert Blank Page adds a page');
+  // Thumbnails toolbar: Copy / Paste / Cut Pages, Labels > Page Scale, Re-Label.
+  {
+    const windowPanel = async (name) => { await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click(); await page.getByRole('menuitem', { name }).click(); };
+    if (!(await page.locator('.thumbs-toolbar').count())) await windowPanel('Thumbnails');
+    await page.locator('.thumbs-toolbar').waitFor();
+    const n1 = await pagesOf();
+    await page.locator('.thumb').first().click();
+    await page.getByRole('button', { name: 'Thumbnails menu' }).click();
+    await page.getByRole('menuitem', { name: /^Copy Pages/ }).click();
+    await page.getByText(/Copied 1 page/).waitFor();
+    await page.getByRole('button', { name: 'Thumbnails menu' }).click();
+    await page.getByRole('menuitem', { name: 'Paste Pages' }).click();
+    await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n + 1})`), n1);
+    assert(await pagesOf() === n1 + 1, 'Copy Pages + Paste Pages adds the copied page');
+    await page.getByRole('button', { name: 'Labels menu' }).click();
+    await page.getByRole('menuitem', { name: 'Page Scale' }).click();
+    assert(await page.locator('.thumb-scale').count() === n1 + 1, 'Labels > Page Scale shows the scale under every thumbnail');
+    await page.getByRole('button', { name: 'Labels menu' }).click();
+    await page.getByRole('menuitem', { name: 'Page Scale' }).click();
+    page.once('dialog', (d) => d.accept('X-1'));
+    await page.getByRole('button', { name: 'Thumbnails menu' }).click();
+    await page.getByRole('menuitem', { name: 'Re-Label…' }).click();
+    await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('labelled "X-1"'));
+    assert((await page.locator('.thumb-label').allInnerTexts()).some((t) => t.startsWith('X-1')), 'Re-Label changes the page label');
+    await page.getByRole('button', { name: 'Thumbnails menu' }).click();
+    await page.getByRole('menuitem', { name: /^Cut Pages/ }).click();
+    await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n})`), n1);
+    assert(await pagesOf() === n1, 'Cut Pages removes the page (it stays on the page clipboard)');
+    await page.locator('.thumbs-toolbar input[type=range]').fill('90');
+    const w = await page.locator('.thumb canvas').first().evaluate((c) => c.getBoundingClientRect().width);
+    assert(Math.round(w) === 90, `the size slider resizes the thumbnails (${w})`);
+    await page.locator('.thumbs-toolbar input[type=range]').fill('130');
+    // Undo the cut, the relabel and the paste so the page-operation checks below see the document as before.
+    await page.evaluate(() => document.activeElement?.blur?.());
+    for (let i = 0; i < 3; i++) { await page.keyboard.press('Control+z'); await page.waitForTimeout(400); }
+    await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n})`), n1);
+    assert(!(await page.locator('.thumb-label').allInnerTexts()).some((t) => t.startsWith('X-1')), 'undo reverts the thumbnail page commands');
+  }
   // File > Create Layered PDF: each chosen file becomes a layer of a new document; File > Open Recent lists recent files.
   {
     const tabs = await page.locator('.doc-tab').count();

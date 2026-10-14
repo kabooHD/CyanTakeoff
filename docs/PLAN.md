@@ -225,6 +225,8 @@ filling, image signatures, redaction and OCR.
   indicator)
 - [x] Sets: Tags (standard/custom, AutoMark, derived Discipline/Sheet Type)
   and Export Drawing Log (CSV/PDF)
+- [x] Thumbnails toolbar: Cut/Copy/Paste Pages, Re-Label, Export/Email/Print
+  Pages, Labels (Page Label, Page Scale), size slider
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

@@ -570,3 +570,7 @@ label.button, a.button { display: inline-block; padding: 2px 8px; border: 1px so
 .tag-head-actions button:hover { opacity: 1; }
 .log-elements { display: flex; flex-direction: column; gap: 2px; }
 .log-element { display: flex; align-items: center; gap: 6px; }
+
+.thumbs-toolbar { position: sticky; top: 0; z-index: 2; background: var(--panel-bg, #f4f4f4); width: 100%; box-sizing: border-box; display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 6px; align-items: center; }
+.thumbs-toolbar input[type=range] { width: 70px; }
+.thumb-scale { font-size: 10px; cursor: pointer; }

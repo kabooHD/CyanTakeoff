@@ -636,6 +636,19 @@ Print Spaces.
 - Search > Replace Checked: replaces the checked results in the drawing's
   text (as Edit Text does).
 
+## Thumbnails panel toolbar
+Thumbnails menu: Page Setup, Cut / Copy / Paste Pages (pages move between
+open documents with their markups; a paste goes after the current page),
+Copy Page to Snapshot, Apply Stamp, Insert Blank Page, Insert Pages,
+Extract, Replace, Delete, Rotate, Number Pages, Create Page Labels,
+Re-Label (the current page's label), Set Scale, Export Pages (a PDF of
+the selected pages), Email Pages, Print Pages (the Print dialog preset to
+the selected pages), Repair PDF, Flatten, Markup Summary. Commands act on
+the selected thumbnails (Ctrl/Shift+click), else the current page; the
+same menu opens on right-click. Labels menu: Page Label, Page Scale
+(double-click the scale to set it). Create Page Label button; size
+slider.
+
 ## Flags panel (Window > Flags)
 Flags are for jumping to pages and places. Linked flags are Flag markups
 (Shift+F; title and colour follow the markup, click jumps to it; the
