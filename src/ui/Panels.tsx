@@ -5,6 +5,7 @@ import { HatchSelect, LineStyleSelect } from './LineStyles';
 import { LayersPanel } from './LayersPanel';
 import { LinksPanel } from './LinksPanel';
 import { FlagsPanel } from './FlagsPanel';
+import { DocumentProps } from './DocumentProps';
 import { flaggedPages } from '../model/flags';
 import { StatusSelect } from './StatusModels';
 import { FileAccessPanel } from './FileAccess';
@@ -310,7 +311,8 @@ function Properties() {
   if (!sel.length) {
     const t = toolById(s.tool);
     if (s.tool === 'select' || s.tool === 'pan' || s.tool === 'zoom' || s.tool === 'calibrate') {
-      return <p className="muted pad">Select a markup to view and edit its properties, or choose a markup tool to set its defaults.</p>;
+      // Revu: with nothing selected the panel shows the document's properties.
+      return doc ? <DocumentProps doc={doc} /> : <p className="muted pad">Select a markup to view and edit its properties, or choose a markup tool to set its defaults.</p>;
     }
     const type = s.tool as MarkupType;
     // Tools that draw no markup of their own (form fields, viewports, lasso...) have no style defaults.

@@ -574,3 +574,7 @@ label.button, a.button { display: inline-block; padding: 2px 8px; border: 1px so
 .thumbs-toolbar { position: sticky; top: 0; z-index: 2; background: var(--panel-bg, #f4f4f4); width: 100%; box-sizing: border-box; display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 6px; align-items: center; }
 .thumbs-toolbar input[type=range] { width: 70px; }
 .thumb-scale { font-size: 10px; cursor: pointer; }
+
+.doc-props .custom-add { display: flex; gap: 4px; }
+.doc-props .custom-add input { flex: 1; min-width: 0; }
+.doc-props .attachment-row > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

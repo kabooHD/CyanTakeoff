@@ -230,6 +230,8 @@ filling, image signatures, redaction and OCR.
 - [x] Search panel: Markups / Form Fields / File Properties scopes, Select All,
   Check Options (Hyperlink, Redaction, Count, Highlight, Underline, Squiggly,
   Strikethrough), Clear
+- [x] Properties panel document mode: File Properties, Custom Properties,
+  File Attachments
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

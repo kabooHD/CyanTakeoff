@@ -2528,6 +2528,38 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.screenshot({ path: `${OUT}/doc-properties.png` });
   await page.keyboard.press('Escape');
   assert(await dlg.count() === 0, 'Esc closes Document Properties');
+  // Properties panel with nothing selected: File Properties, Custom Properties, File Attachments.
+  {
+    await page.keyboard.press('Escape');
+    if (!(await page.locator('.doc-props').count())) await page.keyboard.press('Alt+P');
+    const dp = page.locator('.doc-props');
+    await dp.waitFor();
+    await page.waitForFunction(() => document.querySelector('.doc-props [aria-label="Document title"]')?.value === 'E2E Title', null, { timeout: 10000 });
+    assert(true, 'the Properties panel shows the document title when nothing is selected');
+    await dp.getByLabel('Document author').fill('Panel Author');
+    await dp.getByLabel('Document author').press('Enter');
+    await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Document properties changed'));
+    await dp.getByLabel('New property name').fill('Project');
+    await dp.getByLabel('New property value').fill('P-12');
+    await dp.getByRole('button', { name: 'Add', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Custom properties changed'));
+    await dp.getByLabel('Custom property Project').waitFor({ timeout: 10000 });
+    assert(await dp.getByLabel('Custom property Project').inputValue() === 'P-12', 'a custom property is added and read back from the file');
+    const [afc] = await Promise.all([page.waitForEvent('filechooser'), dp.getByRole('button', { name: 'Add New…' }).click()]);
+    await afc.setFiles('tests/fixtures/form.pdf');
+    await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Attached form.pdf'));
+    await dp.locator('.attachment-row', { hasText: 'form.pdf' }).waitFor({ timeout: 10000 });
+    assert(true, 'Add New attaches a file to the document');
+    await dp.getByRole('button', { name: 'Delete attachment form.pdf' }).click();
+    await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Removed attachment form.pdf'));
+    await page.waitForFunction(() => !document.querySelector('.doc-props .attachment-row'), null, { timeout: 10000 });
+    assert(true, 'Delete removes the attachment');
+    await dp.getByRole('button', { name: 'Delete property Project' }).click();
+    await page.waitForFunction(() => !document.querySelector('.doc-props [aria-label="Custom property Project"]'), null, { timeout: 10000 });
+    await page.waitForFunction(() => !document.querySelector('.busy-overlay'));
+    await page.evaluate(() => document.activeElement?.blur?.());
+    await page.waitForTimeout(300);
+  }
 
   await page.keyboard.press('F4');
   assert(await page.locator('.sb-nav').count() === 0, 'F4 hides the navigation bar');

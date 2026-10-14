@@ -557,6 +557,11 @@ mm) with Fit/Reduce to Margins and Center. Not yet: Dim Filtered Markups,
 Print Spaces.
 
 ## Small commands (Window, Document, Markup menus)
+- Properties panel with nothing selected: File Properties (title, author,
+  subject, keywords; Enter or leaving the field saves), Custom Properties
+  (own Info entries: add, edit, delete) and File Attachments of the
+  document (Open saves the file, Add New, Delete; the File Attachment
+  markups are separate).
 - Document Properties (Ctrl+D): title, author, subject, keywords (editable,
   saved in the file) and file facts (creator, producer, dates, version,
   pages, page size, file size, security).
