@@ -2,9 +2,10 @@
 // paper, and where. Paper size Auto follows each page; page scaling None,
 // Fit to Paper, Reduce to Paper or a custom percentage; several pages per
 // sheet in a grid; auto-rotation turns a page to match the paper; copies,
-// collate and reverse order. All sizes are in PDF points (1/72 inch).
+// collate and reverse order; margins (Fit/Reduce to Margins keep the page
+// inside them). All sizes are in PDF points (1/72 inch).
 
-export type Scaling = 'none' | 'fit' | 'reduce' | 'custom';
+export type Scaling = 'none' | 'fit' | 'reduce' | 'custom' | 'fitMargins' | 'reduceMargins';
 export type Orientation = 'portrait' | 'landscape';
 
 export interface PaperSize { name: string; w: number; h: number }
@@ -40,11 +41,15 @@ export interface PrintOptions {
   copies: number;
   collate: boolean;
   reverse: boolean;
+  /** Printer margins in points (top, right, bottom, left); Fit/Reduce to Margins stay inside them. */
+  margins: [number, number, number, number];
+  /** Centre each page in its cell (else top-left). */
+  center: boolean;
 }
 
 export const DEFAULT_PRINT: PrintOptions = {
   paper: 'auto', orientation: 'portrait', scaling: 'fit', customScale: 100, autoRotate: true,
-  perSheet: 1, copies: 1, collate: true, reverse: false,
+  perSheet: 1, copies: 1, collate: true, reverse: false, margins: [18, 18, 18, 18], center: true,
 };
 
 /** A page placed on a sheet: its box on the sheet (top-left origin), scale, and rotation (0 or 90, clockwise). */
@@ -65,11 +70,13 @@ export function printOrder(pages: number[], o: Pick<PrintOptions, 'copies' | 'co
   return o.collate ? Array.from({ length: n }, () => list).flat() : list.flatMap((p) => Array(n).fill(p));
 }
 
-/** Scale of a w×h page inside a cell of cw×ch. */
-function fitScale(w: number, h: number, cw: number, ch: number, o: PrintOptions): number {
-  const fit = Math.min(cw / w, ch / h);
+/** Scale of a w×h page inside a cell of cw×ch (iw×ih is the cell inside the margins). */
+function fitScale(w: number, h: number, cw: number, ch: number, iw: number, ih: number, o: PrintOptions): number {
+  const fit = Math.min(cw / w, ch / h), fitM = Math.min(iw / w, ih / h);
   if (o.scaling === 'fit') return fit;
   if (o.scaling === 'reduce') return Math.min(1, fit);
+  if (o.scaling === 'fitMargins') return fitM;
+  if (o.scaling === 'reduceMargins') return Math.min(1, fitM);
   if (o.scaling === 'custom') return Math.max(1, o.customScale) / 100;
   return 1;
 }
@@ -94,14 +101,22 @@ export function layoutSheets(sizes: { w: number; h: number }[], order: number[],
     }
     const [cols, rows] = grid(perSheet, sw > sh);
     const cw = sw / cols, ch = sh / rows;
+    // Margins apply to the sheet; inside a grid, each cell keeps its share of them.
+    const [mt, mr, mb, ml] = paper ? (o.margins ?? [0, 0, 0, 0]).map((m) => Math.max(0, m)) : [0, 0, 0, 0];
+    const iw = Math.max(1, cw - (ml + mr) / cols), ih = Math.max(1, ch - (mt + mb) / rows);
+    const toMargins = o.scaling === 'fitMargins' || o.scaling === 'reduceMargins';
     const items = pages.map((page, k): Placed => {
       const { w, h } = sizes[page];
       // Auto-rotate when the page's shape is the opposite of its cell's.
       const rotate: 0 | 90 = paper && o.autoRotate && (w > h) !== (cw > ch) && Math.abs(w - h) > 1e-6 ? 90 : 0;
       const [rw, rh] = rotate ? [h, w] : [w, h];
-      const scale = paper ? fitScale(rw, rh, cw, ch, o) : 1;
+      const scale = paper ? fitScale(rw, rh, cw, ch, iw, ih, o) : 1;
       const col = k % cols, row = Math.floor(k / cols);
-      const x = col * cw + (cw - rw * scale) / 2, y = row * ch + (ch - rh * scale) / 2;
+      // The box the page is placed in: the cell, or the cell inside the margins.
+      const bx = col * cw + (toMargins ? ml / cols : 0), by = row * ch + (toMargins ? mt / rows : 0);
+      const bw = toMargins ? iw : cw, bh = toMargins ? ih : ch;
+      const center = o.center ?? true;
+      const x = bx + (center ? (bw - rw * scale) / 2 : 0), y = by + (center ? (bh - rh * scale) / 2 : 0);
       return { page, x, y, w: rw * scale, h: rh * scale, scale, rotate };
     });
     sheets.push({ w: sw, h: sh, items });

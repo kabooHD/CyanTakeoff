@@ -398,8 +398,10 @@ Dim Filtered Markups, Print Spaces, Print Visible Hyperlinks, Defaults.
 Ours: the browser picks the printer, so the dialog prepares the sheets
 (rendered at 150 or 300 dpi, capped per page for low-memory machines) and
 opens the browser's print dialog. Layers print when shown and their Print
-usage is on; markups on hidden layers do not print. Not yet: Selected
-pages, margins options, Dim Filtered Markups, Print Spaces.
+usage is on; markups on hidden layers do not print. Selected pages come
+from the Thumbnails panel (click, Ctrl+click, Shift+click); margins (in or
+mm) with Fit/Reduce to Margins and Center. Not yet: Dim Filtered Markups,
+Print Spaces.
 
 ## Small commands (Window, Document, Markup menus)
 - Document Properties (Ctrl+D): title, author, subject, keywords (editable,

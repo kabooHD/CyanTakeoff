@@ -51,3 +51,28 @@ describe('print layout', () => {
     expect(ARCH_D.w * ARCH_D.h * s * s).toBeLessThanOrEqual(16_777_216 + 1);
   });
 });
+
+describe('print margins', () => {
+  const letter = { ...DEFAULT_PRINT, paper: 'Letter', margins: [36, 36, 36, 36] as [number, number, number, number] };
+  it('fit to margins keeps the page inside the margins', () => {
+    const it0 = layoutSheets([LETTER], [0], { ...letter, scaling: 'fitMargins' })[0].items[0];
+    expect(it0.scale).toBeCloseTo((8.5 * 72 - 72) / (8.5 * 72));
+    expect(it0.x).toBeCloseTo(36);
+    expect(it0.y).toBeGreaterThanOrEqual(36);
+  });
+  it('reduce to margins never enlarges', () => {
+    const small = { w: 200, h: 300 };
+    const it0 = layoutSheets([small], [0], { ...letter, scaling: 'reduceMargins' })[0].items[0];
+    expect(it0.scale).toBe(1);
+    expect(it0.x).toBeCloseTo(36 + (8.5 * 72 - 72 - 200) / 2);
+  });
+  it('center off places the page at the top-left of its box', () => {
+    const it0 = layoutSheets([{ w: 200, h: 300 }], [0], { ...letter, scaling: 'reduceMargins', center: false })[0].items[0];
+    expect([it0.x, it0.y]).toEqual([36, 36]);
+    const it1 = layoutSheets([{ w: 200, h: 300 }], [0], { ...letter, scaling: 'reduce', center: false })[0].items[0];
+    expect([it1.x, it1.y]).toEqual([0, 0]);
+  });
+  it('fit to paper ignores the margins', () => {
+    expect(layoutSheets([LETTER], [0], { ...letter, scaling: 'fit' })[0].items[0].scale).toBe(1);
+  });
+});

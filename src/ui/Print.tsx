@@ -14,8 +14,9 @@ import { loadForRender } from '../pdf/document';
 import { layerShown } from './layersView';
 import { PERM, allowed } from '../pdf/crypt';
 import { deviceMemoryGB } from '../model/device';
+import { selectedPages, useThumbSel } from './Panels';
 
-type Range = 'all' | 'current' | 'custom';
+type Range = 'all' | 'current' | 'selected' | 'custom';
 type Content = 'both' | 'document' | 'markups';
 export interface PrintSettings extends PrintOptions { content: Content; dim: boolean; dpi: number }
 const DEFAULTS: PrintSettings = { ...DEFAULT_PRINT, content: 'both', dim: false, dpi: 150 };
@@ -88,6 +89,7 @@ async function renderPage(d: DocState, src: Sources, page: number, scale: number
 export function pagesToPrint(d: DocState, range: Range, custom: string): number[] {
   const n = d.loaded.pages.length;
   if (range === 'current') return [d.page];
+  if (range === 'selected') return selectedPages(d);
   if (range === 'custom') return parsePageRange(custom, n);
   return Array.from({ length: n }, (_, i) => i);
 }
@@ -172,9 +174,11 @@ function PrintForm({ d }: { d: DocState }) {
   const [range, setRange] = useState<Range>('all');
   const [custom, setCustom] = useState(`1-${d.loaded.pages.length}`);
   const [sheet, setSheet] = useState(0);
+  const thumbSel = useThumbSel((x) => x.sel[d.id]);
+  const [unit, setUnit] = useState<'in' | 'mm'>(() => /^(en-US|en-CA)/.test(navigator.language) ? 'in' : 'mm');
   const set = (p: Partial<PrintSettings>) => { setO((x) => ({ ...x, ...p })); setSheet(0); };
   const close = () => usePrintDialog.setState({ open: false });
-  const pages = useMemo(() => pagesToPrint(d, range, custom), [d, range, custom]);
+  const pages = useMemo(() => pagesToPrint(d, range, custom), [d, range, custom, thumbSel]); // eslint-disable-line react-hooks/exhaustive-deps
   const sheets = useMemo(() => sheetsFor(d, pages, o), [d, pages, o]);
   const fixedPaper = o.paper !== 'auto';
   const ok = async () => {
@@ -188,7 +192,7 @@ function PrintForm({ d }: { d: DocState }) {
         <div className="modal-title">Print</div>
         <div className="print-body">
           <div className="print-preview">
-            <Preview d={d} sheet={sheets[Math.min(sheet, sheets.length - 1)]} />
+            <Preview d={d} sheet={sheets[Math.min(sheet, sheets.length - 1)]} margins={fixedPaper && (o.scaling === 'fitMargins' || o.scaling === 'reduceMargins') ? o.margins : undefined} />
             <div className="print-nav">
               <button aria-label="Previous sheet" disabled={sheet <= 0} onClick={() => setSheet(sheet - 1)}>‹</button>
               <span>{sheets.length ? `Sheet ${Math.min(sheet, sheets.length - 1) + 1} of ${sheets.length}` : 'No pages'}</span>
@@ -201,6 +205,7 @@ function PrintForm({ d }: { d: DocState }) {
               <select aria-label="Page range" value={range} onChange={(e) => { setRange(e.target.value as Range); setSheet(0); }}>
                 <option value="all">All Pages</option>
                 <option value="current">Current ({d.loaded.pages[d.page]?.label})</option>
+                <option value="selected" disabled={!selectedPages(d).length}>Selected ({selectedPages(d).length})</option>
                 <option value="custom">Custom</option>
               </select>
               {range === 'custom' && <input aria-label="Custom pages" value={custom} onChange={(e) => { setCustom(e.target.value); setSheet(0); }} placeholder="1-3, 5, 9" style={{ width: 110 }} />}
@@ -227,6 +232,8 @@ function PrintForm({ d }: { d: DocState }) {
                 <option value="none">None</option>
                 <option value="fit">Fit to Paper</option>
                 <option value="reduce">Reduce to Paper</option>
+                <option value="fitMargins">Fit to Margins</option>
+                <option value="reduceMargins">Reduce to Margins</option>
                 <option value="custom">Custom Scale</option>
               </select>
               {o.scaling === 'custom' && fixedPaper && <><input aria-label="Custom scale" type="number" min={1} max={1000} value={o.customScale} onChange={(e) => set({ customScale: Number(e.target.value) || 100 })} style={{ width: 64 }} />%</>}
@@ -236,6 +243,11 @@ function PrintForm({ d }: { d: DocState }) {
                 {[1, 2, 4, 6, 9, 16].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
               <label><input type="checkbox" disabled={!fixedPaper} checked={o.autoRotate} onChange={(e) => set({ autoRotate: e.target.checked })} /> Auto-rotate</label>
+              <label><input type="checkbox" disabled={!fixedPaper} checked={o.center} onChange={(e) => set({ center: e.target.checked })} /> Center</label>
+            </div>
+            <div className="form-row"><span>Margins</span>
+              <Margins value={o.margins} unit={unit} disabled={!fixedPaper} onChange={(margins) => set({ margins })} />
+              <select aria-label="Margin unit" value={unit} onChange={(e) => setUnit(e.target.value as 'in' | 'mm')}><option value="in">in</option><option value="mm">mm</option></select>
             </div>
             <div className="form-row"><span>Copies</span>
               <input aria-label="Copies" type="number" min={1} max={99} value={o.copies} onChange={(e) => set({ copies: Math.max(1, Math.min(99, Number(e.target.value) || 1)) })} style={{ width: 56 }} />
@@ -265,8 +277,24 @@ function PrintForm({ d }: { d: DocState }) {
   );
 }
 
+/** Top/right/bottom/left margin fields, shown in inches or millimetres, kept in points. */
+function Margins({ value, unit, disabled, onChange }: { value: [number, number, number, number]; unit: 'in' | 'mm'; disabled: boolean; onChange: (m: [number, number, number, number]) => void }) {
+  const k = unit === 'in' ? 72 : 72 / 25.4, step = unit === 'in' ? 0.05 : 1;
+  const names = ['Top', 'Right', 'Bottom', 'Left'];
+  return (
+    <span className="print-margins">
+      {value.map((v, i) => (
+        <input key={names[i]} aria-label={`${names[i]} margin`} title={names[i]} type="number" min={0} step={step} disabled={disabled}
+          value={Math.round((v / k) * 100) / 100}
+          onChange={(e) => { const m = [...value] as [number, number, number, number]; m[i] = Math.max(0, Number(e.target.value) || 0) * k; onChange(m); }}
+          style={{ width: 52 }} />
+      ))}
+    </span>
+  );
+}
+
 /** The sheet as it will print: paper, and each page's thumbnail in its place. */
-function Preview({ d, sheet }: { d: DocState; sheet?: Sheet }) {
+function Preview({ d, sheet, margins }: { d: DocState; sheet?: Sheet; margins?: [number, number, number, number] }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const c = ref.current;
@@ -291,8 +319,14 @@ function Preview({ d, sheet }: { d: DocState; sheet?: Sheet }) {
         ctx.strokeStyle = '#c00'; ctx.lineWidth = 1; ctx.strokeRect(it.x * k, it.y * k, it.w * k, it.h * k);
         ctx.restore();
       }
+      if (margins) {
+        const [mt, mr, mb, ml] = margins;
+        ctx.setLineDash([3, 3]); ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
+        ctx.strokeRect(ml * k, mt * k, (sheet.w - ml - mr) * k, (sheet.h - mt - mb) * k);
+        ctx.setLineDash([]);
+      }
     })();
     return () => { stop = true; };
-  }, [d, sheet]);
+  }, [d, sheet, margins]);
   return <canvas ref={ref} className="print-canvas" aria-label="Print preview" />;
 }

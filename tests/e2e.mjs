@@ -1830,6 +1830,32 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.emulateMedia({ media: 'screen' });
   await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
   assert(await page.locator('#print-root').count() === 0, 'print sheets are removed after printing');
+  // Selected pages (Ctrl+click in Thumbnails) and Fit to Margins.
+  const thumbs = page.locator('.thumbs .thumb');
+  const hadThumbs = await thumbs.count() > 0;
+  if (!hadThumbs) { await page.keyboard.press('Alt+t'); await page.waitForTimeout(300); }
+  {
+    const n = Math.min(2, await thumbs.count());
+    await thumbs.nth(0).click();
+    if (n === 2) await thumbs.nth(1).click({ modifiers: ['Control'] });
+    assert(await page.locator('.thumbs .thumb.selected').count() === n, `Ctrl+click selects ${n} thumbnail(s)`);
+    await page.keyboard.press('Control+p');
+    await dlg.waitFor();
+    await dlg.locator('[aria-label="Page range"]').selectOption('selected');
+    await dlg.locator('[aria-label="Copies"]').fill('1');
+    assert((await dlg.innerText()).includes(`Sheet 1 of ${n}`), `Selected range prints the ${n} selected page(s)`);
+    await dlg.locator('[aria-label="Page scaling"]').selectOption('fitMargins');
+    await dlg.locator('[aria-label="Margin unit"]').selectOption('in');
+    await dlg.locator('[aria-label="Top margin"]').fill('1');
+    await dlg.locator('[aria-label="Page range"]').selectOption('current');
+    await dlg.getByRole('button', { name: 'Print', exact: true }).click();
+    await page.waitForFunction(() => window.__printed === 2, null, { timeout: 30000 });
+    const top = await page.evaluate(() => document.querySelector('#print-root .print-sheet img').style.top);
+    assert(parseFloat(top) >= 72, `Fit to Margins keeps the page below the 1 in top margin (top=${top})`);
+    await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+    await thumbs.nth(0).click();
+    if (!hadThumbs) await page.keyboard.press('Alt+t');
+  }
 }
 
 // Quick Revu commands: Document Properties (Ctrl+D), Navigation Bar (F4),

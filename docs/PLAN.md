@@ -165,8 +165,9 @@ filling, image signatures, redaction and OCR.
   tests/fixtures/revu/README.md)
 
 ### Now: Revu parity, third pass (owner: "do all")
-- [x] Print (Ctrl+P): page range, Document & Markups / Document Only /
-  Markups Only, paper size (Auto or fixed), scaling, pages per sheet,
+- [x] Print (Ctrl+P): page range (incl. pages selected in Thumbnails),
+  Document & Markups / Document Only / Markups Only, paper size (Auto or
+  fixed), scaling (incl. Fit/Reduce to Margins), margins, Center, pages per sheet,
   auto-rotate, copies/collate/reverse, Dim Page Content, preview; layers
   print when shown and their Print usage is on
 - [x] Rulers (Ctrl+R, units by right-click), Full-Screen Crosshair, Dimmer

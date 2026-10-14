@@ -8,6 +8,7 @@ import { FileAccessPanel } from './FileAccess';
 import { layerIds } from '../pdf/layers';
 import { SignaturesPanel } from './DigitalSignature';
 import { useEffect, useRef, useState } from 'react';
+import { create } from 'zustand';
 import { useApp, useActiveDoc, type DocState } from '../model/store';
 import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, formatNumber, measure, precisionOf, unitLabel, withPrecision } from '../model/measure';
 import type { Markup, MarkupStyle, MarkupType, Scale, ToolPreset, ToolSet } from '../model/types';
@@ -81,7 +82,13 @@ export function RightPanel() {
 
 // ---------------- Thumbnails ----------------
 
-function Thumb({ doc, index }: { doc: DocState; index: number }) {
+/** Pages selected in the Thumbnails panel (Ctrl/Shift+click), per document; Print's "Selected" range. */
+export const useThumbSel = create<{ sel: Record<string, number[]> }>(() => ({ sel: {} }));
+const NO_PAGES: number[] = [];
+export const selectedPages = (d: DocState): number[] =>
+  (useThumbSel.getState().sel[d.id] ?? []).filter((i) => i < d.loaded.pages.length).sort((a, b) => a - b);
+
+function Thumb({ doc, index, selected, onClick }: { doc: DocState; index: number; selected: boolean; onClick: (e: React.MouseEvent) => void }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
   const p = doc.loaded.pages[index];
@@ -103,10 +110,9 @@ function Thumb({ doc, index }: { doc: DocState; index: number }) {
     });
     return () => { cancelled = true; };
   }, [visible, doc.loaded.pdf, index, p.width]);
-  const s = useApp();
   const count = doc.markups.filter((m) => m.page === index).length;
   return (
-    <div className={`thumb ${doc.page === index ? 'active' : ''}`} onClick={() => s.setPage(index)}>
+    <div className={`thumb ${doc.page === index ? 'active' : ''} ${selected ? 'selected' : ''}`} aria-selected={selected} onClick={onClick}>
       <canvas ref={ref} style={{ width: w, height: h }} />
       <div className="thumb-label">{p.label}{count ? <span className="thumb-count">{count}</span> : null}</div>
     </div>
@@ -117,6 +123,18 @@ function Thumbnails({ doc }: { doc: DocState }) {
   const s = useApp();
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [drag, setDrag] = useState<number | null>(null);
+  const sel = useThumbSel((x) => x.sel[doc.id] ?? NO_PAGES);
+  const setSel = (ids: number[]) => useThumbSel.setState((x) => ({ sel: { ...x.sel, [doc.id]: ids } }));
+  const click = (e: React.MouseEvent, index: number) => {
+    if (e.ctrlKey || e.metaKey) { setSel(sel.includes(index) ? sel.filter((i) => i !== index) : [...sel, index]); return; }
+    if (e.shiftKey) {
+      const a = Math.min(doc.page, index), z = Math.max(doc.page, index);
+      setSel(Array.from({ length: z - a + 1 }, (_, i) => a + i));
+      return;
+    }
+    setSel([index]);
+    s.setPage(index);
+  };
   const onMenu = (e: React.MouseEvent, index: number) => {
     e.preventDefault();
     s.setPage(index);
@@ -144,7 +162,7 @@ function Thumbnails({ doc }: { doc: DocState }) {
           }}
           onDragEnd={() => setDrag(null)}
           onContextMenu={(e) => onMenu(e, p.index)}>
-          <Thumb doc={doc} index={p.index} />
+          <Thumb doc={doc} index={p.index} selected={sel.includes(p.index)} onClick={(e) => click(e, p.index)} />
         </div>
       ))}
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
