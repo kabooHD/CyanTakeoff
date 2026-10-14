@@ -7,6 +7,7 @@ import type { Cutout, Markup, MarkupStyle, MarkupType, Pt } from '../model/types
 import { useEffect } from 'react';
 import { openCapturePreview } from './Capture';
 import { cssFamily, fitFontSize, shapeOutline, textStyleOf } from '../model/textStyle';
+import { countRadius, countSymbolPolygon, countSymbolStrokes } from '../model/count';
 import { textWidth } from './quickCommands';
 import { useApp } from '../model/store';
 import { LEGEND_HEADERS, legendLayout, legendRows } from '../model/legend';
@@ -267,9 +268,17 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     case 'angle':
       shape = <polyline {...c} fill="none" points={pts(P)} />;
       break;
-    case 'count':
-      shape = <>{P.map((p, i) => <circle key={i} {...c} cx={p.x} cy={p.y} r={5} />)}</>;
+    case 'count': {
+      const sym = st.countSymbol ?? 'circle', r = countRadius(st.countScale);
+      shape = <>{P.map((p, i) => {
+        const poly = countSymbolPolygon(sym, p, r);
+        if (poly) return <polygon key={i} {...c} points={pts(poly)} />;
+        const strokes = countSymbolStrokes(sym, p, r);
+        if (strokes.length) return <g key={i}>{strokes.map(([a, b], k) => <line key={k} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={st.color} strokeWidth={Math.max(1.5, r * 0.35)} strokeLinecap="round" />)}<circle cx={p.x} cy={p.y} r={r * 1.3} fill="transparent" stroke="none" /></g>;
+        return <circle key={i} {...c} cx={p.x} cy={p.y} r={r} />;
+      })}</>;
       break;
+    }
     case 'note': {
       const p = P[0];
       shape = <g>

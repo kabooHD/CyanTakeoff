@@ -159,6 +159,9 @@ export interface MarkupStyle {
   autoSize?: boolean;
   /** Shape of a text box / callout box. */
   shape?: 'rectangle' | 'circle' | 'triangle' | 'hexagon';
+  /** Count: the symbol placed at each counted item and its size (1 = default). */
+  countSymbol?: 'circle' | 'square' | 'triangle' | 'diamond' | 'cross' | 'x' | 'check' | 'star';
+  countScale?: number;
 }
 
 export interface Markup {

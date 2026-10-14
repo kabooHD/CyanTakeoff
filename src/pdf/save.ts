@@ -13,6 +13,7 @@ import { spaceTree, type SpaceNode } from '../model/spaces';
 import { LEGEND_HEADERS, legendLayout, legendRows, type LegendRow } from '../model/legend';
 import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import { fitFontSize, quadding, shapeOutline, textStyleOf, toDS, toRC } from '../model/textStyle';
+import { countRadius, countStyleName, countSymbolPolygon, countSymbolStrokes } from '../model/count';
 import { refKey, removeAnnots, type CTData, type PageInfo } from './document';
 import { COLUMNS_KEY, isRulerViewport } from './importAnnots';
 import { writeFields, type FieldValue } from './forms';
@@ -549,6 +550,7 @@ function ctData(m: Markup, P: Pt[]): CTData {
     display: m.display,
     capture: m.capture?.length ? m.capture : undefined,
     valign: m.style.valign, margin: m.style.margin, autoSize: m.style.autoSize || undefined, shape: m.style.shape,
+    countSymbol: m.style.countSymbol, countScale: m.style.countScale,
     lineDef: m.style.lineDef, hatch: m.style.hatch, hatchScale: m.style.hatch ? m.style.hatchScale : undefined,
     points: m.type === 'count' || m.type === 'arc' || m.type === 'cloudplus' ? P.flatMap((p) => [p.x, p.y]) : undefined,
     comment: measure(m) || m.type === 'cloudplus' || m.type === 'stamp' ? m.comment || undefined : undefined,
@@ -572,15 +574,23 @@ function buildCount(doc: PDFDocument, m: Markup, page: PageInfo): PDFRef[] {
   const ctx = doc.context;
   const P = toPdf(m, page);
   const st = m.style;
-  const r = 6;
+  const sym = st.countSymbol ?? 'circle';
+  const r = countRadius(st.countScale) * 1.2;
   const refs: PDFRef[] = [];
   P.forEach((p, i) => {
     const o = new Ops();
     o.add('q /GS0 gs');
-    o.add(`${hexToRgb(st.fill ?? st.color).map(f).join(' ')} rg ${hexToRgb(st.color).map(f).join(' ')} RG 0.75 w`);
-    o.ellipse({ x: p.x - r, y: p.y - r }, { x: p.x + r, y: p.y + r });
-    o.add('B Q');
-    const bbox = [p.x - r - 1, p.y - r - 1, p.x + r + 1, p.y + r + 1];
+    o.add(`${hexToRgb(st.fill ?? st.color).map(f).join(' ')} rg ${hexToRgb(st.color).map(f).join(' ')} RG 0.75 w 1 J`);
+    // PDF space has y up: the polygon helpers draw in page space, so flip their y about the point.
+    const flip = (q: Pt): Pt => ({ x: q.x, y: 2 * p.y - q.y });
+    const poly = countSymbolPolygon(sym, p, r);
+    const strokes = countSymbolStrokes(sym, p, r);
+    if (poly) { o.poly(poly.map(flip), true); o.add('B'); }
+    else if (strokes.length) { o.add(`${f(Math.max(1.5, r * 0.35))} w`); for (const [a, b] of strokes) { o.moveTo(flip(a)); o.lineTo(flip(b)); } o.add('S'); }
+    else o.ellipse({ x: p.x - r, y: p.y - r }, { x: p.x + r, y: p.y + r }), o.add('B');
+    o.add('Q');
+    const pad = r * 1.3;
+    const bbox = [p.x - pad - 1, p.y - pad - 1, p.x + pad + 1, p.y + pad + 1];
     const gs = ctx.obj({ CA: st.opacity, ca: st.fillOpacity });
     const ap = ctx.stream(o.out.join('\n'), { Type: 'XObject', Subtype: 'Form', BBox: bbox, Resources: { ExtGState: { GS0: gs } } });
     const verts: number[] = [];
@@ -596,7 +606,7 @@ function buildCount(doc: PDFDocument, m: Markup, page: PageInfo): PDFRef[] {
       Contents: PDFHexString.fromText(m.label ? `${m.label}\r${P.length}` : String(P.length)),
       M: PDFString.of(pdfDate(new Date(m.modified))), CreationDate: PDFString.of(pdfDate(new Date(m.created))),
       F: 4, C: hexToRgb(st.color), IC: hexToRgb(st.fill ?? st.color), CA: st.opacity,
-      BS: { Type: 'Border', W: 0, S: 'S' }, CountStyle: 'Circle', NumCounts: P.length, MeasurementTypes: 128,
+      BS: { Type: 'Border', W: 0, S: 'S' }, CountStyle: countStyleName(sym), NumCounts: P.length, MeasurementTypes: 128,
       AP: { N: ctx.register(ap) },
     };
     if (m.scale) entries.BBMeasure = writeMeasure(doc, m.scale);

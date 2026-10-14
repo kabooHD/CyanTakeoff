@@ -19,6 +19,7 @@ import type { CustomColumn, Markup, MarkupStatus, MarkupStyle, MarkupType, Pt, R
 import { DEFAULT_STYLES, toolById } from '../tools/tools';
 import { MEASURE_TYPES } from '../model/measure';
 import { DEFAULT_LINE_HEIGHT, alignOfQuadding, parseDS } from '../model/textStyle';
+import { symbolOfCountStyle } from '../model/count';
 import {
   N, colorToHex, getArray, getDict, getName, getNumber, getText, lookup, numbers,
   parsePdfDate, readMeasure,
@@ -55,6 +56,7 @@ export interface CTData {
   display?: Markup['display']; // caption, segment values, centroid, units
   capture?: Markup['capture']; // Capture photos
   valign?: MarkupStyle['valign']; margin?: number; autoSize?: boolean; shape?: MarkupStyle['shape']; // text box extras
+  countSymbol?: MarkupStyle['countSymbol']; countScale?: number; // Count appearance
   handles?: (number[] | null)[]; // curved segments: PDF-space [inX, inY, outX, outY] offsets per vertex
 }
 
@@ -167,6 +169,7 @@ function readStyle(doc: PDFDocument, dict: PDFDict, type: MarkupType, ct?: CTDat
     ...(ct?.lineDef ? { lineDef: ct.lineDef } : {}),
     ...(ct?.hatch ? { hatch: ct.hatch, hatchScale: ct.hatchScale } : {}),
     fontSize,
+    ...(type === 'count' ? { countSymbol: ct?.countSymbol ?? symbolOfCountStyle(getName(doc, dict, 'CountStyle')), countScale: ct?.countScale } : {}),
     ...text,
     ...(textTypes && (ds.textColor ?? (textColor ? colorToHex(textColor.slice(1, 4).map(Number)) : undefined)) ? { textColor: ds.textColor ?? colorToHex(textColor!.slice(1, 4).map(Number))! } : {}),
   };

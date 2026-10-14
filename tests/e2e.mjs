@@ -138,6 +138,46 @@ await page.waitForTimeout(200);
 
 list = await page.locator('.ml-table tbody').innerText();
 assert(list.includes('Count Measurement') && /\t3\t/.test(list), 'count of 3');
+// Count group commands (right-click a counted item): Split All, Delete from Group, Resume Count; Symbol in Properties.
+{
+  const rows = () => page.locator('.ml-table tbody tr').count();
+  const n0 = await rows();
+  // The second counted item, from its drawn symbol (the clicks may have snapped to content).
+  const item = page.locator('.markup-layer circle[r="5"]').nth(1);
+  const ib = await item.boundingBox();
+  const at = { x: ib.x + ib.width / 2, y: ib.y + ib.height / 2 };
+  await page.mouse.click(at.x, at.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Split All' }).click();
+  await page.waitForFunction((n) => document.querySelectorAll('.ml-table tbody tr').length === n + 2, n0);
+  assert(await rows() === n0 + 2, 'Split All makes a Count per item');
+  // Split All is three undo steps (the update of the group, two new Counts).
+  const restored = async () => (await rows()) === n0 && /\t3\t/.test(await page.locator('.ml-table tbody').innerText());
+  for (let i = 0; i < 5 && !(await restored()); i++) { await page.keyboard.press('Control+z'); await page.waitForTimeout(250); }
+  assert(await rows() === n0 && /\t3\t/.test(await page.locator('.ml-table tbody').innerText()), 'undo restores the group of 3');
+  const items = () => page.locator('.markup-layer circle[r="5"]').count();
+  await page.mouse.click(at.x, at.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Delete from Group' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.markup-layer circle[r="5"]').length === 2);
+  assert(await items() === 2, 'Delete from Group removes one item (count of 2)');
+  const item0 = await page.locator('.markup-layer circle[r="5"]').first().boundingBox();
+  await page.mouse.click(item0.x + item0.width / 2, item0.y + item0.height / 2, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Resume Count' }).click();
+  const more = await toScreen(20, 20); // a free spot, away from the other markups
+  await page.mouse.click(more.x, more.y);
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.querySelectorAll('.markup-layer circle[r="5"]').length === 3);
+  assert(await rows() === n0 && await items() === 3, 'Resume Count adds to the same group (count of 3)');
+  { const c2 = await page.locator('.markup-layer circle[r="5"]').nth(2).boundingBox(); await page.mouse.click(c2.x + c2.width / 2, c2.y + c2.height / 2); }
+  await page.waitForFunction(() => document.querySelectorAll('.ml-table tbody tr.selected').length === 1);
+  if (!(await page.locator('[aria-label="Count symbol"]').count())) await page.keyboard.press('Alt+P');
+  await page.getByLabel('Count symbol').selectOption('square');
+  await page.waitForTimeout(200);
+  assert(await page.locator('.markup-layer polygon').count() >= 3, 'the Square symbol draws each item as a polygon');
+  await page.getByLabel('Count symbol').selectOption('circle');
+  await page.evaluate(() => document.activeElement?.blur?.());
+  await page.keyboard.press('Escape');
+}
+
 assert(list.includes('Verify door hardware'), 'text box content in list');
 await page.screenshot({ path: `${OUT}/03-takeoff.png` });
 

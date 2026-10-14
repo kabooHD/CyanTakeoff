@@ -21,6 +21,7 @@ import { placeColumns } from '../model/listColumns';
 import { layoutOf, withLayout } from '../model/layoutProps';
 import { addCapture, openCapturePreview } from './Capture';
 import { DEFAULT_LINE_HEIGHT, DEFAULT_MARGIN, TEXT_FONTS, textStyleOf } from '../model/textStyle';
+import { COUNT_SYMBOLS, symbolForType } from '../model/count';
 import { usePageSetup } from './PageSetup';
 import { useApp, useActiveDoc, type DocState } from '../model/store';
 import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, formatNumber, measure, precisionOf, unitLabel, withPrecision } from '../model/measure';
@@ -303,6 +304,16 @@ function StyleEditor({ style, type, onChange }: { style: MarkupStyle; type: Mark
         <Row label="Font Size"><input type="number" min={4} max={144} value={style.fontSize} onChange={(e) => onChange({ fontSize: Math.max(4, +e.target.value) })} /></Row>
       )}
       {textTypes && <TextStyleEditor style={style} type={type} onChange={onChange} />}
+      {type === 'count' && (
+        <>
+          <Row label="Symbol">
+            <select aria-label="Count symbol" value={style.countSymbol ?? 'circle'} onChange={(e) => onChange({ countSymbol: e.target.value === 'circle' ? undefined : e.target.value as MarkupStyle['countSymbol'] })}>
+              {COUNT_SYMBOLS.map((sym) => <option key={sym} value={sym}>{sym === 'x' ? 'X' : sym[0].toUpperCase() + sym.slice(1)}</option>)}
+            </select>
+          </Row>
+          <Row label="Scale"><input aria-label="Count scale" type="number" min={0.25} max={10} step={0.25} value={style.countScale ?? 1} onChange={(e) => onChange({ countScale: +e.target.value === 1 ? undefined : Math.max(0.25, +e.target.value) })} style={{ width: 60 }} /></Row>
+        </>
+      )}
     </>
   );
 }
@@ -602,6 +613,12 @@ function ToolChest() {
     { label: 'Sequence: Reset', disabled: !p.sequence, action: () => { updateTool(p.id, (x) => ({ ...x, sequence: { ...x.sequence!, run: x.sequence!.run + 1 } })); s.setStatus(`${p.name}: the sequence starts again`); } },
     { label: 'Sequence: Remove', disabled: !p.sequence, action: () => updateTool(p.id, (x) => ({ ...x, sequence: undefined })) },
     { sep: true },
+    ...(p.type !== 'count' ? [{ label: 'Create Count', action: () => {
+      // Revu: a count tool with this tool's colours; the symbol follows the shape (ours: the standard symbols).
+      const tool: ToolPreset = { id: crypto.randomUUID(), name: `${p.name} Count`, type: 'count', subject: p.subject || p.name, style: { ...s.toolDefaults.count, color: p.style.color, fill: p.style.fill ?? p.style.color, opacity: p.style.opacity, countSymbol: symbolForType(p.type) } };
+      update(set.id, (t) => ({ ...t, tools: [...t.tools, tool] }));
+      s.setStatus(`${tool.name} added to ${set.name}`);
+    } }] : []),
     { label: 'Rename…', action: () => { const n = prompt('Tool name', p.name); if (n) update(set.id, (t) => ({ ...t, tools: t.tools.map((x) => (x.id === p.id ? { ...x, name: n } : x)) })); } },
     { label: 'Remove', action: () => s.removeFromToolChest(p.id) },
   ] });

@@ -678,6 +678,17 @@ same menu opens on right-click. Labels menu: Page Label, Page Scale
 (double-click the scale to set it). Create Page Label button; size
 slider.
 
+## Count groups
+A Count is one markup whose items are its points; the Markups List
+Count column shows the total. Right-click an item: Resume Count (keep
+clicking to add items; Esc ends), Delete from Group (that item), Split
+Counts (that item becomes its own Count), Split All (every item), Merge
+Counts (with the other selected Counts; the right-clicked one's
+properties win). Appearance: Symbol (circle, square, triangle, diamond,
+cross, X, check, star) and Scale; written as /CountStyle. Tool Chest:
+Create Count on any tool makes a count tool with its colours and a
+symbol matching its shape (ours: standard symbols only).
+
 ## Flags panel (Window > Flags)
 Flags are for jumping to pages and places. Linked flags are Flag markups
 (Shift+F; title and colour follow the markup, click jumps to it; the

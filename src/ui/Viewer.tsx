@@ -17,6 +17,7 @@ import { applyCutout, ellipsePolygon } from '../model/cutouts';
 import { expandGroups } from '../model/arrange';
 import { rgbaOf, wheelZoomFactor } from '../model/prefs';
 import { cssFamily, textStyleOf } from '../model/textStyle';
+import { mergeCounts, nearestCountIndex, splitAll, splitCount } from '../model/count';
 import { autosizedBox, withBox } from '../model/textBox';
 import { textWidth } from './quickCommands';
 import { attachCapture, captureMenuItems, shrinkPhoto } from './Capture';
@@ -1380,6 +1381,20 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     } else if (hit) {
       if (!selected.has(hit.id)) s.select([hit.id]);
       const ids = selected.has(hit.id) ? doc.selection : [hit.id];
+      if (hit.type === 'count' && !hit.locked) {
+        // Count menu (Revu): Resume Count, Delete from Group, Split Counts, Split All, Merge Counts.
+        const vi = nearestCountIndex(hit, raw, 8 / zoom);
+        const newCount = (points: Pt[]) => ({ type: 'count' as const, page: hit.page, points, style: { ...hit.style }, subject: hit.subject, label: hit.label, comment: hit.comment, depth: hit.depth, scale: hit.scale });
+        const otherCounts = doc.markups.filter((x) => x.type === 'count' && x.id !== hit.id && selected.has(x.id) && x.page === hit.page);
+        items.push({ label: 'Resume Count', action: () => { s.setTool('count'); setTimeout(() => { countId.current = hit.id; s.setStatus('Resume Count: click each item; Esc ends.'); }, 0); } });
+        if (vi >= 0 && hit.points.length > 1) {
+          items.push({ label: 'Delete from Group', action: () => s.updateMarkups([hit.id], (x) => ({ points: x.points.filter((_, k) => k !== vi) })) });
+          items.push({ label: 'Split Counts', action: () => { const r = splitCount(hit.points, [vi]); if (!r) return; s.updateMarkups([hit.id], () => ({ points: r.keep })); s.addMarkup(newCount(r.split)); } });
+        }
+        if (hit.points.length > 1) items.push({ label: 'Split All', action: () => { const parts = splitAll(hit.points); s.updateMarkups([hit.id], () => ({ points: parts[0] })); for (const part of parts.slice(1)) s.addMarkup(newCount(part)); s.setStatus(`Split All: ${parts.length} Counts`); } });
+        if (otherCounts.length) items.push({ label: `Merge Counts (${otherCounts.length + 1})`, action: () => { s.updateMarkups([hit.id], (x) => ({ points: mergeCounts(x, otherCounts) })); s.deleteMarkups(otherCounts.map((x) => x.id)); } });
+        items.push({ sep: true });
+      }
       if (CURVABLE.has(hit.type) && !hit.locked) {
         // Control point menu (Revu): curve a point, or turn a line into an arc.
         const vi = hit.points.findIndex((q) => dist(q, raw) <= 6 / zoom);
