@@ -234,6 +234,8 @@ filling, image signatures, redaction and OCR.
   File Attachments
 - [x] Preferences dialog (Ctrl+K): General, Navigation, Markup, Sketch,
   Forms, Signature
+- [x] Text formatting: font, size/Auto, bold/italic/underline/strikethrough,
+  alignment, line space, margin, text colour, box shape (saved as DS/RC/Q)
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

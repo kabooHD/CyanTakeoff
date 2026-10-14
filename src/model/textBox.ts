@@ -1,6 +1,7 @@
 // Autosize Text Box (Revu, Alt+Z): fit a text box or callout box to its text.
 import { bounds } from './measure';
 import type { Markup, Pt } from './types';
+import { textStyleOf } from './textStyle';
 
 /**
  * The text box of a text markup sized to its text, top-left corner kept.
@@ -12,9 +13,10 @@ export function autosizedBox(m: Markup, width: (text: string, size: number) => n
   const b = bounds(box);
   const lines = (m.text ?? '').split('\n');
   const size = m.style.fontSize;
-  // As drawn (.markup-text): 3 pt side padding, 2 pt top and bottom, line height 1.15, plus the border.
-  const w = Math.max(size, ...lines.map((l) => width(l, size))) + 6 + m.style.width * 2 + 2;
-  const h = lines.length * size * 1.15 + 4 + m.style.width * 2 + 2;
+  const t = textStyleOf(m.style);
+  // As drawn (.markup-text): the margin at the sides, one point less above and below, the line height, plus the border.
+  const w = Math.max(size, ...lines.map((l) => width(l, size))) + 2 * t.margin + m.style.width * 2 + 2;
+  const h = lines.length * size * t.lineHeight + 2 * Math.max(0, t.margin - 1) + m.style.width * 2 + 2;
   return [{ x: b.minX, y: b.minY }, { x: b.minX + w, y: b.minY + h }];
 }
 

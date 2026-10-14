@@ -568,6 +568,18 @@ Print Spaces.
 - Save All (Ctrl+F2) saves every changed file; Refresh (F5) reloads the
   file from disk (we need it opened with file access).
 - Autosize Text Box (Alt+Z) fits a text box or callout box to its text.
+- Text properties (Text Box, Callout, Typewriter, Cloud+; Properties >
+  Text): Font (Helvetica, Times, Courier: the standard PDF fonts), Font
+  Size or Auto (the largest size that fits the box), Font Style (bold,
+  italic, underline, strikethrough), Alignment (left/center/right and
+  top/middle/bottom), Line Space (multiple of the size; 1.15 = Revu's
+  default), Margin, Text Color (separate from the line colour), Shape
+  (rectangle, circle, triangle, hexagon; text box and callout). Saved as
+  the annotation's /DS ("font: Times 12pt; text-align:center;
+  line-height:13.8pt; color:#0000FF; font-weight:bold"), /RC rich text,
+  /Q and the DA font; vertical alignment, margin, Auto and the shape are
+  ours (CTData). Revu's per-word formatting, superscript/subscript and
+  other fonts are not supported.
 - Remove Selected from Group (Ctrl+Shift+Alt+G): pick the member in the
   Markups List (a list click selects just that markup, not its group),
   then the command; a group left with one member is dissolved.

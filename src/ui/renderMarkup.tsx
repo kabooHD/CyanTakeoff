@@ -6,6 +6,8 @@ import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCo
 import type { Cutout, Markup, MarkupStyle, MarkupType, Pt } from '../model/types';
 import { useEffect } from 'react';
 import { openCapturePreview } from './Capture';
+import { cssFamily, fitFontSize, shapeOutline, textStyleOf } from '../model/textStyle';
+import { textWidth } from './quickCommands';
 import { useApp } from '../model/store';
 import { LEGEND_HEADERS, legendLayout, legendRows } from '../model/legend';
 
@@ -124,7 +126,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     case 'typewriter': {
       const b = bounds(P.length > 1 ? [P[0], P[1]] : [P[0], { x: P[0].x + 120, y: P[0].y + 20 }]);
       shape = <foreignObject x={b.minX} y={b.minY} width={Math.max(b.w, 20)} height={Math.max(b.h, st.fontSize * 1.4)}>
-        <div className="markup-text typewriter" style={{ fontSize: st.fontSize, color: st.color }}>{m.text}</div>
+        <div className="markup-text typewriter" style={textCss(m, b.w, b.h)}>{m.text}</div>
       </foreignObject>;
       break;
     }
@@ -142,7 +144,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
           <line {...c} x1={from.x} y1={from.y} x2={to.x} y2={to.y} />
           <rect {...c} x={b.minX} y={b.minY} width={b.w} height={b.h} />
           <foreignObject x={b.minX} y={b.minY} width={b.w} height={b.h}>
-            <div className="markup-text" style={{ fontSize: st.fontSize, color: st.color }}>{m.text}</div>
+            <div className="markup-text" style={textCss(m, b.w, b.h)}>{m.text}</div>
           </foreignObject>
         </>;
       }
@@ -289,9 +291,11 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
         : null;
       shape = <>
         {leader}
-        <rect {...c} x={b.minX} y={b.minY} width={b.w} height={b.h} />
+        {st.shape === 'circle' ? <ellipse {...c} cx={b.minX + b.w / 2} cy={b.minY + b.h / 2} rx={b.w / 2} ry={b.h / 2} />
+          : shapeOutline(st.shape ?? 'rectangle', b) ? <polygon {...c} points={pts(shapeOutline(st.shape ?? 'rectangle', b)!)} />
+          : <rect {...c} x={b.minX} y={b.minY} width={b.w} height={b.h} />}
         <foreignObject x={b.minX} y={b.minY} width={b.w} height={b.h}>
-          <div className="markup-text" style={{ fontSize: st.fontSize, color: st.color }}>{m.text}</div>
+          <div className="markup-text" style={textCss(m, b.w, b.h)}>{m.text}</div>
         </foreignObject>
       </>;
       break;
@@ -434,4 +438,16 @@ function LegendShape({ m }: { m: Markup }) {
       })}
     </g>
   );
+}
+
+/** CSS of a text box's text from its formatting (font, style, alignment, spacing, margin, colour, auto size). */
+export function textCss(m: Markup, boxW: number, boxH: number): React.CSSProperties {
+  const st = m.style, t = textStyleOf(st);
+  const size = t.autoSize ? fitFontSize((m.text ?? '').split('\n'), boxW, boxH, t.lineHeight, t.margin, (s, k) => textWidth(s, k) * (t.font === 'Courier' ? 1.1 : 1)) : st.fontSize;
+  return {
+    fontSize: size, color: t.textColor, fontFamily: cssFamily(t.font), fontWeight: t.bold ? 'bold' : undefined, fontStyle: t.italic ? 'italic' : undefined,
+    textDecoration: [t.underline ? 'underline' : '', t.strike ? 'line-through' : ''].filter(Boolean).join(' ') || undefined,
+    textAlign: t.align, lineHeight: t.lineHeight, padding: `${Math.max(0, t.margin - 1)}px ${t.margin}px`,
+    display: 'flex', flexDirection: 'column', justifyContent: t.valign === 'middle' ? 'center' : t.valign === 'bottom' ? 'flex-end' : 'flex-start',
+  };
 }

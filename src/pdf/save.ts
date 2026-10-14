@@ -8,10 +8,11 @@ import {
   PDFArray, PDFDict, PDFDocument, PDFHexString, PDFRef, PDFString, StandardFonts,
   type PDFFont, type PDFObject,
 } from 'pdf-lib';
-import type { CustomColumn, Cutout, Markup, Pt, Scale, Space, Viewport } from '../model/types';
+import type { CustomColumn, Cutout, Markup, MarkupStyle, Pt, Scale, Space, Viewport } from '../model/types';
 import { spaceTree, type SpaceNode } from '../model/spaces';
 import { LEGEND_HEADERS, legendLayout, legendRows, type LegendRow } from '../model/legend';
 import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
+import { fitFontSize, quadding, shapeOutline, textStyleOf, toDS, toRC } from '../model/textStyle';
 import { refKey, removeAnnots, type CTData, type PageInfo } from './document';
 import { COLUMNS_KEY, isRulerViewport } from './importAnnots';
 import { writeFields, type FieldValue } from './forms';
@@ -39,6 +40,8 @@ export function calloutAttach(tip: Pt, a: Pt, c: Pt): Pt {
 /** Collects content-stream operators and the bounding box of what is drawn. */
 class Ops {
   out: string[] = [];
+  /** Font resources used by the text (/Helv ... ). */
+  fonts = new Set<string>();
   minX = Infinity; minY = Infinity; maxX = -Infinity; maxY = -Infinity;
   add(s: string) { this.out.push(s); }
   grow(p: Pt, pad = 0) {
@@ -110,28 +113,85 @@ const at = (fr: Frame, u: number, v: number): Pt => ({ x: u * fr.right.x + v * f
 const proj = (fr: Frame, p: Pt) => ({ u: p.x * fr.right.x + p.y * fr.right.y, v: p.x * fr.up.x + p.y * fr.up.y });
 
 /** Draw text with its baseline origin at frame coordinates (u, v). */
-function textAt(o: Ops, font: PDFFont, s: string, size: number, u: number, v: number, rgb: string, fr: Frame = textFrame(0)) {
+function textAt(o: Ops, font: PDFFont, s: string, size: number, u: number, v: number, rgb: string, fr: Frame = textFrame(0), fname = 'Helv') {
   const t = safeText(font, s);
   const w = font.widthOfTextAtSize(t, size);
   for (const [du, dv] of [[0, -size * 0.25], [w, -size * 0.25], [0, size], [w, size]]) o.grow(at(fr, u + du, v + dv));
   const p = at(fr, u, v);
   const m = `${fr.right.x} ${fr.right.y} ${fr.up.x} ${fr.up.y} ${f(p.x)} ${f(p.y)}`;
-  o.add(`BT ${rgb} rg /Helv ${f(size)} Tf ${m} Tm ${font.encodeText(t).toString()} Tj ET`);
+  o.fonts.add(fname);
+  o.add(`BT ${rgb} rg /${fname} ${f(size)} Tf ${m} Tm ${font.encodeText(t).toString()} Tj ET`);
   return w;
 }
 
-/** Wrapped lines of text laid out from the top of box (a, c), in the page's reading direction. */
-function textInBox(o: Ops, font: PDFFont, text: string, size: number, a: Pt, c: Pt, rgb: string, fr: Frame, align: 'left' | 'center' = 'left') {
+/** The standard 14 fonts used for text boxes, by resource name. */
+export type FontSet = Record<string, PDFFont>;
+const FONT_NAMES: Record<string, StandardFonts> = {
+  Helv: StandardFonts.Helvetica, HeBo: StandardFonts.HelveticaBold, HeOb: StandardFonts.HelveticaOblique, HeBO: StandardFonts.HelveticaBoldOblique,
+  TiRo: StandardFonts.TimesRoman, TiBo: StandardFonts.TimesRomanBold, TiIt: StandardFonts.TimesRomanItalic, TiBI: StandardFonts.TimesRomanBoldItalic,
+  Cour: StandardFonts.Courier, CoBo: StandardFonts.CourierBold, CoOb: StandardFonts.CourierOblique, CoBO: StandardFonts.CourierBoldOblique,
+};
+/** Embed the standard fonts the text markups need (Helvetica is always there). */
+export async function embedTextFonts(doc: PDFDocument, helv: PDFFont, markups: Markup[] = []): Promise<FontSet> {
+  const out: FontSet = { Helv: helv };
+  const needed = new Set(markups.filter((m) => ['textbox', 'callout', 'typewriter', 'cloudplus'].includes(m.type)).map((m) => fontNameOf(m.style)));
+  for (const name of needed) if (name !== 'Helv' && FONT_NAMES[name]) out[name] = await doc.embedFont(FONT_NAMES[name]);
+  return out;
+}
+/** Resource name of the font a text style asks for. */
+export function fontNameOf(st: MarkupStyle): string {
+  const t = textStyleOf(st);
+  const fam = t.font === 'Times' ? 'Ti' : t.font === 'Courier' ? 'Co' : 'He';
+  if (fam === 'He') return t.bold && t.italic ? 'HeBO' : t.bold ? 'HeBo' : t.italic ? 'HeOb' : 'Helv';
+  if (fam === 'Ti') return t.bold && t.italic ? 'TiBI' : t.bold ? 'TiBo' : t.italic ? 'TiIt' : 'TiRo';
+  return t.bold && t.italic ? 'CoBO' : t.bold ? 'CoBo' : t.italic ? 'CoOb' : 'Cour';
+}
+
+/**
+ * The text of a text box laid out in box (a, c) with its formatting:
+ * font, alignment, vertical alignment, line spacing, margin, underline and
+ * strikethrough, text colour, auto size.
+ */
+function formattedText(o: Ops, fonts: FontSet, st: MarkupStyle, text: string, a: Pt, c: Pt, fr: Frame) {
+  const t = textStyleOf(st);
+  const fname = fontNameOf(st);
+  const font = fonts[fname] ?? fonts.Helv;
   const cs = [a, c].map((q) => proj(fr, q));
   const u0 = Math.min(cs[0].u, cs[1].u), u1 = Math.max(cs[0].u, cs[1].u);
   const v0 = Math.min(cs[0].v, cs[1].v), v1 = Math.max(cs[0].v, cs[1].v);
-  let v = v1 - size - 2;
-  for (const line of wrap(font, text, size, u1 - u0 - 6)) {
+  const boxW = u1 - u0, boxH = v1 - v0;
+  const width = (s: string, size: number) => font.widthOfTextAtSize(safeText(font, s), size);
+  const size = t.autoSize ? fitFontSize(text.split(/\r?\n/), boxW, boxH, t.lineHeight, t.margin, width) : st.fontSize;
+  const lines = wrap(font, text, size, boxW - 2 * t.margin);
+  const lh = size * t.lineHeight;
+  const total = lines.length * lh;
+  const rgb = hexToRgb(t.textColor).map(f).join(' ');
+  // First baseline: the top margin plus the ascent; middle/bottom move the block down.
+  const slack = Math.max(0, boxH - 2 * t.margin - total);
+  let v = v1 - t.margin - size * 0.9 - (t.valign === 'middle' ? slack / 2 : t.valign === 'bottom' ? slack : 0);
+  for (const line of lines) {
     if (v < v0 - size * 0.3) break;
-    const w = font.widthOfTextAtSize(safeText(font, line), size);
-    textAt(o, font, line, size, align === 'center' ? (u0 + u1 - w) / 2 : u0 + 3, v, rgb, fr);
-    v -= size * 1.2;
+    const w = width(line, size);
+    const u = t.align === 'center' ? (u0 + u1 - w) / 2 : t.align === 'right' ? u1 - t.margin - w : u0 + t.margin;
+    textAt(o, font, line, size, u, v, rgb, fr, fname);
+    if (t.underline || t.strike) {
+      const lw = Math.max(0.5, size * 0.06);
+      const draw = (dv: number) => { const p0 = at(fr, u, v + dv), p1 = at(fr, u + w, v + dv); o.add(`q ${rgb} RG ${f(lw)} w [] 0 d ${f(p0.x)} ${f(p0.y)} m ${f(p1.x)} ${f(p1.y)} l S Q`); };
+      if (t.underline) draw(-size * 0.15);
+      if (t.strike) draw(size * 0.3);
+    }
+    v -= lh;
   }
+}
+
+/** The box outline for a text box shape (PDF space): a polygon, or null for rectangle/circle. */
+function boxShape(o: Ops, st: MarkupStyle, x0: number, y0: number, x1: number, y1: number, paint: string) {
+  const shape = st.shape ?? 'rectangle';
+  if (shape === 'circle') { o.ellipse({ x: x0, y: y0 }, { x: x1, y: y1 }); o.add(paint); return; }
+  const poly = shapeOutline(shape, { minX: x0, minY: y1, maxX: x1, maxY: y0 }); // page space has y down: swap
+  if (poly) { o.poly(poly, true); o.add(paint); return; }
+  o.poly([{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], true);
+  o.add(paint);
 }
 
 /** A path with curved segments (m, l, c; closed with h). */
@@ -154,7 +214,7 @@ function pdfHandles(m: Markup, page: PageInfo): Markup['handles'] {
   });
 }
 
-function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], rot = 0, rows: LegendRow[] = []) {
+function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], rot = 0, rows: LegendRow[] = [], fonts: FontSet = { Helv: font }) {
   const fr = textFrame(rot);
   const o = new Ops();
   const st = m.style;
@@ -201,7 +261,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
       break;
     case 'typewriter':
       o.grow(P[0]); o.grow(P[1]);
-      textInBox(o, font, m.text ?? '', st.fontSize, P[0], P[1], rgb, fr);
+      formattedText(o, fonts, st, m.text ?? '', P[0], P[1], fr);
       break;
     case 'cloudplus': {
       const cloud = rectCorners(P[0], P[1]);
@@ -214,7 +274,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
         const from = { x: Math.max(cb.minX, Math.min(cb.maxX, target.x)), y: Math.max(cb.minY, Math.min(cb.maxY, target.y)) };
         o.moveTo(from); o.lineTo(calloutAttach(from, P[2], P[3])); o.add('S');
         o.poly(rectCorners(P[2], P[3]), true); o.add(paint);
-        textInBox(o, font, m.text ?? '', st.fontSize, P[2], P[3], rgb, fr);
+        formattedText(o, fonts, st, m.text ?? '', P[2], P[3], fr);
       }
       break;
     }
@@ -405,19 +465,8 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
         o.moveTo(tip); o.lineTo(attach); o.add('S');
         arrowHead(o, attach, tip, Math.max(8, st.width * 5));
       }
-      o.poly([{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], true);
-      o.add(paint);
-      // Lay the text out in the page's reading direction (rotated pages).
-      const cs = [{ x: x0, y: y0 }, { x: x1, y: y1 }].map((q) => proj(fr, q));
-      const u0 = Math.min(cs[0].u, cs[1].u), u1 = Math.max(cs[0].u, cs[1].u);
-      const v0 = Math.min(cs[0].v, cs[1].v), v1 = Math.max(cs[0].v, cs[1].v);
-      const size = st.fontSize;
-      let v = v1 - size - 2;
-      for (const line of wrap(font, m.text ?? '', size, u1 - u0 - 6)) {
-        if (v < v0) break;
-        textAt(o, font, line, size, u0 + 3, v, rgb, fr);
-        v -= size * 1.2;
-      }
+      boxShape(o, st, x0, y0, x1, y1, paint);
+      formattedText(o, fonts, st, m.text ?? '', { x: x0, y: y0 }, { x: x1, y: y1 }, fr);
       break;
     }
   }
@@ -462,7 +511,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
     textAt(o, font, t, size, q.u - w / 2 + (m.type === 'angle' ? 8 + w / 2 : 0), q.v + lift, rgb, fr);
   }
   o.add('Q');
-  return { ops: o.out.join('\n'), bbox: [o.minX - pad - 2, o.minY - pad - 2, o.maxX + pad + 2, o.maxY + pad + 2], hatch: hatchArea ? st.hatch : undefined };
+  return { fontsUsed: o.fonts, ops: o.out.join('\n'), bbox: [o.minX - pad - 2, o.minY - pad - 2, o.maxX + pad + 2, o.maxY + pad + 2], hatch: hatchArea ? st.hatch : undefined };
 }
 
 const SUBTYPE: Record<Markup['type'], string> = {
@@ -499,6 +548,7 @@ function ctData(m: Markup, P: Pt[]): CTData {
     seq: m.seq,
     display: m.display,
     capture: m.capture?.length ? m.capture : undefined,
+    valign: m.style.valign, margin: m.style.margin, autoSize: m.style.autoSize || undefined, shape: m.style.shape,
     lineDef: m.style.lineDef, hatch: m.style.hatch, hatchScale: m.style.hatch ? m.style.hatchScale : undefined,
     points: m.type === 'count' || m.type === 'arc' || m.type === 'cloudplus' ? P.flatMap((p) => [p.x, p.y]) : undefined,
     comment: measure(m) || m.type === 'cloudplus' || m.type === 'stamp' ? m.comment || undefined : undefined,
@@ -583,7 +633,7 @@ function quads(P: Pt[]): number[] {
 
 const base64ToBytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
 
-function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, image?: PDFRef, pageRefs: PDFRef[] = [], rows: LegendRow[] = []): PDFRef[] {
+function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, image?: PDFRef, pageRefs: PDFRef[] = [], rows: LegendRow[] = [], fonts: FontSet = { Helv: font }): PDFRef[] {
   if (m.type === 'count') return buildCount(doc, m, page);
   const ctx = doc.context;
   const P = toPdf(m, page);
@@ -591,7 +641,7 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
   if (handles) m = { ...m, handles };
   const ct = ctData(m, P);
   const cutouts = m.cutouts?.map((c) => ({ ...c, points: c.points.map((q) => toPdfPt(q, page)), handles: hasCurves(c.handles) ? pdfHandles({ ...m, points: c.points, handles: c.handles }, page) : undefined }));
-  const { ops, bbox, hatch } = buildAppearance(m, P, font, cutouts, (page.viewport as { rotation?: number }).rotation ?? 0, rows);
+  const { ops, bbox, hatch, fontsUsed } = buildAppearance(m, P, font, cutouts, (page.viewport as { rotation?: number }).rotation ?? 0, rows, fonts);
   if (cutouts?.length) ct.cutouts = cutouts.map((c) => ({ kind: c.kind, points: c.points.flatMap((q) => [q.x, q.y]), handles: c.handles?.map((h) => (h ? [h.in.x, h.in.y, h.out.x, h.out.y] : null)) }));
   const st = m.style;
   const gs = ctx.obj({
@@ -602,7 +652,7 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
   const ap = ctx.stream(ops, {
     Type: 'XObject', Subtype: 'Form', BBox: bbox,
     Resources: {
-      Font: { Helv: font.ref }, ExtGState: { GS0: gs }, ...(image ? { XObject: { Im0: image } } : {}),
+      Font: { Helv: font.ref, ...Object.fromEntries([...fontsUsed].filter((n) => n !== 'Helv' && fonts[n]).map((n) => [n, fonts[n].ref])) }, ExtGState: { GS0: gs }, ...(image ? { XObject: { Im0: image } } : {}),
       ...(hatch ? { Pattern: { HP0: hatchPattern(doc, hatch, m.style.hatchScale, m.style.fill ?? m.style.color) } } : {}),
     },
   });
@@ -685,8 +735,12 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
       entries.C = hexToRgb(st.fill ?? st.color);
       break;
     case 'FreeText': {
-      const [r, g, b] = hexToRgb(st.color);
-      entries.DA = PDFString.of(`${f(r)} ${f(g)} ${f(b)} rg /Helv ${f(st.fontSize)} Tf`);
+      const [r, g, b] = hexToRgb(st.textColor ?? st.color);
+      entries.DA = PDFString.of(`${f(r)} ${f(g)} ${f(b)} rg /${fontNameOf(st)} ${f(st.fontSize)} Tf`);
+      // Text style as Revu writes it: /DS (CSS-like), /RC (XHTML), /Q (alignment).
+      entries.DS = PDFString.of(toDS(st));
+      entries.RC = PDFHexString.fromText(toRC(m.text ?? '', st));
+      entries.Q = quadding(st.align ?? 'left');
       if (m.type === 'callout') {
         entries.IT = 'FreeTextCallout';
         entries.CL = flat([P[0], calloutAttach(P[0], P[1], P[2])]);
@@ -792,6 +846,7 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
   if (input.bookmarks) writeBookmarks(doc, input.bookmarks);
   const layerRef = (id: string) => layerRefs.get(id) ?? (/^(\d+)R(\d*)$/.test(id) ? PDFRef.of(Number(id.split('R')[0]), Number(id.split('R')[1] || 0)) : undefined);
   const font = await doc.embedFont(StandardFonts.Helvetica);
+  const fonts = await embedTextFonts(doc, font, input.markups);
   if (input.formValues && Object.keys(input.formValues).length) writeFields(doc, input.formValues, font);
   const pageRefs = doc.getPages().map((pg) => pg.ref);
   // Groups are written as Revu writes them: members point to the first via /IRT with /RT /Group.
@@ -818,7 +873,7 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
       page.node.set(N('Annots'), annots);
     }
     const rows = m.type === 'legend' && m.legend ? legendRows(m.legend, input.markups, m.page) : [];
-    const built = buildAnnot(doc, font, m, input.pages[m.page], image, pageRefs, rows);
+    const built = buildAnnot(doc, font, m, input.pages[m.page], image, pageRefs, rows, fonts);
     if (m.source) carryOver(doc, PDFRef.of(m.source.objectNumber, m.source.generation), built[0]);
     const oc = m.layer ? layerRef(m.layer) : undefined;
     if (oc) for (const r of built) (doc.context.lookup(r) as PDFDict).set(N('OC'), oc);

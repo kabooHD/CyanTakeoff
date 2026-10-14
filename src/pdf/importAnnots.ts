@@ -18,6 +18,7 @@ import { PDFArray, PDFDict, PDFHexString, PDFName, PDFString, PDFNumber, PDFRawS
 import type { CustomColumn, Markup, MarkupStatus, MarkupStyle, MarkupType, Pt, Reply, Scale } from '../model/types';
 import { DEFAULT_STYLES, toolById } from '../tools/tools';
 import { MEASURE_TYPES } from '../model/measure';
+import { DEFAULT_LINE_HEIGHT, alignOfQuadding, parseDS } from '../model/textStyle';
 import {
   N, colorToHex, getArray, getDict, getName, getNumber, getText, lookup, numbers,
   parsePdfDate, readMeasure,
@@ -53,6 +54,7 @@ export interface CTData {
   seq?: Markup['seq']; // Sequence member
   display?: Markup['display']; // caption, segment values, centroid, units
   capture?: Markup['capture']; // Capture photos
+  valign?: MarkupStyle['valign']; margin?: number; autoSize?: boolean; shape?: MarkupStyle['shape']; // text box extras
   handles?: (number[] | null)[]; // curved segments: PDF-space [inX, inY, outX, outY] offsets per vertex
 }
 
@@ -135,14 +137,28 @@ function readStyle(doc: PDFDocument, dict: PDFDict, type: MarkupType, ct?: CTDat
   const width = (bs && getNumber(doc, bs, 'W')) ?? numbers(doc, getArray(doc, dict, 'Border'))[2] ?? defaults.width;
   const dashed = bs && getName(doc, bs, 'S') === 'D';
   const da = getText(doc, dict, 'DA') ?? getText(doc, dict, 'DS') ?? '';
-  const fontSize = Number(da.match(/([\d.]+)\s*(?:Tf|pt)/)?.[1]) || defaults.fontSize;
+  const ds = parseDS(getText(doc, dict, 'DS') ?? '');
+  const fontSize = ds.fontSize || Number(da.match(/([\d.]+)\s*(?:Tf|pt)/)?.[1]) || defaults.fontSize;
   const textColor = da.match(/([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+rg/);
   const textual = type === 'textbox' || type === 'callout';
+  const textTypes = textual || type === 'typewriter' || type === 'cloudplus';
+  // Text formatting: /DS, /Q and the DA font name (ours or Revu's), plus our extras.
+  const daFont = /\/(He|Ti|Co|Helv|Cour|Arial|Times)[A-Za-z]*/.exec(da)?.[0] ?? '';
+  const text: Partial<MarkupStyle> = textTypes ? {
+    ...ds,
+    font: ds.font ?? (/^\/(Ti|Times)/.test(daFont) ? 'Times' : /^\/(Co|Cour)/.test(daFont) ? 'Courier' : undefined),
+    bold: ds.bold ?? (/^\/(HeBo|HeBO|TiBo|TiBI|CoBo|CoBO)/.test(daFont) || undefined),
+    italic: ds.italic ?? (/^\/(HeOb|HeBO|TiIt|TiBI|CoOb|CoBO)/.test(daFont) || undefined),
+    align: ds.align ?? alignOfQuadding(getNumber(doc, dict, 'Q')),
+    valign: ct?.valign, margin: ct?.margin, autoSize: ct?.autoSize || undefined, shape: ct?.shape,
+  } : {};
+  if (text.lineHeight === DEFAULT_LINE_HEIGHT) delete text.lineHeight;
+  for (const k of Object.keys(text) as (keyof MarkupStyle)[]) if (text[k] === undefined || text[k] === false) delete text[k];
   // Polylines/lines: Revu writes /IC as the arrowhead fill, not a shape fill.
   const fillable = !['line', 'arrow', 'length', 'polyline', 'polylength', 'perimeter', 'pen'].includes(type);
   return {
     ...defaults,
-    color: textual && textColor ? colorToHex(textColor.slice(1, 4).map(Number))! : stroke ?? defaults.color,
+    color: textual ? stroke ?? (textColor ? colorToHex(textColor.slice(1, 4).map(Number))! : defaults.color) : stroke ?? defaults.color,
     fill: type === 'highlight' ? stroke ?? defaults.fill : fillable ? fill : null,
     opacity: ca ?? 1,
     fillOpacity: ct?.fillOpacity ?? getNumber(doc, dict, 'FillOpacity') ?? ca ?? defaults.fillOpacity,
@@ -151,6 +167,8 @@ function readStyle(doc: PDFDocument, dict: PDFDict, type: MarkupType, ct?: CTDat
     ...(ct?.lineDef ? { lineDef: ct.lineDef } : {}),
     ...(ct?.hatch ? { hatch: ct.hatch, hatchScale: ct.hatchScale } : {}),
     fontSize,
+    ...text,
+    ...(textTypes && (ds.textColor ?? (textColor ? colorToHex(textColor.slice(1, 4).map(Number)) : undefined)) ? { textColor: ds.textColor ?? colorToHex(textColor!.slice(1, 4).map(Number))! } : {}),
   };
 }
 

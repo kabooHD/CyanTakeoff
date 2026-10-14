@@ -16,6 +16,7 @@ import { STAMPS, downloadBase64, loadImage, pageText, pickFile, readAsDataUrl, s
 import { applyCutout, ellipsePolygon } from '../model/cutouts';
 import { expandGroups } from '../model/arrange';
 import { rgbaOf, wheelZoomFactor } from '../model/prefs';
+import { cssFamily, textStyleOf } from '../model/textStyle';
 import { autosizedBox, withBox } from '../model/textBox';
 import { textWidth } from './quickCommands';
 import { attachCapture, captureMenuItems, shrinkPhoto } from './Capture';
@@ -1844,7 +1845,7 @@ function TextEditor({ m, zoom, onDone }: { m: Markup; zoom: number; onDone: (t: 
   const w = Math.abs(box[1].x - box[0].x), h = Math.abs(box[1].y - box[0].y);
   return (
     <textarea className="text-editor" spellCheck lang="en" autoFocus value={text}
-      style={{ left: x * zoom, top: y * zoom, width: w * zoom, height: h * zoom, fontSize: m.style.fontSize * zoom, color: m.style.color }}
+      style={{ left: x * zoom, top: y * zoom, width: w * zoom, height: h * zoom, fontSize: m.style.fontSize * zoom, color: m.style.textColor ?? m.style.color, fontFamily: cssFamily(textStyleOf(m.style).font), fontWeight: m.style.bold ? 'bold' : undefined, fontStyle: m.style.italic ? 'italic' : undefined, textAlign: m.style.align, lineHeight: textStyleOf(m.style).lineHeight }}
       onChange={(e) => setText(e.target.value)}
       onBlur={() => onDone(text)}
       onKeyDown={(e) => {

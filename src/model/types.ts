@@ -141,6 +141,24 @@ export interface MarkupStyle {
   hatch?: HatchDef;
   hatchScale?: number;
   fontSize: number; // points
+  // Text formatting (Text Box, Callout, Typewriter, Cloud+); undefined = Revu defaults.
+  font?: 'Helvetica' | 'Times' | 'Courier';
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strike?: boolean;
+  align?: 'left' | 'center' | 'right';
+  valign?: 'top' | 'middle' | 'bottom';
+  /** Line spacing as a multiple of the font size (1.15 = Revu's 13.8pt for 12pt). */
+  lineHeight?: number;
+  /** Space between the text and the box border, points. */
+  margin?: number;
+  /** Text colour when it differs from the line colour. */
+  textColor?: string;
+  /** Auto: the largest font size that fits the box. */
+  autoSize?: boolean;
+  /** Shape of a text box / callout box. */
+  shape?: 'rectangle' | 'circle' | 'triangle' | 'hexagon';
 }
 
 export interface Markup {

@@ -395,6 +395,22 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Control+Shift+F8'); // content snap off for exact clicks
   await page.keyboard.press('Shift+L'); await click(44, 36); await click(54, 36);
   await page.keyboard.press('w'); await click(44, 12); await page.keyboard.type('Hello typewriter'); await page.keyboard.press('Escape');
+  // A text box with formatting: bold, centred, Times, hexagon (Properties > Text).
+  await page.keyboard.press('t'); await drag([30, 12], [41, 16]); await page.keyboard.type('Styled box'); await page.keyboard.press('Escape');
+  await page.locator('.side-right button[title="Properties"]').click();
+  await page.getByRole('button', { name: 'Bold' }).click();
+  await page.getByLabel('Text alignment').selectOption('center');
+  await page.getByLabel('Font', { exact: true }).selectOption('Times');
+  await page.getByLabel('Box shape').selectOption('hexagon');
+  {
+    const styled = page.locator('.markup-text', { hasText: 'Styled box' }).first();
+    const cs = await styled.evaluate((el) => { const c = getComputedStyle(el); return { w: c.fontWeight, a: c.textAlign, f: c.fontFamily }; });
+    assert((cs.w === 'bold' || Number(cs.w) >= 600) && cs.a === 'center' && /Times/.test(cs.f), `text formatting is drawn (${JSON.stringify(cs)})`);
+    assert(await page.locator('.markup-layer polygon').count() >= 1, 'a hexagon text box is drawn as a polygon');
+  }
+  await page.evaluate(() => (document.activeElement)?.blur?.());
+  await page.locator('.side-right button[title="Properties"]').click(); // back to the panel that was open
+  await page.keyboard.press('Escape');
   await page.keyboard.press('s'); await click(52, 14);
   await page.keyboard.press('d'); await drag([47.5, 31.2], [56, 29.6]);
   await page.waitForFunction(() => document.querySelector('.ml-table tbody')?.textContent?.includes('Strikethrough'));
@@ -415,7 +431,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const list = await page.locator('.ml-table tbody').innerText();
   for (const subj of ['Dimension', 'Typewriter', 'Stamp', 'Strikethrough', 'Flag', 'Cloud+', 'Arc']) assert(list.includes(subj), `${subj} markup created ${list.includes(subj) ? '' : list}`);
   assert(list.includes(`10'-0"`), 'Dimension shows its length');
-  assert(await page.locator('.ml-table tbody tr').count() === rowsBefore + 7, 'seven markups added');
+  assert(await page.locator('.ml-table tbody tr').count() === rowsBefore + 8, 'eight markups added');
 
   const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
   const f = `${OUT}/saved-tools.pdf`;
@@ -427,6 +443,12 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const after = await page.locator('.ml-table tbody').innerText();
   for (const subj of ['Dimension', 'Typewriter', 'Stamp', 'Strikethrough', 'Flag', 'Cloud+', 'Arc']) assert(after.includes(subj), `${subj} survives save and reload`);
   assert(after.includes('Hello typewriter') || (await page.locator('.markup-text.typewriter').allInnerTexts()).some((t) => t.includes('Hello typewriter')), 'typewriter text kept');
+  {
+    const styled = page.locator('.markup-text', { hasText: 'Styled box' }).first();
+    await styled.waitFor({ timeout: 10000 });
+    const cs = await styled.evaluate((el) => { const c = getComputedStyle(el); return { w: c.fontWeight, a: c.textAlign, f: c.fontFamily }; });
+    assert((cs.w === 'bold' || Number(cs.w) >= 600) && cs.a === 'center' && /Times/.test(cs.f), `text formatting survives save and reload (${JSON.stringify(cs)})`);
+  }
 
   // Hyperlink to page 2, followed by double-click.
   await page.keyboard.press('Control+Shift+F8');
@@ -713,8 +735,8 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert(!(await added.innerText()).includes('🔗'), 'Add makes an unlinked flag');
   await fp.getByRole('button', { name: 'Properties' }).click();
   await fp.getByLabel('Flag title').fill('Cover');
-  await page.waitForTimeout(300);
-  assert((await rows().allInnerTexts()).some((t) => t.startsWith('Cover') || t.includes('Cover')), `the title edit renames the flag (${pageLabel})`);
+  await page.waitForFunction(() => [...document.querySelectorAll('.flags-panel .flag-row')].some((r) => r.textContent?.includes('Cover')), null, { timeout: 10000 });
+  assert((await rows().allInnerTexts()).some((t) => t.includes('Cover')), `the title edit renames the flag (${pageLabel})`);
   await fp.getByRole('button', { name: 'Action' }).click();
   await fp.getByLabel('Flag action').selectOption('uri');
   await fp.getByLabel('Flag URL').waitFor();

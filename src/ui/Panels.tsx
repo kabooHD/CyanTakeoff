@@ -20,6 +20,7 @@ import { LENGTH_UNITS, SEGMENT_TYPES, displayText } from '../model/measureDispla
 import { placeColumns } from '../model/listColumns';
 import { layoutOf, withLayout } from '../model/layoutProps';
 import { addCapture, openCapturePreview } from './Capture';
+import { DEFAULT_LINE_HEIGHT, DEFAULT_MARGIN, TEXT_FONTS, textStyleOf } from '../model/textStyle';
 import { usePageSetup } from './PageSetup';
 import { useApp, useActiveDoc, type DocState } from '../model/store';
 import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, formatNumber, measure, precisionOf, unitLabel, withPrecision } from '../model/measure';
@@ -282,6 +283,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 function StyleEditor({ style, type, onChange }: { style: MarkupStyle; type: MarkupType; onChange: (p: Partial<MarkupStyle>) => void }) {
   const textual = type === 'textbox' || type === 'callout';
+  const textTypes = textual || type === 'typewriter' || type === 'cloudplus';
   return (
     <>
       <div className="prop-section">Appearance</div>
@@ -297,8 +299,63 @@ function StyleEditor({ style, type, onChange }: { style: MarkupStyle; type: Mark
       <Row label="Line Width"><input type="number" min={0} max={50} step={0.25} value={style.width} onChange={(e) => onChange({ width: Math.max(0, +e.target.value) })} /></Row>
       <Row label="Line Style"><LineStyleSelect style={style} onChange={onChange} /></Row>
       <HatchSelect style={style} type={type} onChange={onChange} />
-      {(textual || ['length', 'polylength', 'area', 'perimeter', 'volume', 'angle', 'radius', 'diameter'].includes(type)) && (
+      {(textual || ['length', 'polylength', 'area', 'perimeter', 'volume', 'angle', 'radius', 'diameter'].includes(type)) && !textTypes && (
         <Row label="Font Size"><input type="number" min={4} max={144} value={style.fontSize} onChange={(e) => onChange({ fontSize: Math.max(4, +e.target.value) })} /></Row>
+      )}
+      {textTypes && <TextStyleEditor style={style} type={type} onChange={onChange} />}
+    </>
+  );
+}
+
+/** Revu's text properties: font, size (or Auto), style, alignment, line space, margin, text colour, box shape. */
+function TextStyleEditor({ style, type, onChange }: { style: MarkupStyle; type: MarkupType; onChange: (p: Partial<MarkupStyle>) => void }) {
+  const t = textStyleOf(style);
+  const toggle = (k: 'bold' | 'italic' | 'underline' | 'strike', label: string, title: string) => (
+    <button className={`tb-btn text-toggle ${t[k] ? 'active' : ''}`} title={title} aria-label={title} aria-pressed={t[k]} onClick={() => onChange({ [k]: !t[k] || undefined } as Partial<MarkupStyle>)}>{label}</button>
+  );
+  return (
+    <>
+      <div className="prop-section">Text</div>
+      <Row label="Font">
+        <select aria-label="Font" value={t.font} onChange={(e) => onChange({ font: e.target.value === 'Helvetica' ? undefined : e.target.value as MarkupStyle['font'] })}>
+          {TEXT_FONTS.map((fnt) => <option key={fnt} value={fnt}>{fnt}</option>)}
+        </select>
+      </Row>
+      <Row label="Font Size">
+        <span className="inline">
+          <input type="number" min={1} max={144} step={0.5} value={style.fontSize} disabled={t.autoSize} onChange={(e) => onChange({ fontSize: Math.max(1, +e.target.value) })} style={{ width: 60 }} />
+          <label title="The largest size that fits the box"><input type="checkbox" checked={t.autoSize} onChange={(e) => onChange({ autoSize: e.target.checked || undefined })} /> Auto</label>
+        </span>
+      </Row>
+      <Row label="Font Style">
+        <span className="inline text-styles">
+          {toggle('bold', 'B', 'Bold')}{toggle('italic', 'I', 'Italic')}{toggle('underline', 'U', 'Underline')}{toggle('strike', 'S', 'Strikethrough')}
+        </span>
+      </Row>
+      <Row label="Alignment">
+        <span className="inline">
+          <select aria-label="Text alignment" value={t.align} onChange={(e) => onChange({ align: e.target.value === 'left' ? undefined : e.target.value as MarkupStyle['align'] })}>
+            <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
+          </select>
+          <select aria-label="Vertical alignment" value={t.valign} onChange={(e) => onChange({ valign: e.target.value === 'top' ? undefined : e.target.value as MarkupStyle['valign'] })}>
+            <option value="top">Top</option><option value="middle">Middle</option><option value="bottom">Bottom</option>
+          </select>
+        </span>
+      </Row>
+      <Row label="Line Space"><input aria-label="Line space" type="number" min={0.5} max={5} step={0.05} value={t.lineHeight} onChange={(e) => onChange({ lineHeight: +e.target.value === DEFAULT_LINE_HEIGHT ? undefined : Math.max(0.5, +e.target.value) })} style={{ width: 60 }} /></Row>
+      <Row label="Margin"><input aria-label="Text margin" type="number" min={0} max={72} step={0.5} value={t.margin} onChange={(e) => onChange({ margin: +e.target.value === DEFAULT_MARGIN ? undefined : Math.max(0, +e.target.value) })} style={{ width: 60 }} /></Row>
+      <Row label="Text Color">
+        <span className="inline">
+          <input type="checkbox" aria-label="Separate text colour" checked={!!style.textColor} onChange={(e) => onChange({ textColor: e.target.checked ? style.color : undefined })} />
+          {style.textColor && <input type="color" aria-label="Text colour" value={style.textColor} onChange={(e) => onChange({ textColor: e.target.value })} />}
+        </span>
+      </Row>
+      {(type === 'textbox' || type === 'callout') && (
+        <Row label="Shape">
+          <select aria-label="Box shape" value={t.shape} onChange={(e) => onChange({ shape: e.target.value === 'rectangle' ? undefined : e.target.value as MarkupStyle['shape'] })}>
+            <option value="rectangle">Rectangle</option><option value="circle">Circle</option><option value="triangle">Triangle</option><option value="hexagon">Hexagon</option>
+          </select>
+        </Row>
       )}
     </>
   );
