@@ -640,6 +640,9 @@ shows the menu it lives in and its shortcut.
 - Batch > Sign & Seal: one digital ID signs every open document with an
   invisible signature (the seal is placed first with Batch > Apply Stamp).
   Save All writes the signed files.
+- File > Create > Layered PDF: pick several PDFs; a new document whose
+  page N carries page N of every file as a layer named after the file.
+  File > Open Recent: the last files (File Access keeps the full list).
 - Document > Insert > Layered Pages: pick a PDF; its page N becomes a
   layer named after the file on page N of the open document (as Add Layer
   from Page does, one page at a time).

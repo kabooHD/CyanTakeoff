@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { pickFile } from './toolActions';
 import { FilesRow, batchHint, targets } from './filesRow';
-import { addLayerFromPage, readLayers, refId, writeLayers } from '../pdf/layers';
+import { addLayerFromPage, buildLayeredPdf, readLayers, refId, writeLayers } from '../pdf/layers';
 import { create } from 'zustand';
 import { PDFDocument, type PDFRef } from 'pdf-lib';
 import { activeDoc, serialize, useApp, type DocState } from '../model/store';
@@ -143,6 +143,31 @@ export async function insertLayeredPages() {
     writeLayers(lib, set);
   }, `Layered Pages: "${name}" added as a layer on ${n} page${n === 1 ? '' : 's'}`);
   s.setPanels({ left: 'layers' });
+}
+
+// ---------- File > Create > Layered PDF ----------
+
+/** Pick several PDFs; page N of each becomes a layer (named after the file) on page N of a new document. */
+export async function createLayeredPdf(picked?: File[]) {
+  const s = useApp.getState();
+  const files = picked ?? await new Promise<File[]>((resolve) => {
+    const input = Object.assign(document.createElement('input'), { type: 'file', accept: '.pdf,application/pdf', multiple: true });
+    input.onchange = () => resolve(Array.from(input.files ?? []));
+    input.oncancel = () => resolve([]);
+    input.click();
+  });
+  if (!files.length) return;
+  const srcs: { name: string; doc: PDFDocument }[] = [];
+  for (const f of files) {
+    try { srcs.push({ name: f.name.replace(/\.pdf$/i, ''), doc: await PDFDocument.load(new Uint8Array(await f.arrayBuffer()), { ignoreEncryption: true, updateMetadata: false }) }); }
+    catch { s.setStatus(`${f.name} could not be read as a PDF.`); return; }
+  }
+  const { out, n } = await buildLayeredPdf(srcs);
+  await s.openBytes(await out.save(), 'Layered.pdf');
+  const d = useApp.getState().docs.find((x) => x.name === 'Layered.pdf');
+  if (d) useApp.setState({ docs: useApp.getState().docs.map((x) => (x.id === d.id ? { ...x, dirty: true } : x)) });
+  useApp.getState().setStatus(`Layered PDF: ${srcs.length} file${srcs.length === 1 ? '' : 's'} as layers on ${n} page${n === 1 ? '' : 's'}`);
+  useApp.getState().setPanels({ left: 'layers' });
 }
 
 // ---------- Crop Pages ----------

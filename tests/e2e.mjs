@@ -651,6 +651,23 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.getByRole('dialog', { name: 'Insert Blank Page' }).getByRole('button', { name: 'OK' }).click();
   await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n + 1})`), n0);
   assert(await pagesOf() === n0 + 1, 'Insert Blank Page adds a page');
+  // File > Create Layered PDF: each chosen file becomes a layer of a new document; File > Open Recent lists recent files.
+  {
+    const tabs = await page.locator('.doc-tab').count();
+    await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+    assert(await page.getByRole('menuitem', { name: /^Open Recent › / }).count() >= 1, 'File > Open Recent lists the files opened before');
+    const [cfc] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('menuitem', { name: 'Create Layered PDF…' }).click()]);
+    await cfc.setFiles(['tests/fixtures/form.pdf', 'tests/fixtures/revu/measure.pdf']);
+    await page.getByText(/Layered PDF: 2 files as layers/).waitFor({ timeout: 20000 });
+    await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs);
+    const lp = page.getByRole('tree', { name: 'Layers' });
+    await lp.getByRole('treeitem', { name: 'Layer measure' }).waitFor({ timeout: 10000 });
+    assert(await lp.getByRole('treeitem').count() === 2, 'Create Layered PDF makes one layer per file');
+    await page.keyboard.press('Alt+Y');
+    page.once('dialog', (d) => d.accept()); // close the unsaved layered document
+    await page.keyboard.press('Control+F4');
+    await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n, tabs);
+  }
   // Document > Insert Layered Pages: each page of the chosen PDF becomes a layer here.
   {
     await page.locator('.menubar-item > button', { hasText: /^Document$/ }).click();

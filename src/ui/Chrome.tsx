@@ -41,7 +41,9 @@ import { useDocProps } from './DocProperties';
 import { useCamera } from './Camera';
 import { useStampManager } from './Stamps';
 import { useManageStatus } from './StatusModels';
-import { emailDocument, insertLayeredPages, publishCompressed, useDocTools } from './DocTools';
+import { createLayeredPdf, emailDocument, insertLayeredPages, publishCompressed, useDocTools } from './DocTools';
+import { useRecent } from '../model/recent';
+import { reopen } from './FileAccess';
 import { copyPageToSnapshot, copyText, selectAllText } from './textCommands';
 import { openCommandFinder, registerMenus } from './CommandFinder';
 
@@ -51,6 +53,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
   const s = useApp();
   const doc = useActiveDoc();
   const [open, setOpen] = useState<string | null>(null);
+  const recent = useRecent((x) => x.list);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -77,6 +80,8 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'New PDF from Template…', action: () => useTemplateDialog.setState({ open: true }) },
       { label: 'Open…', shortcut: 'Ctrl+O', action: openFile },
       { label: 'Open Sample Drawing', action: openSample },
+      ...recent.slice(0, 8).map((r) => ({ label: `Open Recent › ${r.name}`, action: () => reopen(r) })),
+      { label: 'Create Layered PDF…', action: () => createLayeredPdf() },
       { label: 'Combine Files…', action: combineFiles },
       { label: 'Close', shortcut: 'Ctrl+F4', disabled: noDoc, action: () => doc && s.closeDoc(doc.id) },
       { sep: true },

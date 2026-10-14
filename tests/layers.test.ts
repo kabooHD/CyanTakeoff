@@ -170,3 +170,21 @@ describe('layer move / rotate / scale matrix', async () => {
     expect(ap(layerMatrix(0, 0, 0, 1, 50, 50), 50, 50)).toEqual([50, 50]);
   });
 });
+
+describe('Create Layered PDF', () => {
+  it('puts page N of every file on page N as one layer per file', async () => {
+    const { PDFDocument } = await import('pdf-lib');
+    const { buildLayeredPdf, readLayers, layersOnPages } = await import('../src/pdf/layers');
+    const a = await PDFDocument.create(); a.addPage([300, 200]).drawLine({ start: { x: 0, y: 0 }, end: { x: 300, y: 200 } }); a.addPage([300, 200]); // page 2 blank
+    const b = await PDFDocument.create(); b.addPage([400, 400]).drawLine({ start: { x: 0, y: 0 }, end: { x: 400, y: 400 } });
+    const { out, n } = await buildLayeredPdf([{ name: 'Arch', doc: a }, { name: 'Mech', doc: b }]);
+    expect(n).toBe(2);
+    expect(out.getPage(0).getWidth()).toBe(300);
+    const again = await PDFDocument.load(await out.save());
+    const set = readLayers(again)!;
+    expect(Object.values(set.layers).map((l) => l.name)).toEqual(['Arch', 'Mech']);
+    const used = layersOnPages(again);
+    expect(used[0]).toHaveLength(2); // both files on page 1
+    expect(used[1]).toHaveLength(0); // Arch's page 2 is blank: nothing to embed
+  });
+});
