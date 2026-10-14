@@ -135,9 +135,12 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
   shadings under a mark are removed. The rest of the page stays vector and
   searchable. A page whose content cannot be parsed falls back to an image.
 - OCR (Ctrl+Shift+O): makes scanned pages searchable (invisible text).
-  Languages: English, French, German, Spanish, Italian, Portuguese, Dutch
-  (several at once); their data is served by the app and only downloaded
-  when used.
+  Languages: English, French, German, Spanish, Italian, Portuguese, Dutch,
+  Polish, Turkish, Russian, Ukrainian, Greek, Arabic, Hebrew, Chinese
+  (Simplified and Traditional), Japanese, Korean (several at once); their
+  data is served by the app and only downloaded when used. The invisible
+  text uses a glyphless Unicode font (any script searches and copies;
+  right-to-left words are written in visual order).
 
 - Forms: field tools (Text Field, Check Box, Radio Button, Dropdown, List
   Box, Signature Field; Revu default shortcut X adds a signature field):

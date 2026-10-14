@@ -126,7 +126,8 @@ signatures (draw/type, reusable), digital signatures (src/pdf/sign.ts:
 trust list src/model/trust.ts with chain checks, RFC 3161 timestamps;
 Signatures panel Alt+4), redaction (mark area/text; apply removes the
 content under the marks: src/pdf/redactContent.ts), OCR (tesseract.js,
-7 Latin-script languages, assets served from /ocr/, invisible text);
+18 languages incl. Cyrillic, Greek, Arabic, Hebrew, CJK; invisible text in a
+glyphless Unicode font, src/pdf/glyphless.ts; assets served from /ocr/);
 length, polylength, area, perimeter, volume, count, angle, radius, diameter;
 cutouts (polygon/ellipse, Revu fuse/trim rules); curved segments
 (src/model/curves.ts: Ctrl+drag, Ctrl/Shift+click, Convert to Arc; PDF 2.0
@@ -157,5 +158,4 @@ first paint, not only when a file is opened (split chunks, docs/perf.md); need R
 tests/fixtures/revu/README.md): cutout storage (ours in CTData), custom
 column values (/BSIColumnData kept on edit but not read), .btx tool sets;
 timestamps need a TSA that allows browser
-requests (CORS); revocation (OCSP/CRL) is not checked; OCR languages limited to Latin scripts
-(the text layer is WinAnsi).
+requests (CORS); revocation (OCSP/CRL) is not checked.
