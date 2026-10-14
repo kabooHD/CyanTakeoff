@@ -19,6 +19,7 @@ import { allColumns, exportSummaryCsv, exportSummaryPdf, exportSummaryXlsx, open
 import { viewerApi } from './Viewer';
 import { combineFiles, openPagesDialog, unflattenMarkups } from './PagesDialog';
 import { openCompare } from './Compare';
+import { openBatchCompare } from './BatchCompare';
 import { openPrint } from './Print';
 import { addBookmark } from './BookmarksPanel';
 import { checkSpelling, useSpellContent } from './Spell';
@@ -250,6 +251,8 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
     ],
     Batch: [
       { label: 'Batch Link…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'batch-link' }) },
+      { label: 'Compare Documents…', disabled: s.docs.length < 2, action: () => openBatchCompare('compare') },
+      { label: 'Overlay Pages…', disabled: s.docs.length < 2, action: () => openBatchCompare('overlay') },
       { label: 'Apply Stamp…', disabled: noDoc, action: () => { batchHint.set(); useApplyStamp.setState({ open: true }); } },
       { label: 'Sign & Seal…', disabled: noDoc, action: () => { batchHint.set(); openSignDialog(); } },
       { label: 'Rotate Pages…', disabled: noDoc, action: () => { batchHint.set(); openPagesDialog('rotate'); } },

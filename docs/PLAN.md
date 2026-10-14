@@ -225,6 +225,8 @@ filling, image signatures, redaction and OCR.
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData
 - [x] File > Create Layered PDF, File > Open Recent
+- [x] Batch > Compare Documents / Overlay Pages over open files (pairing by
+  name+index or page label with Match Filter, CSV report)
 - [x] Batch > Sign & Seal (invisible signature on every open document);
   Document > Insert Layered Pages (a PDF's pages become layers here)
 - [x] Properties: Layout section (X, Y, Width, Height, editable) and Set

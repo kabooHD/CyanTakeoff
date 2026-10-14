@@ -131,7 +131,7 @@ src/ui/Stamps.tsx), status models (src/model/statusModels.ts,
 src/ui/StatusModels.tsx), Edit Action on any markup, Offset
 (src/model/offset.ts, src/ui/OffsetBar.tsx), Multiply (src/model/multiply.ts,
 src/ui/Multiply.tsx), Hide/Show markups, Sketch to Scale (src/model/sketch.ts,
-src/ui/SketchBar.tsx), Camera (src/ui/Camera.tsx), Capture photos (src/ui/Capture.tsx), Find Tools + Commands (src/ui/CommandFinder.tsx), Batch Sign & Seal, Insert Layered
+src/ui/SketchBar.tsx), Camera (src/ui/Camera.tsx), Capture photos (src/ui/Capture.tsx), Find Tools + Commands (src/ui/CommandFinder.tsx), Batch Compare/Overlay (src/model/batchPairs.ts, src/ui/BatchCompare.tsx), Batch Sign & Seal, Insert Layered
 Pages (DocTools.tsx),
 Replace Checked (src/ui/Search.tsx); low-end machine pass (src/model/device.ts: undo
 memory budget, cold undo snapshots, canvas limits; docs/perf.md); CyanTakeoff (=Revu)

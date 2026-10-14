@@ -627,6 +627,18 @@ A search box over every menu item and tool: type part of the name, pick
 with the arrow keys, Enter runs it (disabled items are greyed). Each row
 shows the menu it lives in and its shortcut.
 
+## Batch > Compare Documents / Overlay Pages
+Pages of the chosen current files are paired with pages of the revised
+files by File Name + Page Index (name without extension, case ignored)
+or by Page Label. A Match Filter picks the part of the name/label to
+compare: `*` non-numeric characters, `#` numbers, `?` a letter, `;`
+separates alternatives (e.g. `?-###` finds "A-101" in "A-101 rev 2").
+Unmatched pages are left out; the dialog lists the pairs. Compare clouds
+the differences on each revised sheet (Visual or Vector); Overlay makes
+one overlay PDF per pair. A CSV report lists the pairs with the number of
+differences or the overlay file. Ours: only open files (Revu also adds
+folders, manual correlation and saved .bcx batches).
+
 ## Capture, Sign & Seal, Layered Pages
 - Capture (embedded markup media): a markup can carry photos, added from
   Properties > Capture, right-click > Capture > From Camera / From File,

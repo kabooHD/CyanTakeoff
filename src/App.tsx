@@ -21,6 +21,7 @@ import { nextHit, useSearch } from './ui/Search';
 import { PagesDialog, openPagesDialog, unflattenMarkups } from './ui/PagesDialog';
 import { rotatePages } from './pdf/pages';
 import { CompareDialog } from './ui/Compare';
+import { BatchCompareDialog } from './ui/BatchCompare';
 import { PrintDialog, openPrint } from './ui/Print';
 import { stepView } from './ui/Rulers';
 import { addBookmark } from './ui/BookmarksPanel';
@@ -291,6 +292,7 @@ export function App() {
       <SpaceDialog />
       <PagesDialog />
       <CompareDialog />
+      <BatchCompareDialog />
       <PrintDialog />
       <MultiplyDialog />
       <ReviewTextDialog />

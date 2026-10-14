@@ -2859,6 +2859,23 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     assert(n === 1, `vector compare finds the ${what} change (${n} difference)`);
   }
   await page.screenshot({ path: `${OUT}/compare-style.png` });
+  // Batch > Compare Documents: pages paired by label ('1' on both), one difference clouded.
+  {
+    await page.locator('.doc-tab', { hasText: 'style-a' }).first().click();
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: 'Batch', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Compare Documents…' }).click();
+    const bd = page.getByRole('dialog', { name: 'Batch Compare Documents' });
+    await bd.getByLabel('Current files').selectOption([{ label: 'style-a.pdf' }]);
+    await bd.getByLabel('Revised files').selectOption([{ label: 'style-b.pdf' }]);
+    assert((await bd.locator('.batch-pairs').innerText()).includes('No pages match'), 'different file names do not pair by File Name, Page Index');
+    await bd.getByLabel('Match pages by').selectOption('label');
+    assert((await bd.locator('.batch-pairs').innerText()).includes('style-a.pdf p1 ⇄ style-b.pdf p1'), 'Page Label pairs the sheets');
+    await bd.getByLabel('Compare method').selectOption('vector');
+    await bd.getByRole('button', { name: 'OK' }).click();
+    await page.waitForFunction(() => /Batch Compare: 1 pair, \d+ difference/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 30000 });
+    assert((await page.locator('.statusbar').innerText()).includes('1 pair, 1 difference'), 'Batch Compare clouds the difference of the paired sheets');
+  }
 }
 
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
