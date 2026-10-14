@@ -155,7 +155,6 @@ Known gaps: low-end performance measured only with CPU throttling (docs/perf.md,
 loaded on demand); need Revu-made samples (none public; wanted list in
 tests/fixtures/revu/README.md): cutout storage (ours in CTData), custom
 column values (/BSIColumnData kept on edit but not read), .btx tool sets;
-vector Compare ignores
-colour/lineweight-only changes; signatures are not checked against a
+signatures are not checked against a
 trust list and have no timestamps; OCR languages limited to Latin scripts
 (the text layer is WinAnsi).

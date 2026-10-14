@@ -124,13 +124,24 @@ export function mapBox(m: Mat, b: Rect): Rect {
 
 export interface Rect { x0: number; y0: number; x1: number; y1: number }
 /** A page's drawing as vectors, in page space: straight segments (x1,y1,x2,y2...) and text runs. */
-export interface VectorPage { segments: Float32Array; texts: (Rect & { str: string })[] }
+export interface VectorPage {
+  segments: Float32Array; texts: (Rect & { str: string })[];
+  /** Per segment: colour (0xRRGGBB) and line width (-1 for fills). Without it, style changes are not compared. */
+  styles?: Float32Array;
+}
+
+/** Same look: same colour, and line widths within 20% (fills match fills). */
+export function sameStyle(c1: number, w1: number, c2: number, w2: number): boolean {
+  if (c1 !== c2) return false;
+  if (w1 < 0 || w2 < 0) return w1 < 0 && w2 < 0;
+  return Math.abs(w1 - w2) <= Math.max(0.15, 0.2 * Math.max(w1, w2));
+}
 
 /** Grid of segments for "is there a line within tol of this point" queries. */
 class SegIndex {
   private grid = new Map<number, number[]>();
   private big: number[] = [];
-  constructor(private s: Float32Array, private cell: number) {
+  constructor(private s: Float32Array, private cell: number, private sty?: Float32Array) {
     for (let i = 0; i < s.length; i += 4) {
       const x0 = Math.floor(Math.min(s[i], s[i + 2]) / cell), x1 = Math.floor(Math.max(s[i], s[i + 2]) / cell);
       const y0 = Math.floor(Math.min(s[i + 1], s[i + 3]) / cell), y1 = Math.floor(Math.max(s[i + 1], s[i + 3]) / cell);
@@ -158,6 +169,24 @@ class SegIndex {
     }
     return this.big.some((i) => this.d2(i, x, y) <= t2);
   }
+  /** 0: no line within tol; 1: only lines drawn differently; 2: a line in the same style. */
+  nearStyle(x: number, y: number, tol: number, c: number, w: number): 0 | 1 | 2 {
+    const t2 = tol * tol;
+    let found: 0 | 1 = 0;
+    const check = (i: number) => {
+      if (this.d2(i, x, y) > t2) return false;
+      if (!this.sty || sameStyle(c, w, this.sty[i / 2], this.sty[i / 2 + 1])) return true;
+      found = 1;
+      return false;
+    };
+    for (let cx = Math.floor((x - tol) / this.cell); cx <= Math.floor((x + tol) / this.cell); cx++) {
+      for (let cy = Math.floor((y - tol) / this.cell); cy <= Math.floor((y + tol) / this.cell); cy++) {
+        for (const i of this.grid.get(cx * 100_003 + cy) ?? []) if (check(i)) return 2;
+      }
+    }
+    for (const i of this.big) if (check(i)) return 2;
+    return found;
+  }
 }
 
 function mapSegs(s: Float32Array, m: Mat | null): Float32Array {
@@ -170,18 +199,24 @@ function mapSegs(s: Float32Array, m: Mat | null): Float32Array {
   return out;
 }
 
-/** Points sampled along `segs` (every `step`) that have no line of `idx` within `tol`. */
-function uncovered(segs: Float32Array, idx: SegIndex, tol: number, step: number): Pt[] {
-  const out: Pt[] = [];
+/**
+ * Points sampled along `segs` (every `step`) that have no line of `idx`
+ * within `tol` (`missing`), or only lines in another colour or weight
+ * (`restyled`, when both pages carry styles).
+ */
+function uncovered(segs: Float32Array, idx: SegIndex, tol: number, step: number, sty?: Float32Array): { missing: Pt[]; restyled: Pt[] } {
+  const missing: Pt[] = [], restyled: Pt[] = [];
   for (let i = 0; i < segs.length; i += 4) {
     const ax = segs[i], ay = segs[i + 1], dx = segs[i + 2] - ax, dy = segs[i + 3] - ay;
     const n = Math.min(400, Math.max(1, Math.ceil(Math.hypot(dx, dy) / step)));
     for (let k = 0; k <= n; k++) {
       const x = ax + (dx * k) / n, y = ay + (dy * k) / n;
-      if (!idx.near(x, y, tol)) out.push({ x, y });
+      if (!sty) { if (!idx.near(x, y, tol)) missing.push({ x, y }); continue; }
+      const r = idx.nearStyle(x, y, tol, sty[i / 2], sty[i / 2 + 1]);
+      if (r === 0) missing.push({ x, y }); else if (r === 1) restyled.push({ x, y });
     }
   }
-  return out;
+  return { missing, restyled };
 }
 
 const center = (r: Rect) => ({ x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 });
@@ -206,13 +241,21 @@ function unmatchedText(a: (Rect & { str: string })[], b: (Rect & { str: string }
  * line up as drawn. Linework is sampled every `step` and counts as changed
  * where the other page has no line within `tol` (page units).
  */
-export function vectorDiff(a: VectorPage, b: VectorPage, m: Mat | null, tol = 1, step = 2) {
+export function vectorDiff(a: VectorPage, b: VectorPage, m: Mat | null, tol = 1, step = 2, styles = true) {
   const sa = mapSegs(a.segments, m);
   const ta = m ? a.texts.map((t) => ({ ...mapBox(m, t), str: t.str })) : a.texts;
   const cell = 16;
+  // Colour and line weight are compared when both pages carry them (weights scale with the alignment).
+  const k = m ? Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])) || 1 : 1;
+  const both = styles && a.styles && b.styles && a.styles.length === a.segments.length / 2 && b.styles.length === b.segments.length / 2;
+  const styA = both ? a.styles!.map((v, i) => (i % 2 && v > 0 ? v * k : v)) : undefined;
+  const removed = uncovered(sa, new SegIndex(b.segments, cell, both ? b.styles : undefined), tol, step, styA);
+  const added = uncovered(b.segments, new SegIndex(sa, cell, styA), tol, step, both ? b.styles : undefined);
   return {
-    removed: uncovered(sa, new SegIndex(b.segments, cell), tol, step),
-    added: uncovered(b.segments, new SegIndex(sa, cell), tol, step),
+    removed: removed.missing,
+    added: added.missing,
+    /** Linework in the same place on both pages but in another colour or weight (on page b). */
+    restyled: added.restyled,
     removedText: unmatchedText(ta, b.texts, tol),
     addedText: unmatchedText(b.texts, ta, tol),
   };
@@ -230,7 +273,7 @@ export function vectorMask(d: ReturnType<typeof vectorDiff>, w: number, h: numbe
       for (let x = Math.max(0, Math.floor(r.x0 * k)); x < Math.min(w, Math.ceil(r.x1 * k)); x++) mask[y * w + x] |= v;
     }
   };
-  d.removed.forEach((p) => dot(p, 1)); d.added.forEach((p) => dot(p, 2));
+  d.removed.forEach((p) => dot(p, 1)); d.added.forEach((p) => dot(p, 2)); d.restyled.forEach((p) => dot(p, 2));
   d.removedText.forEach((r) => box(r, 1)); d.addedText.forEach((r) => box(r, 2));
   return mask;
 }

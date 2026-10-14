@@ -2,7 +2,7 @@
 // Usage: npm run build && npx vite preview --port 4173 & node tests/e2e.mjs
 import { chromium } from 'playwright-core';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { PDFDocument, PDFName, PDFArray, PDFDict, PDFString, StandardFonts } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFArray, PDFDict, PDFString, StandardFonts, rgb } from 'pdf-lib';
 
 const URL = process.env.APP_URL ?? 'http://localhost:4173/';
 const OUT = process.env.OUT ?? 'test-results';
@@ -2148,6 +2148,38 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const found = await page.locator('.search-hit').count();
   assert(found > 0, `Replace Checked rewrites the page text (${found} STUDIO found)`);
   await page.screenshot({ path: `${OUT}/replace-checked.png` });
+}
+
+// Vector compare notices colour and line-weight-only changes.
+{
+  const make = async (color, w) => {
+    const d = await PDFDocument.create();
+    const pg = d.addPage([612, 792]);
+    pg.drawLine({ start: { x: 100, y: 700 }, end: { x: 500, y: 700 }, thickness: 1, color: rgb(0, 0, 0) });
+    pg.drawLine({ start: { x: 100, y: 400 }, end: { x: 500, y: 400 }, thickness: w, color });
+    pg.drawRectangle({ x: 100, y: 100, width: 200, height: 100, borderWidth: 1, borderColor: rgb(0, 0, 0) });
+    return d.save();
+  };
+  writeFileSync(`${OUT}/style-a.pdf`, await make(rgb(0, 0, 0), 1));
+  writeFileSync(`${OUT}/style-b.pdf`, await make(rgb(1, 0, 0), 1));
+  writeFileSync(`${OUT}/style-c.pdf`, await make(rgb(0, 0, 0), 4));
+  const fc = await ctrlO();
+  await fc.setFiles([`${OUT}/style-a.pdf`, `${OUT}/style-b.pdf`, `${OUT}/style-c.pdf`]);
+  await page.waitForFunction(() => [...document.querySelectorAll('.doc-tab')].some((t) => t.textContent?.startsWith('style-c')));
+  await page.waitForTimeout(800);
+  for (const [rev, what] of [['style-b.pdf', 'colour'], ['style-c.pdf', 'line weight']]) {
+    await page.getByRole('button', { name: 'Document', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Compare Documents…' }).click();
+    const cd = page.getByRole('dialog', { name: 'Compare Documents' });
+    await cd.getByLabel('Original document').selectOption({ label: 'style-a.pdf' });
+    await cd.getByLabel('Revised document').selectOption({ label: rev });
+    await cd.getByLabel('Compare method').selectOption('vector');
+    await cd.getByRole('button', { name: 'OK' }).click();
+    await page.waitForFunction(() => /Compare: (\d+ difference|no diff)/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 30000 });
+    const n = Number((await page.locator('.statusbar').innerText()).match(/Compare: (\d+) difference/)?.[1] ?? 0);
+    assert(n === 1, `vector compare finds the ${what} change (${n} difference)`);
+  }
+  await page.screenshot({ path: `${OUT}/compare-style.png` });
 }
 
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.

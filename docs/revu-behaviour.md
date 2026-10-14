@@ -157,6 +157,9 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
   vectors (lines, curves and text from the PDF content: exact, independent
   of resolution; colour- or lineweight-only changes are not flagged).
 
+- Vector compare also flags linework that is in the same place but in
+  another colour or a line weight more than 20% different.
+
 ## Measurement properties: slope, rise/drop, depth
 - Slope (Pitch x/12, Degree or Grade %) adjusts lengths and areas for a
   sloped plane: sloped = plan × sqrt(1 + slope²).

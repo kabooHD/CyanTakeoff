@@ -41,7 +41,7 @@ Bluebeam users should be able to switch without retraining:
 | Markups List | Markups List | Sortable/filterable grid of every markup, custom columns, status/check marks, replies, summary export to CSV/XLSX/PDF |
 | Tool Chest | Tool Chest | Reusable tool sets in "properties" or "drawing" mode, import/export, shared tool sets |
 | Measure / takeoff | Measurements | Calibrate, viewports with per-area scales, length, polylength, area, perimeter, volume, count, diameter, angle, radius, cutouts, depth, slope, Dynamic Fill, Legends, custom columns with formulas |
-| Compare | Overlay pages, Compare Documents | Raster overlay with colour tint and alignment points; vector diff with clouded changes |
+| Compare | Overlay pages, Compare Documents | Raster overlay with colour tint and alignment points; vector diff with clouded changes, including colour and line weight changes |
 | Sets | Sets | Multi-PDF drawing sets with sheet index, page labels, hyperlinks across sheets |
 | Batch | Batch Link, Slip Sheet, Stamp, Flatten, Summary | Auto-link sheet references, slip-sheet new revisions while carrying markups forward, batch stamp/flatten/export |
 | Document tools | Pages, Combine, Split, OCR, Forms, Signatures | Insert/extract/rotate/reorder pages, combine/split, OCR (searchable PDF), form fill/create, digital signatures and validation, redaction |

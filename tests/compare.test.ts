@@ -66,3 +66,23 @@ describe('vector compare', () => {
     expect(applyMat(invertMat(m), applyMat(m, { x: 3, y: 7 }))).toEqual({ x: expect.closeTo(3), y: expect.closeTo(7) });
   });
 });
+
+describe('vector compare: colour and line weight', () => {
+  const seg = new Float32Array([0, 0, 100, 0, 0, 50, 100, 50]);
+  const page = (c2: number, w2: number, styled = true) => ({ segments: seg, texts: [], styles: styled ? new Float32Array([0, 1, c2, w2]) : undefined });
+  it('flags a line that only changed colour or weight', async () => {
+    const { vectorDiff } = await import('../src/model/compare');
+    const red = vectorDiff(page(0, 1), page(0xff0000, 1), null);
+    expect(red.removed).toHaveLength(0);
+    expect(red.added).toHaveLength(0);
+    expect(red.restyled.length).toBeGreaterThan(40);
+    expect(red.restyled.every((p) => p.y === 50)).toBe(true);
+    expect(vectorDiff(page(0, 1), page(0, 2), null).restyled.length).toBeGreaterThan(40);
+  });
+  it('ignores small width differences, and pages without styles', async () => {
+    const { vectorDiff } = await import('../src/model/compare');
+    expect(vectorDiff(page(0, 1), page(0, 1.1), null).restyled).toHaveLength(0);
+    expect(vectorDiff(page(0, 1, false), page(0xff0000, 3), null).restyled).toHaveLength(0);
+    expect(vectorDiff(page(0, 1), page(0xff0000, 1), null, 1, 2, false).restyled).toHaveLength(0);
+  });
+});

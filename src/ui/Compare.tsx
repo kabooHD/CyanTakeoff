@@ -123,7 +123,7 @@ async function vectorsOf(doc: DocState, page: number): Promise<VectorPage> {
   const [g, texts] = await Promise.all([snapGeometry(p, vp), pageText(p, vp)]);
   const segments = new Float32Array(g.segments.length + g.curves.length);
   segments.set(g.segments); segments.set(g.curves, g.segments.length);
-  return { segments, texts };
+  return { segments, texts, styles: g.styles };
 }
 
 export async function compareDocuments(a: DocState, pa: number, b: DocState, pb: number,

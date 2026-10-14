@@ -13,6 +13,12 @@ export interface SnapGeometry {
   segments: Float32Array;
   /** Curves flattened into short segments (for comparing drawings, not snapping). */
   curves: Float32Array;
+  /**
+   * Style of each segment, then of each curve chord: colour (0xRRGGBB) and
+   * line width in page units (-1: the path is filled, not stroked). For
+   * Compare to notice colour and line weight changes.
+   */
+  styles: Float32Array;
   pointGrid: Map<number, number[]>;
   segGrid: Map<number, number[]>;
 }
@@ -41,6 +47,8 @@ async function extract(page: PDFPageProxy, vp: PageViewport): Promise<SnapGeomet
   const pts: number[] = [];
   const segs: number[] = [];
   const curves: number[] = [];
+  const segSty: number[] = [], curveSty: number[] = [];
+  let sty: [number, number] = [0, 1];
   /** Flatten a Bezier from `a` through control points into 8 chords. */
   const bezier = (a: [number, number], c: [number, number][], end: [number, number]) => {
     const P = [a, ...c, end];
@@ -52,12 +60,19 @@ async function extract(page: PDFPageProxy, vp: PageViewport): Promise<SnapGeomet
           u * u * u * P[0][1] + 3 * u * u * t * P[1][1] + 3 * u * t * t * P[2][1] + t * t * t * P[3][1]]
         : [u * u * P[0][0] + 2 * u * t * P[1][0] + t * t * P[2][0], u * u * P[0][1] + 2 * u * t * P[1][1] + t * t * P[2][1]];
       curves.push(prev[0], prev[1], q[0], q[1]);
+      curveSty.push(sty[0], sty[1]);
       prev = q;
     }
   };
   // Device transform: PDF user space -> page space (viewport at scale 1).
   let ctm: M = vp.transform as M;
   const stack: M[] = [];
+  // Graphics state for styles (saved and restored with the transform).
+  let gs = { stroke: 0, fill: 0, width: 1 };
+  const gstack: (typeof gs)[] = [];
+  const hex = (c: unknown) => (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? parseInt(c.slice(1), 16)
+    : Array.isArray(c) && c.length >= 3 ? ((c[0] & 255) << 16) | ((c[1] & 255) << 8) | (c[2] & 255) : 0);
+  const STROKING = new Set<number>([OPS.stroke, OPS.closeStroke, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke]);
   const tp = (x: number, y: number): [number, number] => [
     ctm[0] * x + ctm[2] * y + ctm[4], ctm[1] * x + ctm[3] * y + ctm[5],
   ];
@@ -65,8 +80,11 @@ async function extract(page: PDFPageProxy, vp: PageViewport): Promise<SnapGeomet
   for (let i = 0; i < fnArray.length && pts.length < MAX_POINTS * 2; i++) {
     const fn = fnArray[i];
     const args = argsArray[i] as unknown[];
-    if (fn === OPS.save) stack.push(ctm);
-    else if (fn === OPS.restore) ctm = stack.pop() ?? ctm;
+    if (fn === OPS.save) { stack.push(ctm); gstack.push({ ...gs }); }
+    else if (fn === OPS.restore) { ctm = stack.pop() ?? ctm; gs = gstack.pop() ?? gs; }
+    else if (fn === OPS.setStrokeRGBColor) gs.stroke = hex(args[0] ?? args);
+    else if (fn === OPS.setFillRGBColor) gs.fill = hex(args[0] ?? args);
+    else if (fn === OPS.setLineWidth) gs.width = Number(args[0]) || 0;
     else if (fn === OPS.transform) ctm = mul(args as M, ctm);
     else if (fn === OPS.paintFormXObjectBegin) {
       stack.push(ctm);
@@ -76,6 +94,8 @@ async function extract(page: PDFPageProxy, vp: PageViewport): Promise<SnapGeomet
     else if (fn === OPS.constructPath) {
       const op = args[0] as number;
       if (op === OPS.endPath) continue; // clipping paths only
+      // Line width in page units (zero width draws one device pixel).
+      sty = STROKING.has(op) ? [gs.stroke, Math.max(0.1, gs.width * Math.sqrt(Math.abs(ctm[0] * ctm[3] - ctm[1] * ctm[2])))] : [gs.fill, -1];
       const data = (args[1] as (Float32Array | null)[])?.[0];
       if (!data) continue;
       let cur: [number, number] | null = null;
@@ -89,7 +109,7 @@ async function extract(page: PDFPageProxy, vp: PageViewport): Promise<SnapGeomet
           }
           case 1: { // lineTo
             const n = tp(data[j++], data[j++]);
-            if (cur) segs.push(cur[0], cur[1], n[0], n[1]);
+            if (cur) { segs.push(cur[0], cur[1], n[0], n[1]); segSty.push(sty[0], sty[1]); }
             pts.push(n[0], n[1]);
             cur = n;
             break;
@@ -111,7 +131,7 @@ async function extract(page: PDFPageProxy, vp: PageViewport): Promise<SnapGeomet
             break;
           }
           case 4: // closePath
-            if (cur && start) segs.push(cur[0], cur[1], start[0], start[1]);
+            if (cur && start) { segs.push(cur[0], cur[1], start[0], start[1]); segSty.push(sty[0], sty[1]); }
             cur = start;
             break;
           default:
@@ -143,7 +163,7 @@ async function extract(page: PDFPageProxy, vp: PageViewport): Promise<SnapGeomet
       }
     }
   }
-  return { points, segments, curves: new Float32Array(curves), pointGrid, segGrid };
+  return { points, segments, curves: new Float32Array(curves), styles: new Float32Array([...segSty, ...curveSty]), pointGrid, segGrid };
 }
 
 /** Nearest content vertex within `tol`, else nearest point on a content line. */
