@@ -261,7 +261,8 @@ interface AppState {
    * written in, `fn` edits the pdf-lib document, and the result is reloaded.
    * Returns false if it failed (the status bar says why).
    */
-  transformDoc(fn: (lib: PDFDocument, bytes: Uint8Array) => Promise<void | Uint8Array> | void | Uint8Array, done: string, page?: number): Promise<boolean>;
+  /** Change the file with pdf-lib (undoable). `markups` replaces the document's markups in the file first (for changes that move both). */
+  transformDoc(fn: (lib: PDFDocument, bytes: Uint8Array) => Promise<void | Uint8Array> | void | Uint8Array, done: string, page?: number, markups?: Markup[]): Promise<boolean>;
   /** Replace the document's custom columns. */
   setColumns(cols: CustomColumn[]): void;
   setFieldValue(name: string, value: string | boolean): void;
@@ -733,13 +734,13 @@ export const useApp = create<AppState>((set, get) => {
       });
     },
     setActiveViewport: (activeViewport) => set({ activeViewport }),
-    async transformDoc(fn, done, page) {
+    async transformDoc(fn, done, page, markups) {
       const d = activeDoc();
       if (!d) return false;
       if (d.loaded.readOnly) { set({ status: 'This file could not be parsed for editing.' }); return false; }
       set({ busy: true, status: 'Updating pages…' });
       try {
-        const src = await serialize(d);
+        const src = await serialize(markups ? { ...d, markups } : d);
         const lib = await loadForUpdate(src);
         const result = await fn(lib, src);
         // `fn` may produce the new file itself (signing); signed files are updated incrementally.

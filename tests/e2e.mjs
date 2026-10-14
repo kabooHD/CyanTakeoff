@@ -1130,6 +1130,14 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await lpd.getByLabel('Zoom', { exact: true }).selectOption('always');
   await lpd.getByRole('button', { name: 'OK' }).click();
   await page.waitForTimeout(1200);
+  // A markup on the Plan layer moves with it.
+  const lbox = await svg.boundingBox();
+  await page.keyboard.press('r');
+  await page.mouse.move(lbox.x + 300, lbox.y + 400); await page.mouse.down(); await page.mouse.move(lbox.x + 360, lbox.y + 440, { steps: 3 }); await page.mouse.up();
+  await page.mouse.click(lbox.x + 300, lbox.y + 420, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Layer › Plan' }).click();
+  const onLayerId = await page.evaluate(() => [...document.querySelectorAll('.markup-layer g[data-id]')].pop()?.getAttribute('data-id'));
+  const mx0 = (await page.locator(`.markup-layer g[data-id="${onLayerId}"]`).first().boundingBox()).x;
   // Move the Plan layer 1 inch right.
   const before = [await inkAt(44, 100, 12, 200), await inkAt(116, 100, 12, 200)];
   await lpanel.getByRole('treeitem', { name: 'Layer Plan' }).click({ button: 'right' });
@@ -1144,6 +1152,9 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForTimeout(1500);
   const after = [await inkAt(44, 100, 12, 200), await inkAt(116, 100, 12, 200)];
   assert(before[0] > 50 && before[1] < 5 && after[0] < 5 && after[1] > 50, `Move / Rotate / Scale moves the layer's content (${before} -> ${after})`);
+  const zl = (await svg.boundingBox()).width / (parseFloat(await page.locator('.sb-size').innerText()) * 72);
+  const mx1 = (await page.locator('.markup-layer g[data-id]').filter({ has: page.locator('rect') }).last().boundingBox()).x;
+  assert(Math.abs(mx1 - mx0 - 72 * zl) < 3, `markups on the layer move with it (${mx0.toFixed(1)} -> ${mx1.toFixed(1)}, expected +${(72 * zl).toFixed(1)})`);
   // Export Layer to Page: a new PDF with only that layer.
   const tabs0 = await page.locator('.doc-tab').count();
   await lpanel.getByRole('treeitem', { name: 'Layer Plan' }).click({ button: 'right' });

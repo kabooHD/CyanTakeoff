@@ -254,7 +254,8 @@ filling, image signatures, redaction and OCR.
     a new empty layer shows in the list at once (a Reddit complaint).
   - [x] Layers, second pass: zoom-range visibility, Export usage and Export
     Layer to Page, Flatten > Assign Layer, Move / Rotate / Scale a layer's
-    content after placing it (the other Reddit request).
+    content after placing it (the other Reddit request); markups on the
+    layer move with it.
   - [x] Low-end machines (docs/perf.md, `npm run perf`): measured a
     100-sheet set with 4x CPU throttling and 4 GB memory; undo capped by a
     memory budget with cold snapshots; lower canvas limits on small

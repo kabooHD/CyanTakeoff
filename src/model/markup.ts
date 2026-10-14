@@ -11,6 +11,20 @@ export function translated(m: Markup, dx: number, dy: number): Pick<Markup, 'poi
 }
 
 /**
+ * A markup's geometry mapped by `f` (page space): points, cutouts and curve
+ * handlebars (handlebars are offsets, so they follow the linear part of `f`).
+ */
+export function mapped(m: Markup, f: (p: Pt) => Pt): Pick<Markup, 'points' | 'cutouts' | 'handles'> {
+  const o = f({ x: 0, y: 0 });
+  const lin = (d: Pt) => { const q = f(d); return { x: q.x - o.x, y: q.y - o.y }; };
+  return {
+    points: m.points.map(f),
+    cutouts: m.cutouts?.map((c) => ({ ...c, points: c.points.map(f) })),
+    handles: m.handles?.map((h) => (h ? { in: lin(h.in), out: lin(h.out) } : null)),
+  };
+}
+
+/**
  * Erase the part of a pen stroke within `r` of `p`: returns the remaining
  * pieces (none if the whole stroke was erased, one if untouched).
  */

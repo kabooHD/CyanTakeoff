@@ -150,8 +150,7 @@ Next (from `docs/PLAN.md`):
    with a display name), live collaboration, self-hostable
 3. Compare versions, Sets, slip sheets, Spaces, Legends, Dynamic Fill, XLSX
 
-Known gaps: Move/Rotate/Scale of a layer moves its content, not markups on
-it; low-end performance measured only with CPU throttling (docs/perf.md,
+Known gaps: low-end performance measured only with CPU throttling (docs/perf.md,
 `npm run perf`); the main script is 1.7 MB (pdf.js and pdf-lib not yet
 loaded on demand); need Revu-made samples (none public; wanted list in
 tests/fixtures/revu/README.md): cutout storage (ours in CTData), custom

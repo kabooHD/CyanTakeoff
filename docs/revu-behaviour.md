@@ -216,7 +216,8 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
   creates it); without it a markup on a layer flattens onto its layer.
 - Ours, beyond Revu (Reddit request): Move / Rotate / Scale a layer's
   content after placing it (e.g. a sheet added from a page), with nudge
-  buttons, about a base point (default the page centre).
+  buttons, about a base point (default the page centre). Markups on the
+  layer move with it.
 - Drag a layer to reorder; drop it to the right to make it a child.
 - Markups: right-click > Layer to assign or create a layer; a markup on a
   hidden layer is hidden. Stored as the annotation's /OC.

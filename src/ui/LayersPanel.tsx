@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { create } from 'zustand';
 import { PDFArray, PDFDict, PDFName, PDFRef } from 'pdf-lib';
 import { activeDoc, serialize, useApp, type DocState } from '../model/store';
+import { mapped } from '../model/markup';
+import type { Pt } from '../model/types';
 import { alphabetical, layerMatrix, findNode, idsUnder, insertNode, moveNode, nodeKey, removeNodes, withoutLayers, type Where } from '../model/layerTree';
 import { keepOnlyLayers, readLayers, refId, stripLayerContent, transformLayer, writeLayers, type Layer, type LayerNode, type LayerSet } from '../pdf/layers';
 import { loadForUpdate } from '../pdf/incremental';
@@ -100,10 +102,21 @@ export async function adjustLayer(id: string, m: [number, number, number, number
   const d = activeDoc();
   const name = d?.layers?.layers[id]?.name;
   if (!d || !name) return;
+  // Markups on the layer move with its content (m is in PDF space; markups are in page space).
+  const markups = d.markups.map((mk) => {
+    if (mk.layer !== id || mk.locked) return mk;
+    const vp = d.loaded.pages[mk.page].viewport;
+    const f = (p: Pt): Pt => {
+      const [x, y] = vp.convertToPdfPoint(p.x, p.y);
+      const [u, v] = vp.convertToViewportPoint(m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]);
+      return { x: u, y: v };
+    };
+    return { ...mk, ...mapped(mk, f), modified: new Date().toISOString(), source: mk.source && { ...mk.source, dirty: true } };
+  });
   await app.transformDoc((lib) => {
     const target = Object.values(readLayers(lib)?.layers ?? {}).find((l) => l.id === id || l.name === name);
     if (target) transformLayer(lib, target.id, m);
-  }, `Layer "${name}" moved`);
+  }, `Layer "${name}" moved`, undefined, markups);
 }
 
 export function LayersPanel({ doc }: { doc: DocState }) {
