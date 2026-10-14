@@ -13,6 +13,7 @@ import {
 import { pickFile } from './toolActions';
 import { openPdf } from '../pdf/document';
 import { OCR_LANGUAGES, addTextLayer, ocrPages } from './ocr';
+import { FilesRow, batchHint, targets } from './filesRow';
 import { detectSheetNumbers } from './Sheets';
 import type { DocState } from '../model/store';
 
@@ -71,6 +72,7 @@ function PagesForm({ op }: { op: PagesOp }) {
   });
   const [file, setFile] = useState<{ name: string; doc: PDFDocument; bytes: Uint8Array } | null>(null);
   const [appendNew, setAppendNew] = useState(true);
+  const [all, setAll] = useState(() => batchHint.take());
   // Flatten > Assign Layer (Revu): an existing layer's name, or a new one ("Markups" when the file has none).
   const [assign, setAssign] = useState(false);
   const [recover, setRecover] = useState(true);
@@ -78,6 +80,7 @@ function PagesForm({ op }: { op: PagesOp }) {
   if (!doc) return null;
   const close = () => usePagesDialog.setState({ op: null });
   const pages = scope === 'current' ? [doc.page] : scope === 'all' ? doc.loaded.pages.map((p) => p.index) : parsePageRange(range, n);
+  const pagesIn = (t: DocState) => (scope === 'current' ? [t.page] : scope === 'all' ? t.loaded.pages.map((p) => p.index) : parsePageRange(range, t.loaded.pages.length));
   const atIndex = Math.max(0, Math.min(n, (Number(at) || 1) - (where === 'before' ? 1 : 0)));
 
   const choose = async () => {
@@ -102,7 +105,7 @@ function PagesForm({ op }: { op: PagesOp }) {
         await s.transformDoc((lib) => deletePages(lib, pages), `Deleted ${pages.length} page(s)`);
         break;
       case 'rotate':
-        await s.transformDoc((lib) => rotatePages(lib, pages, Number(dir) as 90), `Rotated ${pages.length} page(s)`);
+        for (const t of targets(doc, all)) { const tp = pagesIn(t); if (tp.length) await s.transformDoc((lib) => rotatePages(lib, tp, Number(dir) as 90), `Rotated ${tp.length} page(s)`, undefined, undefined, t.id); }
         break;
       case 'extract': {
         const lib = await PDFDocument.load(await serialize(doc), { updateMetadata: false });
@@ -138,9 +141,13 @@ function PagesForm({ op }: { op: PagesOp }) {
       case 'ocr': {
         try {
           try { localStorage.setItem('cyantakeoff:ocr-langs', JSON.stringify(langs)); } catch { /* storage unavailable */ }
-          const words = await ocrPages(doc, pages, (msg) => s.setStatus(msg), langs);
-          const total = [...words.values()].reduce((t, ls) => t + ls.reduce((n, l) => n + l.text.split(' ').length, 0), 0);
-          await s.transformDoc(async (lib) => { for (const [p, w] of words) await addTextLayer(lib, p, w); }, `OCR: ${total} word(s) recognised on ${pages.length} page(s); the text is now searchable`);
+          for (const t of targets(doc, all)) {
+            const tp = pagesIn(t);
+            if (!tp.length) continue;
+            const words = await ocrPages(t, tp, (msg) => s.setStatus(msg), langs);
+            const total = [...words.values()].reduce((tt, ls) => tt + ls.reduce((nn, l) => nn + l.text.split(' ').length, 0), 0);
+            await s.transformDoc(async (lib) => { for (const [p, w] of words) await addTextLayer(lib, p, w); }, `OCR: ${total} word(s) recognised on ${tp.length} page(s) of ${t.name}; the text is now searchable`, undefined, undefined, t.id);
+          }
         } catch (e) { s.setStatus(`OCR failed: ${(e as Error).message}`); }
         break;
       }
@@ -202,6 +209,7 @@ function PagesForm({ op }: { op: PagesOp }) {
           {op === 'insert' && <>{fileRow}{position}</>}
           {op === 'insert-blank' && <>{position}<div className="form-row"><span>Count</span><input aria-label="Count" type="number" min={1} value={count} onChange={(e) => setCount(e.target.value)} style={{ width: 60 }} /></div></>}
           {(op === 'delete' || op === 'extract' || op === 'rotate' || op === 'flatten' || op === 'ocr') && range_}
+          {(op === 'rotate' || op === 'ocr') && <FilesRow all={all} setAll={setAll} />}
           {op === 'ocr' && (
             <>
               <div className="form-row ocr-langs"><span>Languages</span>

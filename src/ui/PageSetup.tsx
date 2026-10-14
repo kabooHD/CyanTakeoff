@@ -9,6 +9,7 @@ import { NUMBER_STYLES, labelsFromBookmarks, numberPages, type NumberStyle } fro
 import { writePageLabels } from '../pdf/pages';
 import { PAPER, pageSetup, pageSetupTransform, type Align, type VAlign } from '../pdf/docTools';
 import { selectedPages } from './Panels';
+import { FilesRow, batchHint, targets } from './filesRow';
 
 type Mode = 'number' | 'bookmarks' | 'setup';
 export const usePageSetup = create<{ open: Mode | null }>(() => ({ open: null }));
@@ -116,6 +117,7 @@ function PageSetupForm({ d }: { d: DocState }) {
   const [dy, setDy] = useState('0');
   const [range, setRange] = useState<Range>('current');
   const [custom, setCustom] = useState('');
+  const [all, setAll] = useState(() => batchHint.take());
   const pages = pagesOf(d, range, custom);
   let [W, H] = media === 'custom' ? [Number(cw) * 72, Number(ch) * 72] : PAPER[media];
   if (media !== 'custom' && !portrait !== (W > H)) [W, H] = [H, W];
@@ -126,8 +128,10 @@ function PageSetupForm({ d }: { d: DocState }) {
   const ok = async () => {
     close();
     const s = useApp.getState();
-    const n = await s.transformDoc((lib) => { pageSetup(lib, pages, opts); }, `Page Setup: ${pages.length} page${pages.length === 1 ? '' : 's'} set to ${(W / 72).toFixed(2)} x ${(H / 72).toFixed(2)} in`);
-    void n;
+    for (const t of targets(d, all)) {
+      const tp = t === d ? pages : pagesOf(t, range, custom);
+      if (tp.length) await s.transformDoc((lib) => { pageSetup(lib, tp, opts); }, `Page Setup: ${tp.length} page${tp.length === 1 ? '' : 's'} set to ${(W / 72).toFixed(2)} x ${(H / 72).toFixed(2)} in`, undefined, undefined, t.id);
+    }
   };
   return (
     <Frame title="Page Setup" onOk={ok} okDisabled={!valid}>
@@ -158,6 +162,7 @@ function PageSetupForm({ d }: { d: DocState }) {
         <button onClick={() => { setDx('0'); setDy('0'); setScale('100'); setAlign(4); }}>Clear</button>
       </div>
       <PagesRow d={d} range={range} setRange={setRange} custom={custom} setCustom={setCustom} />
+      <FilesRow all={all} setAll={setAll} />
       <p className="muted small">Current page {(cur.width / 72).toFixed(2)} × {(cur.height / 72).toFixed(2)} in → media {(W / 72).toFixed(2)} × {(H / 72).toFixed(2)} in at {(t.s * 100).toFixed(1)}%. Measurement scales follow the resize.</p>
     </Frame>
   );

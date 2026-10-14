@@ -211,7 +211,7 @@ interface AppState {
   setTool(tool: ToolId, opts?: { locked?: boolean; preset?: ToolPreset | null }): void;
   addMarkup(m: Omit<Markup, 'id' | 'author' | 'created' | 'modified' | 'status' | 'label' | 'comment'> & Partial<Markup>): Markup;
   /** Add ready-made markups (copies) as one undo step. */
-  addMarkups(ms: Markup[]): void;
+  addMarkups(ms: Markup[], docId?: string): void;
   updateMarkups(ids: string[], fn: (m: Markup) => Partial<Markup>, opts?: { history?: boolean }): void;
   pushUndo(snapshot: Markup[]): void;
   deleteMarkups(ids: string[]): void;
@@ -602,9 +602,10 @@ export const useApp = create<AppState>((set, get) => {
       return m;
     },
 
-    addMarkups(ms) {
+    addMarkups(ms, docId) {
       if (!ms.length) return;
-      withDoc((doc) => ({ markups: [...doc.markups, ...ms], undo: [...doc.undo, doc.markups], redo: [], dirty: true }));
+      const id = docId ?? get().activeId;
+      set((st) => ({ docs: st.docs.map((doc) => (doc.id === id ? { ...doc, markups: [...doc.markups, ...ms], undo: [...doc.undo, doc.markups], redo: [], dirty: true } : doc)) }));
     },
     updateMarkups(ids, fn, opts = { history: true }) {
       const set_ = new Set(ids);

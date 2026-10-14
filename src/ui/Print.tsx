@@ -15,6 +15,7 @@ import { layerShown } from './layersView';
 import { PERM, allowed } from '../pdf/crypt';
 import { deviceMemoryGB } from '../model/device';
 import { selectedPages, useThumbSel } from './Panels';
+import { FilesRow, batchHint, targets } from './filesRow';
 
 type Range = 'all' | 'current' | 'selected' | 'custom';
 type Content = 'both' | 'document' | 'markups';
@@ -108,57 +109,65 @@ function cleanup() {
   document.getElementById('print-page-style')?.remove();
 }
 
+/** A document and its laid-out sheets; Batch > Print prints several in one job. */
+export interface PrintJob { d: DocState; sheets: Sheet[] }
+
 /** Build the print sheets in the page and open the browser's print dialog. */
-export async function printSheets(d: DocState, sheets: Sheet[], o: PrintSettings) {
+export async function printSheets(jobs: PrintJob[], o: PrintSettings) {
   const s = useApp.getState();
   cleanup();
   useApp.setState({ busy: true });
-  const src = await prepare(d, o.content === 'markups' || (o.content === 'both' && o.dim));
+  const sources: Sources[] = [];
   try {
     const root = document.createElement('div');
     root.id = 'print-root';
     // One named @page per sheet size, so Auto paper keeps each sheet's own size.
-    const sizes = [...new Set(sheets.map((sh) => `${pt(sh.w)} ${pt(sh.h)}`))];
+    const allSheets = jobs.flatMap((j) => j.sheets);
+    const sizes = [...new Set(allSheets.map((sh) => `${pt(sh.w)} ${pt(sh.h)}`))];
     const style = document.createElement('style');
     style.id = 'print-page-style';
     style.textContent = sizes.map((sz, i) => `@page cts${i} { size: ${sz}; margin: 0 }`).join('\n') + `\n@page { margin: 0 }`;
-    const done = new Map<string, string>(); // page@scale/rotation -> image URL (copies reuse it)
     let k = 0;
-    const total = sheets.reduce((n, sh) => n + sh.items.length, 0);
-    for (const sh of sheets) {
-      const el = document.createElement('div');
-      el.className = 'print-sheet';
-      Object.assign(el.style, { width: pt(sh.w), height: pt(sh.h), page: `cts${sizes.indexOf(`${pt(sh.w)} ${pt(sh.h)}`)}` });
-      for (const it of sh.items) {
-        s.setStatus(`Preparing page ${++k} of ${total} for printing…`);
-        const page = d.loaded.pages[it.page];
-        const [w, h] = it.rotate ? [page.height, page.width] : [page.width, page.height];
-        const rs = renderScale(w, h, it.scale, o.dpi, deviceMemoryGB() <= 4 ? 8_000_000 : 16_777_216);
-        const key = `${it.page}@${rs}/${it.rotate}`;
-        let url = done.get(key);
-        if (!url) {
-          const c = await renderPage(d, src, it.page, rs, it.rotate, o);
-          const blob = await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('Page too large to print'))), 'image/png'));
-          c.width = c.height = 0;
-          url = URL.createObjectURL(blob);
-          done.set(key, url);
+    const total = allSheets.reduce((n, sh) => n + sh.items.length, 0);
+    for (const { d, sheets } of jobs) {
+      const src = await prepare(d, o.content === 'markups' || (o.content === 'both' && o.dim));
+      sources.push(src);
+      const done = new Map<string, string>(); // page@scale/rotation -> image URL (copies reuse it)
+      for (const sh of sheets) {
+        const el = document.createElement('div');
+        el.className = 'print-sheet';
+        Object.assign(el.style, { width: pt(sh.w), height: pt(sh.h), page: `cts${sizes.indexOf(`${pt(sh.w)} ${pt(sh.h)}`)}` });
+        for (const it of sh.items) {
+          s.setStatus(`Preparing page ${++k} of ${total} for printing…`);
+          const page = d.loaded.pages[it.page];
+          const [w, h] = it.rotate ? [page.height, page.width] : [page.width, page.height];
+          const rs = renderScale(w, h, it.scale, o.dpi, deviceMemoryGB() <= 4 ? 8_000_000 : 16_777_216);
+          const key = `${it.page}@${rs}/${it.rotate}`;
+          let url = done.get(key);
+          if (!url) {
+            const c = await renderPage(d, src, it.page, rs, it.rotate, o);
+            const blob = await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('Page too large to print'))), 'image/png'));
+            c.width = c.height = 0;
+            url = URL.createObjectURL(blob);
+            done.set(key, url);
+          }
+          const img = document.createElement('img');
+          img.src = url;
+          img.alt = `Page ${page.label}`;
+          Object.assign(img.style, { left: pt(it.x), top: pt(it.y), width: pt(it.w), height: pt(it.h) });
+          el.appendChild(img);
         }
-        const img = document.createElement('img');
-        img.src = url;
-        img.alt = `Page ${page.label}`;
-        Object.assign(img.style, { left: pt(it.x), top: pt(it.y), width: pt(it.w), height: pt(it.h) });
-        el.appendChild(img);
+        root.appendChild(el);
       }
-      root.appendChild(el);
     }
     document.head.appendChild(style);
     document.body.appendChild(root);
     await Promise.all([...root.querySelectorAll('img')].map((img) => img.decode().catch(() => undefined)));
-    s.setStatus(`Printing ${sheets.length} sheet${sheets.length === 1 ? '' : 's'}`);
+    s.setStatus(`Printing ${allSheets.length} sheet${allSheets.length === 1 ? '' : 's'}${jobs.length > 1 ? ` from ${jobs.length} documents` : ''}`);
     window.addEventListener('afterprint', cleanup, { once: true });
     window.print();
   } finally {
-    src.destroy();
+    for (const src of sources) src.destroy();
     useApp.setState({ busy: false });
   }
 }
@@ -175,6 +184,7 @@ function PrintForm({ d }: { d: DocState }) {
   const [custom, setCustom] = useState(`1-${d.loaded.pages.length}`);
   const [sheet, setSheet] = useState(0);
   const thumbSel = useThumbSel((x) => x.sel[d.id]);
+  const [all, setAll] = useState(() => batchHint.take());
   const [unit, setUnit] = useState<'in' | 'mm'>(() => /^(en-US|en-CA)/.test(navigator.language) ? 'in' : 'mm');
   const set = (p: Partial<PrintSettings>) => { setO((x) => ({ ...x, ...p })); setSheet(0); };
   const close = () => usePrintDialog.setState({ open: false });
@@ -184,7 +194,8 @@ function PrintForm({ d }: { d: DocState }) {
   const ok = async () => {
     try { localStorage.setItem(LS, JSON.stringify(o)); } catch { /* storage unavailable */ }
     close();
-    try { await printSheets(d, sheets, o); } catch (e) { useApp.getState().setStatus(`Print failed: ${(e as Error).message}`); }
+    const jobs: PrintJob[] = targets(d, all).map((t) => ({ d: t, sheets: t === d ? sheets : sheetsFor(t, pagesToPrint(t, range === 'selected' ? 'all' : range, custom), o) }));
+    try { await printSheets(jobs, o); } catch (e) { useApp.getState().setStatus(`Print failed: ${(e as Error).message}`); }
   };
   return (
     <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>
@@ -210,6 +221,7 @@ function PrintForm({ d }: { d: DocState }) {
               </select>
               {range === 'custom' && <input aria-label="Custom pages" value={custom} onChange={(e) => { setCustom(e.target.value); setSheet(0); }} placeholder="1-3, 5, 9" style={{ width: 110 }} />}
             </div>
+            <FilesRow all={all} setAll={setAll} />
             <div className="form-row"><span>Print</span>
               <select aria-label="Print content" value={o.content} onChange={(e) => set({ content: e.target.value as Content })}>
                 <option value="both">Document &amp; Markups</option>

@@ -1700,6 +1700,31 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.getByText('Watermark removed').waitFor({ timeout: 20000 });
   await page.waitForTimeout(800);
   assert(await find('DRAFT') === 0 && await find('CT0001') === 1, 'Remove Watermark removes only the watermark');
+  // Batch: Apply Stamp on every page of every open document.
+  if (await page.locator('.doc-tab').count() >= 2) {
+    const docRows = async () => Number((await page.getByText(/ of \d+ markups/).innerText()).match(/of (\d+)/)[1]);
+    const activeTab = await page.locator('.doc-tab.active').innerText();
+    const before = await docRows();
+    const pagesHere = Number((await page.locator('.statusbar').innerText()).match(/of (\d+)\)/)[1]);
+    await menu('Batch', 'Apply Stamp…');
+    const asd = page.locator('[role=dialog][aria-label="Apply Stamp"]');
+    await asd.locator('[aria-label="Stamp"]').selectOption('DRAFT');
+    await asd.locator('[aria-label="Position"]').selectOption('bottom-right');
+    assert(await asd.locator('[aria-label="Files"]').inputValue() === 'all', 'the Batch menu opens Apply Stamp for all open documents');
+    await asd.getByRole('button', { name: 'OK' }).click();
+    await page.getByText(/Apply Stamp: \d+ stamps? placed on \d+ documents/).waitFor({ timeout: 10000 });
+    await page.waitForTimeout(400);
+    assert(await docRows() === before + pagesHere, `Apply Stamp put one stamp per page here (${before} + ${pagesHere})`);
+    const other = page.locator('.doc-tab', { hasNotText: activeTab }).first();
+    await other.click();
+    await page.waitForTimeout(600);
+    assert((await page.locator('.ml-table tbody tr td:first-child').allInnerTexts()).some((t) => t.includes('Stamp')), 'the other open document got the stamp too');
+    await page.keyboard.press('Control+z');
+    await page.locator('.doc-tab', { hasText: activeTab }).first().click();
+    await page.waitForTimeout(400);
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(300);
+  }
   // Batch: Header & Footer over all open documents.
   if (await page.locator('.doc-tab').count() >= 2) {
     const activeTab = await page.locator('.doc-tab.active').innerText();

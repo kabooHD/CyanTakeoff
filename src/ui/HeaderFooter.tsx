@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { create } from 'zustand';
 import { useApp, type DocState } from '../model/store';
+import { FilesRow, batchHint, targets } from './filesRow';
 import { parsePageRange } from '../model/measure';
 import { hexToRgb } from '../pdf/pdfutil';
 import {
@@ -56,25 +57,6 @@ const pagesOf = (d: DocState, range: string, custom: string) => {
   return range === 'all' ? Array.from({ length: n }, (_, i) => i) : range === 'current' ? [d.page] : parsePageRange(custom, n);
 };
 
-/** "This document" or "All open documents" (shown when several are open). */
-function FilesRow({ all, setAll }: { all: boolean; setAll: (v: boolean) => void }) {
-  const n = useApp((s) => s.docs.length);
-  if (n < 2) return null;
-  return (
-    <div className="form-row"><span>Files</span>
-      <select aria-label="Files" value={all ? 'all' : 'this'} onChange={(e) => setAll(e.target.value === 'all')}>
-        <option value="this">This document</option><option value="all">All open documents ({n})</option>
-      </select>
-    </div>
-  );
-}
-
-/** The documents a dialog applies to: the active one first, then the other open ones when `all`. */
-function targets(d: DocState, all: boolean): DocState[] {
-  const docs = useApp.getState().docs;
-  return all ? [d, ...docs.filter((x) => x.id !== d.id)] : [d];
-}
-
 /** Small picture of the first page in range with the stamped text. */
 function Preview({ d, page, render }: { d: DocState; page: number; render: (W: number, H: number) => React.ReactNode }) {
   const p = d.loaded.pages[page] ?? d.loaded.pages[0];
@@ -95,7 +77,7 @@ function HeaderFooterForm({ d, bates }: { d: DocState; bates: boolean }) {
   const [range, setRange] = useState('all');
   const [custom, setCustom] = useState('');
   const [focus, setFocus] = useState<Slot>('fr');
-  const [all, setAll] = useState(false);
+  const [all, setAll] = useState(() => batchHint.take());
   const pages = pagesOf(d, range, custom);
   const ctx = (pi: number, k: number) => ({ page: pi, pages: d.loaded.pages.length, label: d.loaded.pages[pi]?.label ?? '', date: new Date(), file: d.name, bates: batesText(o.bates, o.bates.start + k) });
   const setText = (slot: Slot, v: string) => setO({ ...o, texts: { ...o.texts, [slot]: v } });
@@ -175,7 +157,7 @@ function WatermarkForm({ d }: { d: DocState }) {
   const [o, setO] = useState<WMSettings>(() => load(WM_LS, WM_DEFAULT));
   const [range, setRange] = useState('all');
   const [custom, setCustom] = useState('');
-  const [all, setAll] = useState(false);
+  const [all, setAll] = useState(() => batchHint.take());
   const pages = pagesOf(d, range, custom);
   const ok = async () => {
     save(WM_LS, o);

@@ -5,6 +5,8 @@ import type { Toggles, ToolId } from '../model/types';
 import { TOOLS, toolById } from '../tools/tools';
 import { useLinkUrls } from './ReviewText';
 import { usePageSetup } from './PageSetup';
+import { batchHint } from './filesRow';
+import { useApplyStamp } from './ApplyStamp';
 import { exportFormData, importFormData, mergeFormData, migrateTypewrittenText, resetForm } from './FormData';
 import { Icon } from './icons';
 import { MenuList, type MenuItem } from './ContextMenu';
@@ -217,6 +219,14 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
     ],
     Batch: [
       { label: 'Batch Link…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'batch-link' }) },
+      { label: 'Apply Stamp…', disabled: noDoc, action: () => { batchHint.set(); useApplyStamp.setState({ open: true }); } },
+      { label: 'Rotate Pages…', disabled: noDoc, action: () => { batchHint.set(); openPagesDialog('rotate'); } },
+      { label: 'Crop Pages…', disabled: noDoc, action: () => { batchHint.set(); useDocTools.setState({ open: 'crop' }); } },
+      { label: 'Page Setup…', disabled: noDoc, action: () => { batchHint.set(); usePageSetup.setState({ open: 'setup' }); } },
+      { label: 'Security…', disabled: noDoc, action: () => { batchHint.set(); useSecurityDialog.setState({ open: true }); } },
+      { label: 'Reduce File Size…', disabled: noDoc, action: () => { batchHint.set(); useReduceDialog.setState({ open: true }); } },
+      { label: 'OCR…', disabled: noDoc, action: () => { batchHint.set(); openPagesDialog('ocr'); } },
+      { label: 'Print…', disabled: noDoc, action: () => { batchHint.set(); openPrint(); } },
       { label: 'Slip Sheet…', disabled: noDoc, action: () => openPagesDialog('slip-sheet') },
       { label: 'Flatten…', disabled: noDoc, action: () => openPagesDialog('flatten') },
       { label: 'Bates Numbering…', disabled: noDoc, action: () => useStampDialog.setState({ open: 'bates' }) },

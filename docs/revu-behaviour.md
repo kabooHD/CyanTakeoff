@@ -331,6 +331,15 @@ percentage, aligned (nine positions) and offset; content, annotations,
 measurement scales and viewports follow. Not for signed files (Revu
 refuses too).
 
+## Batch menu
+Revu's Batch menu runs a command over many files. Ours runs over the open
+documents: Apply Stamp (a built-in or custom stamp at a corner or the
+centre of every chosen page, with a margin), Rotate Pages, Crop Pages
+(margins), Page Setup, Security, Reduce File Size, OCR, Print (one print
+job), Header & Footer, Watermark, Bates Numbering, plus Batch Link, Slip
+Sheet, Flatten, Summary and Combine. Each dialog has a Files option (This
+document / All open documents) that the Batch menu presets to all.
+
 ## Header & Footer, Bates, Watermark
 Header & Footer (Document menu, Batch for many files): left/centre/right
 text in the header and footer, with fields such as page number, page label,

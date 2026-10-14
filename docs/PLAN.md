@@ -217,6 +217,9 @@ filling, image signatures, redaction and OCR.
 - [x] XFDF export/import of markups (standard XFDF plus our measurement data
   in a namespaced element; Revu measurements round-trip; stamp artwork in
   <appearance>)
+- [x] Batch over the open documents: Apply Stamp, Rotate Pages, Crop Pages,
+  Page Setup, Security, Reduce File Size, OCR, Print (one job), Header &
+  Footer, Watermark, Bates
 - [x] Form data: Import (FDF/XFDF/CSV), Export (FDF/XML/CSV), Merge Data over
   open documents, Reset, Highlight Fields, Migrate Typewritten Text, Button
   fields

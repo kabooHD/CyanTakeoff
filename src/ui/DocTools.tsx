@@ -2,6 +2,7 @@
 // (Shift+Alt+O), Deskew (Ctrl+Alt+D), File > Email (Ctrl+E) and Publish as
 // Compressed (Ctrl+Shift+P).
 import { useState } from 'react';
+import { FilesRow, batchHint, targets } from './filesRow';
 import { create } from 'zustand';
 import { PDFDocument } from 'pdf-lib';
 import { activeDoc, serialize, useApp, type DocState } from '../model/store';
@@ -123,6 +124,7 @@ function CropDialog({ d }: { d: DocState }) {
   const [custom, setCustom] = useState('');
   const [mode, setMode] = useState<'rect' | 'margins'>(rect ? 'rect' : 'margins');
   const [m, setM] = useState({ left: 0.5, bottom: 0.5, right: 0.5, top: 0.5 });
+  const [all, setAll] = useState(() => batchHint.take());
   const close = () => useDocTools.setState({ open: null, cropRect: undefined });
   const pages = pagesOf(d, range, custom);
   const draw = () => {
@@ -139,8 +141,14 @@ function CropDialog({ d }: { d: DocState }) {
       how = { rect: [Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1)] };
     } else if (!remove) how = { margins: [m.left * 72, m.bottom * 72, m.right * 72, m.top * 72] };
     close();
-    await s.transformDoc((lib) => { n = cropPages(lib, pages, how); }, remove ? 'Crop removed' : 'Pages cropped');
-    s.setStatus(remove ? `Crop removed from ${n} page${n === 1 ? '' : 's'}` : `Cropped ${n} page${n === 1 ? '' : 's'}`);
+    // A drawn rectangle belongs to one page; margins (or Remove Crop) can run over every open document.
+    const docs = how && 'rect' in how ? [d] : targets(d, all);
+    for (const t of docs) {
+      const tp = t === d ? pages : pagesOf(t, range, custom);
+      if (!tp.length) continue;
+      await s.transformDoc((lib) => { n += cropPages(lib, tp, how); }, remove ? 'Crop removed' : 'Pages cropped', undefined, undefined, t.id);
+    }
+    s.setStatus(remove ? `Crop removed from ${n} page${n === 1 ? '' : 's'}` : `Cropped ${n} page${n === 1 ? '' : 's'}${docs.length > 1 ? ` in ${docs.length} documents` : ''}`);
   };
   const num = (k: keyof typeof m, label: string) => (
     <label className="inline">{label} <input type="number" aria-label={`Crop ${label}`} step={0.125} min={0} value={m[k]} onChange={(e) => { setM({ ...m, [k]: Number(e.target.value) || 0 }); setMode('margins'); }} style={{ width: 60 }} /></label>
@@ -151,6 +159,7 @@ function CropDialog({ d }: { d: DocState }) {
       <div className="form-row"><label><input type="radio" checked={mode === 'rect'} disabled={!rect} onChange={() => setMode('rect')} /> Rectangle{rect ? ` drawn on ${d.loaded.pages[rect.page]?.label}` : ''}</label><button onClick={draw}>Draw Rectangle</button></div>
       <div className="form-row"><label><input type="radio" checked={mode === 'margins'} onChange={() => setMode('margins')} /> Trim margins (in)</label></div>
       <div className="form-row crop-margins">{num('left', 'Left')}{num('right', 'Right')}{num('top', 'Top')}{num('bottom', 'Bottom')}</div>
+      {mode === 'margins' && <FilesRow all={all} setAll={setAll} />}
       <p className="muted small">Cropping hides what is outside; nothing is deleted, and Remove Crop shows it again.</p>
       <div className="modal-actions"><button onClick={() => run(true)} disabled={!pages.length}>Remove Crop</button><span className="spacer" /><button className="primary" disabled={!pages.length} onClick={() => run()}>Crop</button><button onClick={close}>Cancel</button></div>
     </Frame>
