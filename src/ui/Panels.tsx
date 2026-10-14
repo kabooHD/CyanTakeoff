@@ -19,6 +19,7 @@ import { scaleAt, areaLabel, volumeLabel } from '../model/measure';
 import { LENGTH_UNITS, SEGMENT_TYPES, displayText } from '../model/measureDisplay';
 import { placeColumns } from '../model/listColumns';
 import { layoutOf, withLayout } from '../model/layoutProps';
+import { ROTATION_FIELD, withRotation } from '../model/rotate';
 import { addCapture, openCapturePreview } from './Capture';
 import { DEFAULT_LINE_HEIGHT, DEFAULT_MARGIN, TEXT_FONTS, textStyleOf } from '../model/textStyle';
 import { COUNT_SYMBOLS, symbolForType } from '../model/count';
@@ -577,6 +578,10 @@ function Properties() {
           <>
             <div className="prop-section">Layout (in)</div>
             {field('x', 'X')}{field('y', 'Y')}{field('width', 'Width')}{field('height', 'Height')}
+            {ROTATION_FIELD.has(m.type) && (
+              <Row label="Rotation (°)"><input type="number" step={1} aria-label="Layout Rotation" value={m.rotation ?? 0} disabled={!!m.locked}
+                onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v)) upd((x) => withRotation(x, v)); }} /></Row>
+            )}
           </>
         );
       })()}

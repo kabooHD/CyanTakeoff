@@ -11,6 +11,7 @@ import { countRadius, countSymbolPolygon, countSymbolStrokes } from '../model/co
 import { calloutTips, endsOf, lineEndShape, type LineEnd } from '../model/lineEnds';
 import { textWidth } from './quickCommands';
 import { useApp } from '../model/store';
+import { ROTATION_FIELD, drawnPoints, rotationCenter } from '../model/rotate';
 import { cellAnchor, cellX, legendHeader, legendLayout, legendRows, type FontFlags } from '../model/legend';
 
 const pts = (p: Pt[]) => p.map((q) => `${q.x},${q.y}`).join(' ');
@@ -45,8 +46,9 @@ export function handlePoints(m: Markup): Pt[] {
   if ((m.type === 'highlight' || m.type === 'redaction') && m.points.length > 2) return [];
   if (m.type === 'redaction') return [m.points[0], m.points[1]];
   if (['rectangle', 'ellipse', 'highlight', 'textbox', 'typewriter', 'stamp', 'image', 'link'].includes(m.type)) {
-    return [m.points[0], m.points[1]];
+    return drawnPoints(m, [m.points[0], m.points[1]]);
   }
+  if (m.rotation && ROTATION_FIELD.has(m.type)) return drawnPoints(m);
   if (m.type === 'strikeout' || m.type === 'underline' || m.type === 'squiggly' || m.type === 'flag' || m.type === 'attachment' || m.type === 'legend') return [];
   return m.points;
 }
@@ -312,8 +314,10 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
   const hatchId = `hatch-${m.id}`;
   const [tile, tileH] = st.hatch ? hatchTileWH(st.hatch, st.hatchScale) : [0, 0];
   const hatchColor = st.fill ?? st.color;
+  // A turned box shape is drawn in its own frame, rotated about its centre.
+  const rc = m.rotation && ROTATION_FIELD.has(m.type) ? rotationCenter(m) : null;
   return (
-    <g data-id={m.id}>
+    <g data-id={m.id} transform={rc ? `rotate(${-m.rotation!} ${rc.x} ${rc.y})` : undefined}>
       {showAuthorDate && <title>{`${m.subject}${m.author ? ` · ${m.author}` : ''}${m.modified ? ` · ${new Date(m.modified).toLocaleString()}` : ''}${m.comment ? `\n${m.comment}` : ''}`}</title>}
       {hatchArea && st.hatch && (
         <>

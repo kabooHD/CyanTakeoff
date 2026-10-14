@@ -2,9 +2,15 @@ import { calloutAttach } from '../pdf/save';
 import { arcPoints, arcThrough, bounds, distToSegment, pointInPolygon, rectCorners, rectPairs } from '../model/measure';
 import type { Markup, Pt } from '../model/types';
 import { CURVABLE, flatPoints, flattenPath, hasCurves } from '../model/curves';
+import { drawnPoints } from '../model/rotate';
 
-/** Outline used for hit-testing and rubber-band selection. */
+/** Outline used for hit-testing and rubber-band selection (a turned box shape: its corners as drawn). */
 export function outline(m: Markup): { pts: Pt[]; closed: boolean } {
+  const o = outlineRaw(m);
+  return m.rotation ? { pts: drawnPoints(m, o.pts), closed: o.closed } : o;
+}
+
+function outlineRaw(m: Markup): { pts: Pt[]; closed: boolean } {
   const P = m.points;
   switch (m.type) {
     case 'highlight': case 'strikeout': case 'underline': case 'squiggly': case 'redaction':

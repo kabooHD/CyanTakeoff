@@ -227,6 +227,8 @@ export interface Markup {
   locked?: boolean;
   /** Hidden markups (Edit > Hide) are not drawn; PDF /F Hidden flag. */
   hidden?: boolean;
+  /** Rotation in degrees (counter-clockwise) of a box shape: rectangle, ellipse, text boxes, stamps, images (see model/rotate.ts). */
+  rotation?: number;
   /** Legend settings (Legend markups). */
   legend?: import('./legend').LegendDef;
   /** Replies to this markup (PDF: /Text annotations with /IRT to it). */

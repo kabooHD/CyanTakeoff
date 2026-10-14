@@ -312,6 +312,23 @@ displayed value (in the markup's own unit when set), as Revu writes it.
 - Add Layer from Page draws another sheet on the page as a new layer, with
   Align Points when the sheets differ in position or scale.
 
+## Editing markups (move, resize, rotate)
+- Drag a markup to move it; drag a control point to resize. Polygons and
+  polylines keep their proportions when resized; Shift resizes length and
+  width independently.
+- Rotate: drag the orange control point outside the bounding box; the
+  angle shows while dragging and the shape turns in 15° steps (Shift: any
+  angle). Lines (two control points) cannot rotate. Stamps also take an
+  exact angle in Properties > Layout > Rotation.
+- Select: drag left-to-right selects markups entirely inside the
+  rectangle, right-to-left those it touches; Shift+click adds; Lasso
+  (Shift+O) selects within a free-form region.
+- CyanTakeoff: shapes made of points (polygons, areas, clouds, pen...) are
+  turned point by point; box shapes (rectangle, ellipse, text boxes,
+  stamps, images, Cloud+) keep a rotation angle (CTData) and are drawn
+  with a rotated appearance stream, so other readers that regenerate
+  appearances from /Rect show them unturned.
+
 ## Curved segments
 - Polygon, Polyline, Area, Perimeter, Polylength and Volume can have
   Bézier segments. While drawing, Ctrl+drag at a point pulls out its

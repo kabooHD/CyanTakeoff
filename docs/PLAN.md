@@ -260,6 +260,8 @@ filling, image signatures, redaction and OCR.
   Pages, Copy Legend to Snapshot
 - [x] Bookmarks: Save Collapse State (outline /Count sign), Export Bookmarks
   (PDF) over the open files
+- [x] Markup rotation: orange handle, 15° steps (Shift: free), angle readout,
+  Rotation in Properties > Layout for box shapes (src/model/rotate.ts)
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

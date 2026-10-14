@@ -518,6 +518,35 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.keyboard.press('Delete');
     await page.waitForTimeout(200);
   }
+  // Rotation (Revu): the orange handle above a selected markup turns it in 15° steps; box shapes keep an angle (Layout > Rotation).
+  {
+    await page.keyboard.press('r');
+    const a = await toScreen(44, 30), b = await toScreen(54, 35);
+    await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 4 }); await page.mouse.up();
+    await page.waitForTimeout(200);
+    const rh = page.locator('.rotate-handle circle');
+    assert(await rh.count() === 1, 'a selected rectangle shows the rotate handle');
+    const hb = await rh.boundingBox();
+    const c = await toScreen(49, 32.5);
+    await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2); await page.mouse.down();
+    await page.mouse.move(c.x + 120, c.y + 3, { steps: 6 });
+    await page.waitForTimeout(100);
+    const readout = await page.locator('.rotate-readout').textContent();
+    assert(readout === '-90°', `the angle shows while dragging (${readout})`);
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+    assert(await page.locator('.markup-layer g[data-id][transform^="rotate(90 "]').count() === 1, 'dragging the handle turns the rectangle (snapped to 15° steps)');
+    await page.locator('.side-right button[title="Properties"]').click();
+    const rot = page.getByLabel('Layout Rotation');
+    assert(await rot.inputValue() === '-90', 'Layout > Rotation shows the angle');
+    await rot.fill('45');
+    await page.waitForTimeout(200);
+    assert(await page.locator('.markup-layer g[data-id][transform^="rotate(-45 "]').count() === 1, 'typing a Rotation turns the box to that angle');
+    await page.evaluate(() => (document.activeElement)?.blur?.());
+    await page.locator('.side-right button[title="Properties"]').click();
+    await page.keyboard.press('Delete');
+    await page.waitForTimeout(200);
+  }
   // Rise/Drop on a length (Properties): 10 ft + 2 ft rise reads 12'-0"; then undone.
   await page.keyboard.press('Shift+Alt+L'); await click(44, 33); await click(54, 33);
   await page.locator('.side-right button[title="Properties"]').click();
@@ -1136,12 +1165,18 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.mouse.click(box.x + x * z + 3, box.y + y * z - 2); // a few px off: content snap finds the corner
     await page.waitForTimeout(300);
   };
-  await click(300, 1328); await click(1380, 608);
-  await page.waitForTimeout(800);
+  // Each click is confirmed by the prompt moving on (the second sheet is shown after the first pair).
+  const prompt = (n, sheet) => page.waitForFunction(([n, sheet]) => document.body.textContent?.includes(`Align: click point ${n} of 2 on the ${sheet} sheet`), [n, sheet], { timeout: 10000 });
+  await prompt(1, 'first');
+  await click(300, 1328); await prompt(2, 'first');
+  await click(1380, 608); await prompt(1, 'second');
+  await page.waitForTimeout(500);
   await page.keyboard.press('Control+9');
   await page.waitForTimeout(500);
-  await click(336, 1352); await click(1416, 632);
+  await click(336, 1352); await prompt(2, 'second');
+  await click(1416, 632);
   cd = page.getByRole('dialog', { name: 'Compare Documents' });
+  await cd.getByText('By 2 point pairs').waitFor({ timeout: 10000 });
   assert(await cd.getByText('By 2 point pairs').count() === 1, 'alignment set from two pairs of points');
   await cd.getByRole('button', { name: 'OK' }).click();
   await page.waitForFunction(() => /Compare: (\d+ difference|no diff)/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 30000 });

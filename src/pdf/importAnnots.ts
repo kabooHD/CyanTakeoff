@@ -65,6 +65,7 @@ export interface CTData {
   custom?: Markup['custom'];
   legend?: Markup['legend'];
   checked?: boolean;
+  rotation?: number; // box shapes turned about their centre (degrees, counter-clockwise)
   groupId?: string; // Revu-style markup group
   seq?: Markup['seq']; // Sequence member
   display?: Markup['display']; // caption, segment values, centroid, units
@@ -219,6 +220,7 @@ function baseMarkup(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number, 
     custom: ct?.custom,
     legend: ct?.legend,
     checked: ct?.checked,
+    rotation: ct?.rotation,
     seq: ct?.seq,
     display: ct?.display,
     capture: ct?.capture,

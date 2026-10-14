@@ -11,6 +11,7 @@ import {
 import type { CustomColumn, Cutout, Markup, MarkupStyle, Pt, Scale, Space, Viewport } from '../model/types';
 import { spaceTree, type SpaceNode } from '../model/spaces';
 import { cellAnchor, cellX, legendHeader, legendLayout, legendRows, type LegendRow } from '../model/legend';
+import { ROTATION_FIELD } from '../model/rotate';
 import { arcPoints, arcThrough, bounds, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import { fitFontSize, quadding, shapeOutline, textStyleOf, toDS, toRC } from '../model/textStyle';
 import { countRadius, countStyleName, countSymbolPolygon, countSymbolStrokes } from '../model/count';
@@ -557,7 +558,19 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
     textAt(o, font, t, size, q.u - w / 2, q.v - size * 0.35, rgb, cfr);
   }
   o.add('Q');
-  return { fontsUsed: o.fonts, ops: o.out.join('\n'), bbox: [o.minX - pad - 2, o.minY - pad - 2, o.maxX + pad + 2, o.maxY + pad + 2], hatch: hatchArea ? st.hatch : undefined };
+  let ops = o.out.join('\n');
+  let bbox = [o.minX - pad - 2, o.minY - pad - 2, o.maxX + pad + 2, o.maxY + pad + 2];
+  if (m.rotation && ROTATION_FIELD.has(m.type)) {
+    // A turned box shape: the drawing is rotated about its centre (counter-clockwise, PDF space).
+    const b = bounds(P);
+    const cx = b.minX + b.w / 2, cy = b.minY + b.h / 2;
+    const a = (m.rotation * Math.PI) / 180, cs = Math.cos(a), sn = Math.sin(a);
+    ops = `q ${f(cs)} ${f(sn)} ${f(-sn)} ${f(cs)} ${f(cx - cx * cs + cy * sn)} ${f(cy - cx * sn - cy * cs)} cm\n${ops}\nQ`;
+    const corners = [[bbox[0], bbox[1]], [bbox[2], bbox[1]], [bbox[2], bbox[3]], [bbox[0], bbox[3]]].map(([x, y]) => ({ x: cx + (x - cx) * cs - (y - cy) * sn, y: cy + (x - cx) * sn + (y - cy) * cs }));
+    const rb = bounds(corners);
+    bbox = [rb.minX, rb.minY, rb.maxX, rb.maxY];
+  }
+  return { fontsUsed: o.fonts, ops, bbox, hatch: hatchArea ? st.hatch : undefined };
 }
 
 const SUBTYPE: Record<Markup['type'], string> = {
@@ -608,6 +621,7 @@ function ctData(m: Markup, P: Pt[]): CTData {
     custom: m.custom && Object.keys(m.custom).length ? m.custom : undefined,
     legend: m.legend,
     checked: m.checked || undefined,
+    rotation: m.rotation || undefined,
     handles: hasCurves(m.handles) ? m.handles!.map((h) => (h ? [h.in.x, h.in.y, h.out.x, h.out.y] : null)) : undefined,
   };
 }

@@ -32,6 +32,7 @@ import { toolById } from '../tools/tools';
 import { CURVABLE, arcSegment, bezierAt, closedType, flatPoints, hasCurves, insertHandle, removeHandle, segments, toggleCurve, type Handles } from '../model/curves';
 import { MarkupShape, handlePoints } from './renderMarkup';
 import { cutoutAt, hitTest, markupBounds, outline } from './hit';
+import { ROTATION_FIELD, angleAbout, canRotate, normDeg, rotateHandle, rotated, rotationCenter, snapRotation, unrotatePt } from '../model/rotate';
 import { selectText } from '../model/textSelect';
 import { copyText, searchFor } from './textCommands';
 import { followPlace } from './LinksPanel';
@@ -107,6 +108,8 @@ type Drag =
   /** Shift+drag a measurement caption (offset), or drag its anchor to turn it. */
   | { kind: 'caption'; id: string; start: Pt; orig: Pt; snapshot: Markup[]; moved: boolean }
   | { kind: 'captionRotate'; id: string; center: Pt; snapshot: Markup[]; moved: boolean }
+  /** The orange handle above a markup turns it (15° steps, Shift: free); `deg` is the turn applied so far. */
+  | { kind: 'rotate'; id: string; center: Pt; start: number; orig: Markup; snapshot: Markup[]; moved: boolean; deg: number }
   | { kind: 'band'; start: Pt; cur: Pt; add: boolean; right?: { x: number; y: number } }
   /** Move (corner -1) or resize (corner 0..3) the highlighted viewport. */
   | { kind: 'viewport'; id: string; corner: number; start: Pt; orig: [Pt, Pt]; rect: [Pt, Pt] }
@@ -917,6 +920,14 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       // Measurement captions (Revu): the anchor handle turns the caption; Shift+drag on the caption moves it.
       if (doc.selection.length === 1) {
         const sm = markups.find((x) => x.id === doc.selection[0]);
+        if (sm && canRotate(sm)) {
+          // The rotate handle above the markup (Revu: orange control point outside the box).
+          const rh = rotateHandle(sm, 18 / zoom);
+          if (dist(rh.at, raw) <= 7 / zoom) {
+            const center = rotationCenter(sm);
+            setDrag({ kind: 'rotate', id: sm.id, center, start: angleAbout(center, raw), orig: sm, snapshot: doc.markups, moved: false, deg: 0 }); capture(e); return;
+          }
+        }
         const cap = sm && captionBox(sm, zoom);
         if (cap) {
           if (dist(cap.anchor, raw) <= 7 / zoom) { setDrag({ kind: 'captionRotate', id: sm.id, center: cap.at, snapshot: doc.markups, moved: false }); capture(e); return; }
@@ -1169,10 +1180,19 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         const p = snap(raw, drag.id);
         s.updateMarkups([drag.id], (m) => {
           const pts = [...m.points];
-          pts[drag.index] = p;
+          pts[drag.index] = unrotatePt(m, p); // a turned box is edited in its own frame
           return { points: pts };
         }, { history: false });
         if (!drag.moved) setDrag({ ...drag, moved: true });
+      } else if (drag.kind === 'rotate') {
+        const d = angleAbout(drag.center, raw) - drag.start;
+        const base = ROTATION_FIELD.has(drag.orig.type) ? drag.orig.rotation ?? 0 : 0;
+        const deg = normDeg(snapRotation(base + d, e.shiftKey) - base);
+        if (deg !== drag.deg || !drag.moved) {
+          s.updateMarkups([drag.id], () => rotated(drag.orig, deg), { history: false });
+          setDrag({ ...drag, moved: true, deg });
+          s.setStatus(`Rotation: ${normDeg(base + deg)}° (Shift: any angle)`);
+        }
       } else if (drag.kind === 'caption') {
         const off = { x: drag.orig.x + raw.x - drag.start.x, y: drag.orig.y + raw.y - drag.start.y };
         s.updateMarkups([drag.id], (m) => ({ display: { ...m.display, captionOffset: off } }), { history: false });
@@ -1264,7 +1284,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     }
     if (s.tool === 'dynamic-fill') fillUp();
     if (drag) {
-      if ((drag.kind === 'move' || drag.kind === 'vertex' || drag.kind === 'caption' || drag.kind === 'captionRotate') && drag.moved) s.pushUndo(drag.snapshot);
+      if ((drag.kind === 'move' || drag.kind === 'vertex' || drag.kind === 'caption' || drag.kind === 'captionRotate' || drag.kind === 'rotate') && drag.moved) s.pushUndo(drag.snapshot);
       if (drag.kind === 'bezier') s.pushUndo(drag.snapshot);
       if (drag.kind === 'band') selectInBand(drag);
       if (drag.kind === 'viewport' && drag.rect !== drag.orig) {
@@ -1686,6 +1706,17 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
                     );
                   }))}
                   {doc.selection.length === 1 && (() => { const cap = captionBox(m, zoom); return cap ? <circle className="caption-anchor" cx={cap.anchor.x} cy={cap.anchor.y} r={3.5 / zoom} fill="#ff8c00" stroke="#fff" strokeWidth={1 / zoom} style={{ cursor: 'grab' }}><title>Drag to rotate the caption (Shift: 1° steps); Shift+drag the caption to move it</title></circle> : null; })()}
+                  {doc.selection.length === 1 && canRotate(m) && (() => {
+                    const rh = rotateHandle(m, 18 / zoom);
+                    const deg = drag?.kind === 'rotate' && drag.id === m.id ? normDeg((ROTATION_FIELD.has(m.type) ? m.rotation ?? 0 : drag.deg)) : null;
+                    return (
+                      <g className="rotate-handle">
+                        <line x1={rh.from.x} y1={rh.from.y} x2={rh.at.x} y2={rh.at.y} stroke="#ff8c00" strokeWidth={1 / zoom} />
+                        <circle cx={rh.at.x} cy={rh.at.y} r={4 / zoom} fill="#ff8c00" stroke="#fff" strokeWidth={1 / zoom} style={{ cursor: 'grab' }}><title>Drag to rotate (15° steps; Shift: any angle)</title></circle>
+                        {deg !== null && <text className="rotate-readout" x={rh.at.x + 8 / zoom} y={rh.at.y - 8 / zoom} fontSize={11 / zoom} fill="#ff8c00" fontFamily="Helvetica, Arial, sans-serif">{deg}°</text>}
+                      </g>
+                    );
+                  })()}
                   {doc.selection.length === 1 && handlePoints(m).map((h, i) => (
                     <rect key={i} x={h.x - 3.5 / zoom} y={h.y - 3.5 / zoom} width={7 / zoom} height={7 / zoom}
                       fill="#fff" stroke="#1a73e8" strokeWidth={1 / zoom} />
