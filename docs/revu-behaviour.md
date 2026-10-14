@@ -390,6 +390,23 @@ opens the browser's print dialog. Layers print when shown and their Print
 usage is on; markups on hidden layers do not print. Not yet: Selected
 pages, margins options, Dim Filtered Markups, Print Spaces.
 
+## Small commands (Window, Document, Markup menus)
+- Document Properties (Ctrl+D): title, author, subject, keywords (editable,
+  saved in the file) and file facts (creator, producer, dates, version,
+  pages, page size, file size, security).
+- Save All (Ctrl+F2) saves every changed file; Refresh (F5) reloads the
+  file from disk (we need it opened with file access).
+- Autosize Text Box (Alt+Z) fits a text box or callout box to its text.
+- Remove Selected from Group (Ctrl+Shift+Alt+G): pick the member in the
+  Markups List (a list click selects just that markup, not its group),
+  then the command; a group left with one member is dissolved.
+- Full Screen (F11); Presentation (Ctrl+Enter): page fitted on black, click
+  / Down / PageDown next, right-click / Up / PageUp previous, Esc leaves.
+- Navigation Bar (F4) shows or hides the page navigation in the status bar.
+- Balance (Shift+F12) makes split panes equal; the divider can be dragged
+  (double-click balances too).
+- Show Context Menu (Shift+F10) opens the right-click menu of the selection.
+
 ## Status bar
 - Left: help for the current tool and the toggles Show Grid, Snap to
   Grid, Snap to Content, Snap to Markup (points and guidelines from nearby

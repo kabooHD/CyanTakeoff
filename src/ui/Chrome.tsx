@@ -26,6 +26,8 @@ import { runApplyRedactions } from './redactUi';
 import { effectiveCombo } from './commands';
 import { arrangeItems } from './arrangeMenu';
 import { useCursor } from './cursor';
+import { balanceSplit, refreshDocument, saveAll, toggleFullScreen } from './quickCommands';
+import { useDocProps } from './DocProperties';
 
 // ---------------- Menu bar ----------------
 
@@ -62,6 +64,8 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { sep: true },
       { label: 'Save', shortcut: 'Ctrl+S', disabled: noDoc, action: () => s.save() },
       { label: 'Save As…', shortcut: 'Ctrl+Shift+S', disabled: noDoc, action: () => s.save(true) },
+      { label: 'Save All', shortcut: 'Ctrl+F2', disabled: !s.docs.some((x) => x.dirty), action: saveAll },
+      { label: 'Refresh', shortcut: 'F5', disabled: !doc?.fileHandle, action: refreshDocument },
       { sep: true },
       { label: 'Export Markups Summary (CSV)', disabled: noDoc, action: () => exportSummaryCsv() },
       { label: 'Import Markups (XFDF)…', disabled: noDoc, action: () => importMarkupsXfdf() },
@@ -131,6 +135,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Remove Header & Footer', disabled: noDoc, action: () => removeStamps('Header') },
       { label: 'Watermark…', disabled: noDoc, action: () => useStampDialog.setState({ open: 'watermark' }) },
       { label: 'Remove Watermark', disabled: noDoc, action: () => removeStamps('Watermark') },
+      { label: 'Document Properties…', shortcut: 'Ctrl+D', disabled: noDoc, action: () => useDocProps.setState({ open: true }) },
       { label: 'Security…', shortcut: 'Ctrl+L', disabled: noDoc, action: () => useSecurityDialog.setState({ open: true }) },
       { sep: true },
       { label: 'Slip Sheet…', disabled: noDoc, action: () => openPagesDialog('slip-sheet') },
@@ -184,6 +189,11 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Measurements', shortcut: 'Alt+U', checked: s.right === 'measurements', action: () => s.setPanels({ right: s.right === 'measurements' ? null : 'measurements' }) },
       { label: 'Layers', shortcut: 'Alt+Y', checked: s.left === 'layers', action: () => s.setPanels({ left: s.left === 'layers' ? null : 'layers' }) },
       { label: 'Markups List', shortcut: 'Alt+L', checked: s.markupsList, action: () => s.setPanels({ markupsList: !s.markupsList }) },
+      { sep: true },
+      { label: 'Navigation Bar', shortcut: 'F4', checked: s.toggles.navBar, action: () => s.toggle('navBar') },
+      { label: 'Full Screen', shortcut: 'F11', action: toggleFullScreen },
+      { label: 'Presentation', shortcut: 'Ctrl+Enter', disabled: noDoc, action: () => useApp.setState({ presentation: true }) },
+      { label: 'Balance', shortcut: 'Shift+F12', disabled: !s.split, action: balanceSplit },
       { sep: true },
       { label: 'Reset Layout', action: () => s.setPanels({ left: 'thumbnails', right: 'properties', markupsList: true }) },
     ],
@@ -320,7 +330,7 @@ export function StatusBar() {
       <div className="sb-section sb-status" title={s.status}>
         {s.busy ? '⏳ ' : ''}{s.tool !== 'select' && hint ? `${t.name}: ${hint}` : s.status}
       </div>
-      {doc && (
+      {doc && s.toggles.navBar && (
         <div className="sb-section sb-nav">
           <button onClick={() => s.setPage(0)} title="First Page (Home)"><Icon name="first" size={14} /></button>
           <button onClick={() => s.setPage(doc.page - 1)} title="Previous Page (Ctrl+Left)"><Icon name="prev" size={14} /></button>

@@ -85,3 +85,14 @@ export function flip(markups: Markup[], ids: string[], axis: 'horizontal' | 'ver
     })
     : m));
 }
+
+/**
+ * Remove Selected from Group (Revu): the selected markups leave their
+ * groups; a group left with a single member is dissolved.
+ */
+export function removeFromGroup(markups: Markup[], ids: string[]): Markup[] {
+  const out = markups.map((m) => (ids.includes(m.id) && m.groupId ? markDirty({ ...m, groupId: undefined }) : m));
+  const count = new Map<string, number>();
+  for (const m of out) if (m.groupId) count.set(m.groupId, (count.get(m.groupId) ?? 0) + 1);
+  return out.map((m) => (m.groupId && count.get(m.groupId) === 1 ? markDirty({ ...m, groupId: undefined }) : m));
+}

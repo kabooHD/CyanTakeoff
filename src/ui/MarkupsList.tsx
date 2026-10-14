@@ -95,7 +95,8 @@ export function MarkupsList() {
   /** Select a markup from the list and bring it into view (Revu). */
   const goTo = (m: Markup, add = false) => {
     if (doc && m.page !== doc.page) s.setPage(m.page);
-    s.select([m.id], add);
+    // A grouped markup is picked on its own here, so it can be edited or removed from its group (Revu).
+    s.select([m.id], add, true);
     setTimeout(() => viewerApi.centerOn(anchorOf(m)), 60);
   };
   /** Up/Down arrows step through the list. */

@@ -36,6 +36,9 @@ import { SheetsDialog } from './ui/Sheets';
 import { PrefsDialogs } from './ui/Prefs';
 import { SignatureDialog } from './ui/Signature';
 import { runApplyRedactions } from './ui/redactUi';
+import { DocPropertiesDialog, useDocProps } from './ui/DocProperties';
+import { Presentation } from './ui/Presentation';
+import { autosizeTextBoxes, balanceSplit, refreshDocument, removeSelectedFromGroup, saveAll, toggleFullScreen } from './ui/quickCommands';
 
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
@@ -43,6 +46,7 @@ const isEditable = (t: EventTarget | null) =>
 export function App() {
   const doc = useActiveDoc();
   const split = useApp((st) => st.split);
+  const splitRatio = useApp((st) => st.splitRatio);
   const docs = useApp((st) => st.docs);
   const busy = useApp((st) => st.busy);
   const [dialog, setDialog] = useState<'shortcuts' | 'about' | null>(null);
@@ -71,7 +75,18 @@ export function App() {
       switch (combo) {
         // File
         case 'Ctrl+O': return run(openFile);
-        case 'Ctrl+S': case 'Ctrl+F2': return run(() => s.save());
+        case 'Ctrl+S': return run(() => s.save());
+        case 'Ctrl+F2': return run(saveAll);
+        case 'F5': case 'Shift+F5': return run(() => d && refreshDocument());
+        case 'Ctrl+D': return run(() => d && useDocProps.setState({ open: true }));
+        case 'Alt+Z': return run(autosizeTextBoxes);
+        case 'Ctrl+Shift+Alt+G': return run(removeSelectedFromGroup);
+        case 'F11': return run(toggleFullScreen);
+        case 'Ctrl+Enter': return run(() => d && useApp.setState({ presentation: true }));
+        case 'Shift+F10': return run(() => d && viewerApi.contextMenu());
+        case 'Shift+F12': return run(balanceSplit);
+        case 'Shift+Z': return run(() => d && s.setTool(s.tool === 'zoom' ? 'select' : 'zoom'));
+        case 'F4': return run(() => s.toggle('navBar'));
         case 'Ctrl+Shift+S': return run(() => s.save(true));
         case 'Ctrl+F4': case 'Ctrl+W': return run(() => d && s.closeDoc(d.id));
         case 'Ctrl+P': return run(() => d && openPrint());
@@ -213,7 +228,12 @@ export function App() {
             <div className={`split-view ${split.dir}`}>
               {[0, 1].map((pane) => {
                 const d = docs.find((x) => x.id === (pane ? split.docId : split.mainDocId));
-                return d ? <Viewer key={`${pane}:${d.id}`} doc={d} pane={pane as 0 | 1} /> : null;
+                return [
+                  pane === 1 && <SplitDivider key="div" dir={split.dir} />,
+                  <div key={`p${pane}`} className="split-pane" style={{ flex: `${pane ? 1 - splitRatio : splitRatio} 1 0` }}>
+                    {d && <Viewer key={`${pane}:${d.id}`} doc={d} pane={pane as 0 | 1} />}
+                  </div>,
+                ];
               })}
             </div>
           ) : <Viewer key={doc.id} doc={doc} />}
@@ -245,9 +265,31 @@ export function App() {
       <FormsDialogs />
       <DigitalSignDialog />
       <LayerDialogs />
+      <DocPropertiesDialog />
+      <Presentation />
       {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
       {dialog === 'about' && <AboutDialog onClose={() => setDialog(null)} />}
     </div>
+  );
+}
+
+/** Drag to resize the two panes of a split view (Window > Balance evens them). */
+function SplitDivider({ dir }: { dir: 'h' | 'v' }) {
+  return (
+    <div className="split-divider" role="separator" aria-orientation={dir === 'h' ? 'horizontal' : 'vertical'} title="Drag to resize (Shift+F12: Balance)"
+      onDoubleClick={balanceSplit}
+      onPointerDown={(e) => {
+        const box = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
+        const el = e.currentTarget;
+        el.setPointerCapture(e.pointerId);
+        const move = (ev: PointerEvent) => {
+          const r = dir === 'h' ? (ev.clientY - box.top) / box.height : (ev.clientX - box.left) / box.width;
+          useApp.setState({ splitRatio: Math.max(0.1, Math.min(0.9, r)) });
+        };
+        const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); };
+        el.addEventListener('pointermove', move);
+        el.addEventListener('pointerup', up);
+      }} />
   );
 }
 

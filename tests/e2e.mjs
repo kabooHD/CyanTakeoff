@@ -1797,6 +1797,63 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert(await page.locator('#print-root').count() === 0, 'print sheets are removed after printing');
 }
 
+// Quick Revu commands: Document Properties (Ctrl+D), Navigation Bar (F4),
+// Presentation (Ctrl+Enter), resizable split with Balance (Shift+F12), Shift+F10.
+{
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+d');
+  let dlg = page.locator('[role=dialog][aria-label="Document Properties"]');
+  await dlg.waitFor();
+  await page.waitForFunction(() => !document.querySelector('[aria-label="Document Properties"] button.primary')?.disabled);
+  assert(Number(await dlg.getByTestId('doc-pages').innerText()) > 0, 'Document Properties shows the page count');
+  await dlg.locator('[aria-label="Title"]').fill('E2E Title');
+  await dlg.getByRole('button', { name: 'OK' }).click();
+  await page.waitForFunction(() => !document.querySelector('.busy-overlay'));
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Control+d');
+  dlg = page.locator('[role=dialog][aria-label="Document Properties"]');
+  await page.waitForFunction(() => document.querySelector('[aria-label="Document Properties"] [aria-label="Title"]')?.value === 'E2E Title', null, { timeout: 10000 });
+  await page.screenshot({ path: `${OUT}/doc-properties.png` });
+  await page.keyboard.press('Escape');
+  assert(await dlg.count() === 0, 'Esc closes Document Properties');
+
+  await page.keyboard.press('F4');
+  assert(await page.locator('.sb-nav').count() === 0, 'F4 hides the navigation bar');
+  await page.keyboard.press('F4');
+  assert(await page.locator('.sb-nav').count() === 1, 'F4 shows it again');
+
+  await page.keyboard.press('Control+Enter');
+  await page.locator('.presentation canvas[data-rendered]').waitFor({ timeout: 15000 });
+  await page.screenshot({ path: `${OUT}/presentation.png` });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  assert(await page.locator('.presentation').count() === 0, 'Esc leaves Presentation');
+
+  await page.keyboard.press('Control+2');
+  await page.locator('.split-divider').waitFor();
+  const bar = await page.locator('.split-divider').boundingBox();
+  const box = await page.locator('.split-view').boundingBox();
+  await page.mouse.move(bar.x + 2, bar.y + bar.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.3, bar.y + bar.height / 2, { steps: 4 });
+  await page.mouse.up();
+  const widths = async () => page.locator('.split-pane').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width));
+  let [w0, w1] = await widths();
+  assert(w0 < w1 * 0.6, `the split divider resizes the panes (${w0} / ${w1})`);
+  await page.keyboard.press('Shift+F12');
+  await page.waitForTimeout(100);
+  [w0, w1] = await widths();
+  assert(Math.abs(w0 - w1) < 3, 'Shift+F12 balances the panes');
+  await page.keyboard.press('Control+Shift+2');
+
+  await page.keyboard.press('Control+a');
+  if (await page.locator('.ml-table tbody tr').count()) {
+    await page.keyboard.press('Shift+F10');
+    await page.locator('.menu-list .menu-item', { hasText: 'Properties' }).first().waitFor();
+    await page.keyboard.press('Escape');
+  }
+}
+
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
 for (const [file, expected] of [
   ['measure.pdf', [`5'-5"`, '56.37 sf', `18'-11 1/2"`, `22'-4 1/2"`, '0 cu ft', '96.69°', `4'-9"`, `3'-9"`]],

@@ -232,4 +232,6 @@ export interface Toggles {
   crosshair: boolean;
   /** Pen Mode (tablets): a finger pans and zooms, only the pen draws. */
   penMode: boolean;
+  /** Window > Navigation Bar (F4): page navigation in the status bar. */
+  navBar: boolean;
 }

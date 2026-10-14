@@ -101,7 +101,11 @@ password security (src/pdf/crypt.ts: R2-R6 decrypt, AES-256 encrypt;
 src/ui/Security.tsx), Reduce File Size (src/pdf/reduce.ts), XFDF
 (src/pdf/xfdf.ts); Edit Text / Erase Content (src/pdf/editText.ts, using
 the redaction walker's text probe); touch and pen (pinch, pan, long press,
-Pen Mode; in Viewer.tsx); low-end machine pass (src/model/device.ts: undo
+Pen Mode; in Viewer.tsx); small Revu commands (src/ui/quickCommands.ts:
+Save All, Refresh, Autosize Text Box, Remove Selected from Group, Full
+Screen, Balance with a draggable split; Document Properties Ctrl+D in
+src/ui/DocProperties.tsx; Presentation Ctrl+Enter in src/ui/Presentation.tsx;
+F4 navigation bar, Shift+F10 context menu); low-end machine pass (src/model/device.ts: undo
 memory budget, cold undo snapshots, canvas limits; docs/perf.md); CyanTakeoff (=Revu)
 and Batch menus; form filling (AcroForm inputs saved into the form) and
 field creation (Tools > field tools, X = signature field, Forms Editor

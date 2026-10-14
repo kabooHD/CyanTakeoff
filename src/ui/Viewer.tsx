@@ -53,6 +53,8 @@ export const viewerApi = {
   showAt: (_p: Pt) => {},
   /** Page point at the top left of the view. */
   topLeft: (): Pt => ({ x: 0, y: 0 }),
+  /** Show the context menu for the selection (or the page), as Shift+F10 does. */
+  contextMenu: () => {},
 };
 
 type Draft = { tool: ToolId; points: Pt[]; cursor: Pt | null; dragFrom?: { x: number; y: number }; target?: string;
@@ -1222,7 +1224,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     longPress.current = { x: e.clientX, y: e.clientY, t };
   };
 
-  const rightClick = (e: { clientX: number; clientY: number }) => {
+  const rightClick = (e: { clientX: number; clientY: number }, forceId?: string) => {
     if (draft) { finishPoly(); return; }
     // Right-click leaves a drawing tool, including Reuse mode (Revu).
     if (s.tool !== 'select') {
@@ -1231,7 +1233,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       return;
     }
     const raw = toPage(e);
-    const hit = [...markups].reverse().find((m) => hitTest(m, raw, 5 / zoom));
+    const hit = forceId ? markups.find((m) => m.id === forceId) : [...markups].reverse().find((m) => hitTest(m, raw, 5 / zoom));
     const items: MenuItem[] = [];
     const holeOwner = !hit && [...markups].reverse().find((m) => m.cutouts?.length && pointInPolygon(raw, m.points) && cutoutAt(m, raw) >= 0);
     if (holeOwner) {
@@ -1303,6 +1305,26 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     }
     setMenu({ x: e.clientX, y: e.clientY, items });
   };
+  const rightClickRef = useRef(rightClick);
+  rightClickRef.current = rightClick;
+  useEffect(() => {
+    if (!isActivePane) return;
+    viewerApi.contextMenu = () => {
+      const svg = svgRef.current, el = scrollRef.current;
+      if (!svg || !el) return;
+      const r = svg.getBoundingClientRect(), v = el.getBoundingClientRect();
+      const sel = markups.find((m) => doc.selection.includes(m.id));
+      let at = { clientX: v.left + v.width / 2, clientY: v.top + v.height / 2 };
+      if (sel) {
+        const b = markupBounds(sel);
+        const q = rotateOut(((b.minX + b.maxX) / 2) * zoom, ((b.minY + b.maxY) / 2) * zoom, pw, ph, rot);
+        at = { clientX: Math.min(v.right - 4, Math.max(v.left + 4, r.left + q.x)), clientY: Math.min(v.bottom - 4, Math.max(v.top + 4, r.top + q.y)) };
+      }
+      // Leave the drawing tool first so the menu is the markup menu.
+      if (s.tool !== 'select') s.setTool('select');
+      setTimeout(() => rightClickRef.current(at, sel?.id), 30);
+    };
+  });
 
   // ----- draft preview -----
   let preview: Markup | null = null;

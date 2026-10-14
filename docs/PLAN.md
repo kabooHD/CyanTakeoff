@@ -213,6 +213,11 @@ filling, image signatures, redaction and OCR.
 - [x] Touch and pen: two-finger pinch zoom and pan, finger pans in Select
   (and anywhere off the page), long press = right-click, larger finger
   hit targets, View > Pen Mode (finger pans, only the pen draws)
+- [x] Remaining Revu commands, batch 1: Document Properties (Ctrl+D),
+  Save All (Ctrl+F2), Refresh (F5), Autosize Text Box (Alt+Z), Remove
+  Selected from Group, Full Screen (F11), Presentation (Ctrl+Enter),
+  Navigation Bar (F4), Show Context Menu (Shift+F10), resizable split view
+  with Balance (Shift+F12), Zoom tool toggle (Shift+Z)
 
 ### Next 2: public test build in local mode (days)
 - Host on a VPS (static site + HTTPS), with a feedback link

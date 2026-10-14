@@ -185,6 +185,10 @@ interface AppState {
   setViewZoom(pane: 0 | 1, zoom: number): void;
   /** Split view (Revu: Split Horizontal Ctrl+H, Split Vertical Ctrl+2, Unsplit, Switch Ctrl+1). */
   split: { dir: 'h' | 'v'; mainDocId: string; docId: string; page: number; zoom: number } | null;
+  /** Share of the split view taken by the first pane (Balance sets 0.5). */
+  splitRatio: number;
+  /** Window > Presentation (Ctrl+Enter). */
+  presentation: boolean;
   activePane: 0 | 1;
   /** Revu View > Mode (Single Page Ctrl+4, Continuous Ctrl+5, Side by Side Ctrl+6, Continuous Side by Side Ctrl+7). */
   viewMode: ViewMode;
@@ -208,7 +212,8 @@ interface AppState {
   painter: { style: MarkupStyle } | null;
   /** Replace the document's markups (tools that rewrite several at once). */
   setMarkups(markups: Markup[], opts?: { history?: boolean }): void;
-  select(ids: string[], add?: boolean): void;
+  /** Select markups; grouped markups select together unless `exact` (a group member picked in the Markups List). */
+  select(ids: string[], add?: boolean, exact?: boolean): void;
   undo(): void | Promise<void>;
   redo(): void | Promise<void>;
   copy(): void;
@@ -391,7 +396,7 @@ export const useApp = create<AppState>((set, get) => {
     toolLocked: false,
     preset: null,
     toolDefaults: { ...DEFAULT_STYLES, ...(prefs.toolDefaults ?? {}) },
-    toggles: { snap: false, grid: false, content: true, markup: true, reuse: false, sync: false, rulers: false, dimmer: false, crosshair: false, penMode: false, ...(prefs.toggles ?? {}) },
+    toggles: { snap: false, grid: false, content: true, markup: true, reuse: false, sync: false, rulers: false, dimmer: false, crosshair: false, penMode: false, navBar: true, ...(prefs.toggles ?? {}) },
     dimLevel: prefs.dimLevel ?? 50,
     rulerUnit: prefs.rulerUnit ?? 'in',
     customLineStyles: prefs.customLineStyles ?? [],
@@ -519,6 +524,8 @@ export const useApp = create<AppState>((set, get) => {
       set({ docs: docs.map((d) => (d.id === id ? { ...d, zoom: z } : d)) });
     },
     split: null,
+    splitRatio: 0.5,
+    presentation: false,
     activePane: 0,
     viewMode: 'single',
     viewRotation: 0,
@@ -623,10 +630,10 @@ export const useApp = create<AppState>((set, get) => {
         undo: [...d.undo, d.markups], redo: [], dirty: true,
       }));
     },
-    select(ids, add) {
-      // Grouped markups select together (Revu).
+    select(ids, add, exact) {
+      // Grouped markups select together (Revu), except a member picked in the Markups List.
       withDoc((d) => {
-        const all = expandGroups(d.markups, ids);
+        const all = exact ? ids : expandGroups(d.markups, ids);
         return { selection: add ? [...new Set([...d.selection, ...all])] : all };
       });
     },
