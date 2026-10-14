@@ -14,6 +14,6 @@ describe('custom keyboard shortcuts', () => {
     expect(resolveCombo('Ctrl+S', custom)).toBe('');
   });
   it('lists who uses a combo', () => {
-    expect(usersOf('Ctrl+L', { 'tool:length': 'Ctrl+L' }).map((x) => x.label)).toEqual(['Length']);
+    expect(usersOf('Ctrl+Alt+K', { 'tool:length': 'Ctrl+Alt+K' }).map((x) => x.label)).toEqual(['Length']);
   });
 });
