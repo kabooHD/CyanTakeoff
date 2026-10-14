@@ -1519,9 +1519,19 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.screenshot({ path: `${OUT}/capture.png` });
   await page.keyboard.press('Escape');
   await cp.waitFor({ state: 'hidden' });
-  await page.getByRole('button', { name: 'Remove 01-start.png' }).click();
+  // The media icon at the markup's corner opens the viewer too; Delete there removes the photo.
+  const icon = page.locator('.markup-layer .capture-icon').first();
+  assert(await icon.count() === 1, 'a markup with a photo shows the media icon on the drawing');
+  await icon.click();
+  await cp.waitFor();
+  await cp.getByRole('button', { name: 'Delete' }).click();
+  await cp.waitFor({ state: 'hidden' });
   await page.waitForTimeout(200);
-  assert(await page.locator('.capture-thumb').count() === 0, 'a photo can be removed again');
+  assert(await page.locator('.capture-thumb').count() === 0 && await page.locator('.markup-layer .capture-icon').count() === 0, 'Delete in the viewer removes the photo');
+  // Right-click menu: Capture > From File / From Camera.
+  await page.locator('.ml-table tbody tr').first().click({ button: 'right' });
+  assert(await page.getByRole('menuitem', { name: 'Capture › From File…' }).count() === 1 && await page.getByRole('menuitem', { name: 'Capture › From Camera…' }).count() === 1, 'the markup menu offers Capture > From File / From Camera');
+  await page.keyboard.press('Escape');
   await page.evaluate(() => document.activeElement?.blur?.());
   await page.getByRole('button', { name: 'Columns ▾' }).click();
   if (!(await page.locator('.ml-columns-menu').count())) await page.getByRole('button', { name: 'Columns ▾' }).click();

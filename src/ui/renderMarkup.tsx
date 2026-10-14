@@ -5,6 +5,7 @@ import { calloutAttach } from '../pdf/save';
 import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import type { Cutout, Markup, MarkupStyle, MarkupType, Pt } from '../model/types';
 import { useEffect } from 'react';
+import { openCapturePreview } from './Capture';
 import { useApp } from '../model/store';
 import { LEGEND_HEADERS, legendLayout, legendRows } from '../model/legend';
 
@@ -328,6 +329,20 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
       ))}
       {centroidAt && <circle className="centroid-mark" cx={centroidAt.x} cy={centroidAt.y} r={Math.max(2, st.width * 1.5)} fill={st.color} pointerEvents="none" />}
       {replyIndicators && m.replies?.length && P.length > 0 ? <ReplyIndicator m={m} /> : null}
+      {m.capture?.length && P.length > 0 ? <CaptureIcon m={m} /> : null}
+    </g>
+  );
+}
+
+/** Embedded media (Capture): a camera icon near the markup's lower-right corner; click opens the viewer. */
+function CaptureIcon({ m }: { m: Markup }) {
+  const b = bounds(m.points), x = b.maxX + 2, y = b.maxY + 2;
+  return (
+    <g className="capture-icon" style={{ cursor: 'pointer' }} pointerEvents="all" role="button" aria-label={`View ${m.capture!.length} photo${m.capture!.length === 1 ? '' : 's'}`}
+      onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }} onClick={(e) => { e.stopPropagation(); openCapturePreview(m.capture!, 0, m.id); }}>
+      <rect x={x} y={y} width={14} height={11} rx={2} fill="#fff" stroke={m.style.color} strokeWidth={0.8} />
+      <circle cx={x + 7} cy={y + 6} r={3} fill="none" stroke={m.style.color} strokeWidth={0.8} />
+      <rect x={x + 4} y={y + 1} width={3} height={1.5} fill={m.style.color} />
     </g>
   );
 }

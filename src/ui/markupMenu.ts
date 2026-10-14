@@ -11,6 +11,8 @@ import { sequenceMembers } from '../model/sequence';
 import type { MenuItem } from './ContextMenu';
 import { useApp, type DocState } from '../model/store';
 import type { Markup } from '../model/types';
+import { captureMenuItems } from './Capture';
+import { openCameraFor } from './Camera';
 
 export function markupMenuItems(doc: DocState, hit: Markup, ids: string[]): MenuItem[] {
   const s = useApp.getState();
@@ -19,6 +21,7 @@ export function markupMenuItems(doc: DocState, hit: Markup, ids: string[]): Menu
     { label: 'Edit Action…', shortcut: 'Ctrl+Shift+E', action: () => editAction(ids) },
     { label: 'Add to My Tools', action: () => s.addToToolChest(hit) },
     ...(hit.seq ? [{ label: 'Select Sequence', action: () => s.select(sequenceMembers(doc.markups, hit)) }] : []),
+    ...captureMenuItems(hit, openCameraFor),
     { sep: true },
     ...statusMenuItems(hit, ids),
     { sep: true },

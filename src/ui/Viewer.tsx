@@ -15,6 +15,8 @@ import { cancelPicking, pickAlignPoint, pickingPrompt, useCompareDialog } from '
 import { STAMPS, downloadBase64, loadImage, pageText, pickFile, readAsDataUrl, snapshot, textRectsIn } from './toolActions';
 import { applyCutout, ellipsePolygon } from '../model/cutouts';
 import { expandGroups } from '../model/arrange';
+import { attachCapture, captureMenuItems, shrinkPhoto } from './Capture';
+import { openCameraFor } from './Camera';
 import { arrangeItems } from './arrangeMenu';
 import { legendKey, legendLayout, legendRows, type LegendDef } from '../model/legend';
 import { DynamicFillBar, FillOverlay, buildMask, fillDown, fillMove, fillUp, finishBoundary, resetFill, useFill } from './DynamicFill';
@@ -1395,6 +1397,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         ...(hit.link ? [{ label: 'Follow Action', action: () => followLink(hit) }] : []),
         { label: 'Add to My Tools', action: () => s.addToToolChest(hit) },
         ...(hit.seq ? [{ label: 'Select Sequence', action: () => s.select(sequenceMembers(doc.markups, hit)) }] : []),
+        ...captureMenuItems(hit, openCameraFor),
         { sep: true },
         ...statusMenuItems(hit, ids),
         { sep: true },
@@ -1526,6 +1529,17 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
             viewBox={`0 0 ${page.width} ${page.height}`} style={{ cursor }}
             onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
             onDoubleClick={onDoubleClick} onContextMenu={onContextMenu}
+            onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }}
+            onDrop={async (e) => {
+              // Revu: an image dropped on a markup is embedded in it (Capture); elsewhere the app opens the file.
+              const f = Array.from(e.dataTransfer.files).find((x) => x.type.startsWith('image/'));
+              if (!f) return;
+              const p = toPage(e);
+              const target = [...markups].reverse().find((m) => hitTest(m, p, 5 / zoom));
+              if (!target) return;
+              e.preventDefault(); e.stopPropagation();
+              try { attachCapture(target.id, await shrinkPhoto(f)); } catch { s.setStatus('That image could not be read.'); }
+            }}
             onPointerLeave={() => setCursor(null, null)}>
             {s.toggles.grid && (
               <>

@@ -221,8 +221,9 @@ filling, image signatures, redaction and OCR.
 - [x] Measurements panel menu: Show Measurement Tools, Snap Orthogonal,
   Snap to Content, Highlight Viewports
 - [x] Help > Find Tools + Commands (search box over menus and tools)
-- [x] Capture: photos attached to a markup (Properties > Capture, Capture
-  column, preview), kept in CTData
+- [x] Capture: photos attached to a markup (Properties > Capture, right-click
+  Capture > From Camera / From File, drop an image on a markup; media icon on
+  the drawing, Capture column, viewer with Delete/Export), kept in CTData
 - [x] Batch > Sign & Seal (invisible signature on every open document);
   Document > Insert Layered Pages (a PDF's pages become layers here)
 - [x] Properties: Layout section (X, Y, Width, Height, editable) and Set

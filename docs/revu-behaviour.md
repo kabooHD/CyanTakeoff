@@ -628,11 +628,15 @@ with the arrow keys, Enter runs it (disabled items are greyed). Each row
 shows the menu it lives in and its shortcut.
 
 ## Capture, Sign & Seal, Layered Pages
-- Capture: a markup can carry photos (Properties > Capture: Add Photo or
-  the camera; thumbnails, remove). The Markups List has a Capture column
-  (count); double-click previews the photos (arrow keys page through
-  them). Photos are shrunk to 1600 px and kept inside the PDF with the
-  markup (ours: in CTData), so they travel with the file.
+- Capture (embedded markup media): a markup can carry photos, added from
+  Properties > Capture, right-click > Capture > From Camera / From File,
+  or by dropping an image onto the markup. They are named after the
+  markup's Subject (numbered). The media is not drawn on the page: a
+  camera icon at the markup's lower-right corner and the Capture column
+  of the Markups List open the viewer (Previous/Next, Add from File,
+  Delete, Export, Export All). Photos are shrunk to 1600 px and kept
+  inside the PDF with the markup (ours: in CTData). Video and 360°
+  photos are not supported.
 - Batch > Sign & Seal: one digital ID signs every open document with an
   invisible signature (the seal is placed first with Batch > Apply Stamp).
   Save All writes the signed files.
