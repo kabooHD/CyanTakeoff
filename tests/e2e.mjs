@@ -1355,6 +1355,13 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.locator('.bm-title', { hasText: 'Site Plan' }).click();
   await page.waitForTimeout(400);
   assert((await nav.innerText()).startsWith('(2 of'), 'clicking a bookmark jumps to its page');
+  // Action dialog: the child opens a web address.
+  await row('Detail').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Action…' }).click();
+  const adlg = page.locator('[role=dialog][aria-label="Bookmark Action"]');
+  await adlg.waitFor();
+  await adlg.locator('[aria-label="Web address"]').fill('https://example.com/detail');
+  await adlg.getByRole('button', { name: 'OK' }).click();
   await page.screenshot({ path: `${OUT}/bookmarks.png` });
   await page.locator('.viewer').first().click({ position: { x: 5, y: 5 } }).catch(() => {});
   const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
@@ -1371,6 +1378,8 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert(names.join('|') === 'Floor Plan|Site Plan|-Detail', `saved outline (${names.join('|')})`);
   const dest = look(outline.get(PDFName.of('First'))).lookup(PDFName.of('Dest'), PDFArray);
   assert(dest.get(0).toString() === out.getPage(0).ref.toString() && dest.get(1).toString() === '/XYZ', 'bookmark goes to the view on page 1');
+  const detail = look(look(look(outline.get(PDFName.of('First'))).get(PDFName.of('Next'))).get(PDFName.of('First')));
+  assert(detail.lookup(PDFName.of('A'), PDFDict).lookup(PDFName.of('URI')).decodeText() === 'https://example.com/detail', 'the Action dialog wrote a URI action');
 }
 
 // Line styles and hatch patterns (Properties > Line Style / Hatch, Manage…).

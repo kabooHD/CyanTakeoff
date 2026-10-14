@@ -174,7 +174,8 @@ filling, image signatures, redaction and OCR.
   (Ctrl+F5, 25/50/75%), Previous/Next View (Alt+Left/Right)
 - [x] Bookmarks editing: Add Bookmark (Ctrl+B) at the current view, before/
   after/child, rename, delete, drag to reorder or nest (Ctrl+drag copies),
-  Set to Current View, Properties, from page labels, Audit, Export CSV;
+  Set to Current View, Properties, Action (page, view, Place, web address,
+  other file), from page labels, Audit, Export CSV;
   saved to /Outlines keeping untouched items and actions
 - [x] Line styles (15 standard incl. center/hidden/phantom/double and
   utility lines with text; Line Style Editor: lines, offsets, dash/space/

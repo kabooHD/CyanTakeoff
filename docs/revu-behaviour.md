@@ -374,8 +374,9 @@ Create Bookmarks: Page Labels, or Page Region (AutoMark): Select drags a
 region whose text names the bookmark (Add for more regions, e.g. number and
 title), over All/Current/Custom pages. Ours keeps regions as fractions of
 the page so they fit sheets of other sizes.
-Ours: Export is CSV; the Action dialog (jump to another file, web link) is
-not editable yet, but such actions are kept as they were.
+Right-click > Action: jump to a page, the current view or a Place, open a
+web address, or open another file at a page (saved as /URI, /GoToR or a
+named /Dest). Ours: Export is CSV; unedited actions are kept as they were.
 
 ## Rulers, crosshair, Dimmer, Previous/Next View (View menu)
 Rulers (Ctrl+R) run along the top and left of the workspace: they show the

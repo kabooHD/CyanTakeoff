@@ -2,7 +2,8 @@
 // at the current view, before / after / as child of the selected one;
 // rename (double-click or F2), delete (Delete), drag to reorder or nest
 // (Ctrl+drag copies), Set to Current View, Properties (title, colour, bold,
-// italic), expand/collapse, Create Bookmarks from page labels, Audit
+// italic), Action (jump to a page or Place, open a web address or another
+// file), expand/collapse, Create Bookmarks from page labels, Audit
 // Bookmarks and Export Bookmarks (CSV).
 import { useEffect, useRef, useState } from 'react';
 import { useApp, type DocState } from '../model/store';
@@ -16,8 +17,10 @@ const active = () => { const s = useApp.getState(); return s.docs.find((d) => d.
 
 /** Jump to a bookmark's destination. */
 export function goToBookmark(d: DocState, b: Bookmark) {
-  if (b.page === null) return;
   const s = useApp.getState();
+  if (b.action?.uri) { window.open(b.action.uri, '_blank', 'noopener'); return; }
+  if (b.action?.file) { s.setStatus(`This bookmark opens ${b.action.file} (page ${(b.action.page ?? 0) + 1}): open that file to follow it.`); return; }
+  if (b.page === null) return;
   const page = d.loaded.pages[b.page];
   if (!page) return;
   s.setPage(b.page);
@@ -77,6 +80,7 @@ export function BookmarksPanel({ doc }: { doc: DocState }) {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [props, setProps] = useState<string[] | null>(null);
+  const [action, setAction] = useState<string | null>(null);
   const [drop, setDrop] = useState<{ id: string; where: Where } | null>(null);
   const dragging = useRef<string[]>([]);
   const list = doc.bookmarks;
@@ -120,6 +124,7 @@ export function BookmarksPanel({ doc }: { doc: DocState }) {
       { label: 'Rename', shortcut: 'F2', disabled: !b, action: () => b && setRenaming(b.id) },
       { label: 'Delete', shortcut: 'Del', disabled: !ids.length, action: () => remove(ids) },
       { label: 'Set to Current View', disabled: !b, action: () => b && edit(updateBookmark(list, b.id, { ...currentView(doc), broken: false })) },
+      { label: 'Action…', disabled: !b, action: () => b && setAction(b.id) },
       { label: 'Properties…', disabled: !ids.length, action: () => setProps(ids) },
     ];
   };
@@ -185,6 +190,7 @@ export function BookmarksPanel({ doc }: { doc: DocState }) {
       </div>
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
       {props && <PropsDialog doc={doc} ids={props} onClose={() => setProps(null)} />}
+      {action && <ActionDialog doc={doc} id={action} onClose={() => setAction(null)} />}
     </div>
   );
 }
@@ -215,6 +221,65 @@ function PropsDialog({ doc, ids, onClose }: { doc: DocState; ids: string[]; onCl
             <label><input type="checkbox" checked={italic} onChange={(e) => setItalic(e.target.checked)} /> Italic</label>
           </div>
           <div className="modal-actions"><span className="spacer" /><button className="primary" onClick={ok}>OK</button><button onClick={onClose}>Cancel</button></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Revu's bookmark Action dialog: jump to a page (optionally the current view), a Place, a web address or a page of another file. */
+function ActionDialog({ doc, id, onClose }: { doc: DocState; id: string; onClose: () => void }) {
+  const b = findBookmark(doc.bookmarks, id);
+  const act = b?.action;
+  const places = doc.loaded.places;
+  const n = doc.loaded.pages.length;
+  const [kind, setKind] = useState<'page' | 'view' | 'place' | 'uri' | 'file'>(act?.uri ? 'uri' : act?.file ? 'file' : act?.dest ? 'place' : 'page');
+  const [pageNo, setPageNo] = useState(String((b?.page ?? doc.page) + 1));
+  const [place, setPlace] = useState(act?.dest ?? places[0]?.name ?? '');
+  const [uri, setUri] = useState(act?.uri ?? 'https://');
+  const [file, setFile] = useState(act?.file ?? '');
+  const [filePage, setFilePage] = useState(String((act?.file ? act.page ?? 0 : 0) + 1));
+  if (!b) return null;
+  const pageOk = Number(pageNo) >= 1 && Number(pageNo) <= n;
+  const valid = kind === 'page' ? pageOk : kind === 'view' ? true : kind === 'place' ? !!place : kind === 'uri' ? /^[a-z]+:\/\/./i.test(uri) || /^mailto:/i.test(uri) : !!file.trim() && Number(filePage) >= 1;
+  const ok = () => {
+    if (!valid) return;
+    const patch: Partial<Bookmark> = { destEdited: true, broken: false, action: undefined };
+    if (kind === 'page') Object.assign(patch, { page: Number(pageNo) - 1, fit: 'Fit', args: [] });
+    else if (kind === 'view') Object.assign(patch, currentView(doc));
+    else if (kind === 'place') Object.assign(patch, { action: { dest: place }, page: doc.loaded.places.find((p) => p.name === place)?.page ?? b.page });
+    else if (kind === 'uri') Object.assign(patch, { action: { uri: uri.trim() }, page: null });
+    else Object.assign(patch, { action: { file: file.trim(), page: Number(filePage) - 1 }, page: null });
+    useApp.getState().setBookmarks(updateBookmark(doc.bookmarks, id, patch));
+    onClose();
+  };
+  return (
+    <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal" role="dialog" aria-label="Bookmark Action" onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') onClose(); if (e.key === 'Enter') ok(); }}>
+        <div className="modal-title">Action: {b.title}</div>
+        <div className="scale-dialog">
+          <div className="form-row">
+            <label><input type="radio" checked={kind === 'page'} onChange={() => setKind('page')} /> Jump to page</label>
+            <input aria-label="Page number" type="number" min={1} max={n} value={pageNo} onChange={(e) => setPageNo(e.target.value)} onFocus={() => setKind('page')} style={{ width: 70 }} /> of {n}
+          </div>
+          <div className="form-row"><label><input type="radio" checked={kind === 'view'} onChange={() => setKind('view')} /> Jump to the current view (page {doc.loaded.pages[doc.page]?.label})</label></div>
+          <div className="form-row">
+            <label><input type="radio" checked={kind === 'place'} disabled={!places.length} onChange={() => setKind('place')} /> Jump to Place</label>
+            <select aria-label="Place" value={place} disabled={!places.length} onChange={(e) => { setPlace(e.target.value); setKind('place'); }}>
+              {!places.length && <option value="">(no Places: add one in the Links panel)</option>}
+              {places.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
+            </select>
+          </div>
+          <div className="form-row">
+            <label><input type="radio" checked={kind === 'uri'} onChange={() => setKind('uri')} /> Open web address</label>
+            <input aria-label="Web address" value={uri} onChange={(e) => setUri(e.target.value)} onFocus={() => setKind('uri')} style={{ width: 240 }} />
+          </div>
+          <div className="form-row">
+            <label><input type="radio" checked={kind === 'file'} onChange={() => setKind('file')} /> Open file</label>
+            <input aria-label="File name" placeholder="other.pdf" value={file} onChange={(e) => setFile(e.target.value)} onFocus={() => setKind('file')} style={{ width: 160 }} />
+            page <input aria-label="File page" type="number" min={1} value={filePage} onChange={(e) => setFilePage(e.target.value)} onFocus={() => setKind('file')} style={{ width: 60 }} />
+          </div>
+          <div className="modal-actions"><span className="spacer" /><button className="primary" disabled={!valid} onClick={ok}>OK</button><button onClick={onClose}>Cancel</button></div>
         </div>
       </div>
     </div>
