@@ -282,8 +282,10 @@ Text, click a line, type, Enter. The same font is kept when every new
 character already appears in that run (works with subset fonts); otherwise
 a standard font of the same family is used at the same position, size,
 spacing and colour. Tools > Erase Content removes text, vectors and images
-under a dragged rectangle (redaction without the box). Moving content is
-not supported yet.
+under a dragged rectangle (redaction without the box). Tools > Cut Content
+takes the content under the rectangle to the clipboard as a snapshot and
+removes it from the page; paste it (Ctrl+V) as an image markup, which is
+how content is moved.
 
 ## Security, Reduce File Size, XFDF
 Document > Security (Ctrl+L): No Security or Password Security with a

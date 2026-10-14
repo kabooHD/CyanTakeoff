@@ -43,7 +43,7 @@ export type MarkupType =
   | 'legend'
   | 'redaction';
 
-export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cutout' | 'ellipse-cutout' | 'viewport' | 'radius-3pt' | 'dynamic-fill' | 'snapshot' | 'eraser' | 'lasso' | 'space' | 'redact-text' | 'visual-pick' | 'region-pick' | 'edit-text' | 'erase-content' | 'select-text' | 'snapshot-content'
+export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cutout' | 'ellipse-cutout' | 'viewport' | 'radius-3pt' | 'dynamic-fill' | 'snapshot' | 'eraser' | 'lasso' | 'space' | 'redact-text' | 'visual-pick' | 'region-pick' | 'edit-text' | 'erase-content' | 'cut-content' | 'select-text' | 'snapshot-content'
   | 'form-text' | 'form-checkbox' | 'form-radio' | 'form-dropdown' | 'form-list' | 'form-signature';
 
 /** A hole subtracted from an Area or Volume measurement. Ellipse: two opposite corners. */

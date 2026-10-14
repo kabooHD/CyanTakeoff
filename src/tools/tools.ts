@@ -41,6 +41,7 @@ export const TOOLS: ToolDef[] = [
   { id: 'select-text', name: 'Select Text', group: 'navigate', shortcut: 'Shift+T', interaction: 'box', subject: '' },
   { id: 'edit-text', name: 'Edit Text', group: 'navigate', interaction: 'point', subject: '' },
   { id: 'erase-content', name: 'Erase Content', group: 'navigate', interaction: 'box', subject: '' },
+  { id: 'cut-content', name: 'Cut Content', group: 'navigate', interaction: 'box', subject: '' },
   { id: 'region-pick', name: 'Select Region', group: 'navigate', interaction: 'box', subject: '' },
   { id: 'visual-pick', name: 'VisualSearch: Get Rectangle', group: 'navigate', interaction: 'box', subject: '' },
   { id: 'lasso', name: 'Lasso', group: 'navigate', shortcut: 'Shift+O', interaction: 'freehand', subject: '' },

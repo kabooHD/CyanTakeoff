@@ -1030,13 +1030,16 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       });
       return;
     }
-    if (draft.tool === 'erase-content') {
+    if (draft.tool === 'erase-content' || draft.tool === 'cut-content') {
+      const cut = draft.tool === 'cut-content';
       setDraft(null);
       const [c0, c1] = [a, p].map((q) => page.viewport.convertToPdfPoint(q.x, q.y) as [number, number]);
       const rect: [number, number, number, number] = [Math.min(c0[0], c1[0]), Math.min(c0[1], c1[1]), Math.max(c0[0], c1[0]), Math.max(c0[1], c1[1])];
       let removed = false;
-      s.transformDoc(async (lib) => { removed = await eraseContent(lib, pageIdx, rect); }, 'Content erased', pageIdx)
-        .then((ok) => { if (ok && !removed) s.setStatus('Erase Content: nothing under that rectangle'); });
+      // Cut Content (Revu): the content goes to the clipboard as a Snapshot, then leaves the page.
+      (cut ? takeSnapshot(a, p, true) : Promise.resolve())
+        .then(() => s.transformDoc(async (lib) => { removed = await eraseContent(lib, pageIdx, rect); }, cut ? 'Content cut: paste with Ctrl+V' : 'Content erased', pageIdx))
+        .then((ok) => { if (ok && !removed) s.setStatus(`${cut ? 'Cut' : 'Erase'} Content: nothing under that rectangle`); });
       return;
     }
     if (draft.tool === 'region-pick') { setDraft(null); s.setTool('select'); finishPickRect(doc.id, pageIdx, a, p); return; }
@@ -1436,7 +1439,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     };
   } else if (draft && draft.cursor) {
     const pts = def.interaction === 'freehand' || draft.curving !== undefined ? draft.points : [...draft.points, draft.cursor];
-    const boxed = draft.tool.startsWith('form-') || draft.tool === 'lasso' || draft.tool === 'redact-text' || draft.tool === 'viewport' || draft.tool === 'snapshot' || draft.tool === 'snapshot-content' || draft.tool === 'select-text' || draft.tool === 'visual-pick' || draft.tool === 'region-pick' || draft.tool === 'erase-content' || draft.tool === 'link' || def.interaction === 'text';
+    const boxed = draft.tool.startsWith('form-') || draft.tool === 'lasso' || draft.tool === 'redact-text' || draft.tool === 'viewport' || draft.tool === 'snapshot' || draft.tool === 'snapshot-content' || draft.tool === 'select-text' || draft.tool === 'visual-pick' || draft.tool === 'region-pick' || draft.tool === 'erase-content' || draft.tool === 'cut-content' || draft.tool === 'link' || def.interaction === 'text';
     let type = (draft.tool === 'calibrate' ? 'length' : boxed ? 'rectangle' : draft.tool) as MarkupType;
     let P = pts;
     if (draft.tool === 'cloudplus' && pts.length >= 3) P = [pts[0], pts[1], pts[2], { x: pts[2].x + 144, y: pts[2].y + 40 }];

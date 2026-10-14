@@ -1806,6 +1806,29 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForTimeout(800);
   assert((await page.locator('.search-panel .muted.small').first().innerText()).startsWith('0 result'), 'Erase Content removed the title text');
   await page.keyboard.press('Control+z');
+  await page.waitForTimeout(1500);
+  await page.evaluate(() => document.activeElement?.blur());
+  // Cut Content: the region goes to the clipboard as a snapshot and leaves the page.
+  const rows0 = await page.locator('.ml-table tbody tr').count();
+  await menu('Tools', 'Cut Content');
+  await page.mouse.move(lb.x + lb.width * 0.84, lb.y + lb.height * 0.905);
+  await page.mouse.down();
+  await page.mouse.move(lb.x + lb.width * 0.95, lb.y + lb.height * 0.93, { steps: 4 });
+  await page.mouse.up();
+  await page.waitForFunction(() => /Content cut/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 20000 });
+  await page.waitForTimeout(500);
+  await page.keyboard.press('Escape');
+  await box.fill('PLAN REV');
+  await box.press('Enter');
+  await page.waitForTimeout(800);
+  assert((await page.locator('.search-panel .muted.small').first().innerText()).startsWith('0 result'), 'Cut Content removed the title text from the page');
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press('Control+v');
+  await page.waitForTimeout(300);
+  assert(await page.locator('.ml-table tbody tr').count() === rows0 + 1, 'the cut content pastes as an image markup');
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(1500);
   await page.evaluate(() => document.activeElement?.blur());
 }
 

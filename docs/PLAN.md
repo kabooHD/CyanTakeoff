@@ -215,8 +215,9 @@ filling, image signatures, redaction and OCR.
 - [x] XFDF export/import of markups (standard XFDF plus our measurement data
   in a namespaced element; Revu measurements round-trip)
 - [x] Edit Text (rewrite a run of the drawing's text in its own font and
-  colour when possible, else a standard font) and Erase Content (remove
-  everything under a rectangle); undoable
+  colour when possible, else a standard font), Erase Content (remove
+  everything under a rectangle) and Cut Content (to the clipboard as a
+  snapshot, then removed; paste to move content); undoable
 - [x] Touch and pen: two-finger pinch zoom and pan, finger pans in Select
   (and anywhere off the page), long press = right-click, larger finger
   hit targets, View > Pen Mode (finger pans, only the pen draws)
