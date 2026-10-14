@@ -13,6 +13,7 @@ import { DEFAULT_PRINT, PAPER_SIZES, layoutSheets, printOrder, renderScale, type
 import { loadForRender } from '../pdf/document';
 import { layerShown } from './layersView';
 import { PERM, allowed } from '../pdf/crypt';
+import { deviceMemoryGB } from '../model/device';
 
 type Range = 'all' | 'current' | 'custom';
 type Content = 'both' | 'document' | 'markups';
@@ -130,7 +131,7 @@ export async function printSheets(d: DocState, sheets: Sheet[], o: PrintSettings
         s.setStatus(`Preparing page ${++k} of ${total} for printing…`);
         const page = d.loaded.pages[it.page];
         const [w, h] = it.rotate ? [page.height, page.width] : [page.width, page.height];
-        const rs = renderScale(w, h, it.scale, o.dpi);
+        const rs = renderScale(w, h, it.scale, o.dpi, deviceMemoryGB() <= 4 ? 8_000_000 : 16_777_216);
         const key = `${it.page}@${rs}/${it.rotate}`;
         let url = done.get(key);
         if (!url) {

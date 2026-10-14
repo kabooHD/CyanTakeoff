@@ -30,14 +30,17 @@ import { finishPickRect } from './pickRect';
 import { editText, eraseContent } from '../pdf/editText';
 import type { TextBox } from './toolActions';
 import { formatSequence, nextInSequence, sequenceMembers } from '../model/sequence';
+import { renderLimits } from '../model/device';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { snapGeometry, snapToContent, type SnapGeometry } from '../pdf/geometry';
 import { layoutPages, rotateCss, rotateIn, rotateOut, rotatedSize, slotAt, type Slot, type ViewRotation } from '../model/layout';
 
 const PAD = 40;
-const BASE_MAX_PIXELS = 6e6;
+// Canvas sizes: smaller on machines with little memory (src/model/device.ts).
+const LIMITS = renderLimits();
+const BASE_MAX_PIXELS = LIMITS.base;
 /** Pages other than the active one, in continuous / side-by-side views. */
-const TILE_MAX_PIXELS = 3e6;
+const TILE_MAX_PIXELS = LIMITS.tile;
 
 /** Imperative hooks for menus/toolbar (fit page etc.). */
 export const viewerApi = {
@@ -183,8 +186,9 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     setGeom(null);
     if (!pdfPage || !wantGeom) return;
     let alive = true;
-    snapGeometry(pdfPage, page.viewport).then((g) => alive && setGeom(g)).catch(() => {});
-    return () => { alive = false; };
+    // Only for a page that stays current a moment (not every page passed while scrolling).
+    const t = setTimeout(() => { snapGeometry(pdfPage, page.viewport).then((g) => alive && setGeom(g)).catch(() => {}); }, 300);
+    return () => { alive = false; clearTimeout(t); };
   }, [pdfPage, page.viewport, wantGeom]);
 
   // ----- fit / zoom helpers -----
@@ -269,8 +273,19 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     const hit = lay.slots.find((x) => q.x >= x.x && q.x <= x.x + x.w && q.y >= x.y && q.y <= x.y + x.h);
     if (hit) activate(hit.index);
   };
+  // Scrolling re-renders the view only when it must: when the set of pages in
+  // reach changes (continuous views), and once scrolling pauses (zoom detail).
+  const scrollIdle = useRef(0);
+  const reach = useRef('');
   const onScroll = () => {
-    setScrollTick((n) => n + 1);
+    clearTimeout(scrollIdle.current);
+    scrollIdle.current = window.setTimeout(() => setScrollTick((n) => n + 1), 120);
+    if (multi) {
+      const el = scrollRef.current!;
+      const vy = el.scrollTop, vh = el.clientHeight;
+      const inReach = lay.slots.filter((x) => x.y < vy + vh * 2 && x.y + x.h > vy - vh).map((x) => x.index).join(',');
+      if (inReach !== reach.current) { reach.current = inReach; setScrollTick((n) => n + 1); }
+    }
     if (!multi || pointerIn.current) return;
     const el = scrollRef.current!;
     const mid = slotAt(lay.slots, el.scrollLeft + el.clientWidth / 2, el.scrollTop + el.clientHeight / 2);
@@ -1341,7 +1356,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
               onActivate={() => activate(x.index)} />
           ));
         })()}
-        <div className="page" style={{
+        <div className="page" data-rendered={renderedIdx === page.index ? page.index + 1 : undefined} style={{
           left, top, width: pw, height: ph, transform: rotateCss(pw, ph, rot), transformOrigin: '0 0',
           ...(multi ? { background: 'transparent', boxShadow: 'none' } : {}),
         }}>
@@ -1526,9 +1541,12 @@ function PageTile({ doc, slot, zoom, rot, active, onActivate }: {
         if (!c || !alive) return;
         c.width = off.width; c.height = off.height;
         c.getContext('2d')!.drawImage(off, 0, 0);
+        off.width = off.height = 0;
         done.current = true;
+        // The picture is kept; pdf.js can drop what it parsed for this page.
+        p.cleanup();
       }).catch(() => {});
-    }, done.current ? 200 : 0);
+    }, done.current ? 200 : 90); // pages that only fly past during a fast scroll are not rendered
     return () => { alive = false; clearTimeout(t); task?.cancel(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc.loaded.pdf, slot.index, Math.round(sc * 20), visibilityKey(doc, zoom)]);

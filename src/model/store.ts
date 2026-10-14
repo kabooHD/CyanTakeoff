@@ -14,6 +14,7 @@ import type { LayerSet } from '../pdf/layers';
 import type { Bookmark } from '../pdf/bookmarks';
 import { PERM, PasswordRequired, allowed, encryptPdf, looksEncrypted, openEncrypted, type NewSecurity, type Security } from '../pdf/crypt';
 import { askPassword } from './prompts';
+import { overBudget, undoBudget } from './device';
 import { hasSignatures, incrementalUpdate, loadForUpdate } from '../pdf/incremental';
 import type { ViewMode, ViewRotation } from './layout';
 import type {
@@ -26,7 +27,11 @@ export type RightPanel = 'properties' | 'toolchest' | 'measurements' | null;
 /** Page scales and viewports, for undoing scale changes. */
 export interface ScaleSnapshot { markups: Markup[]; calibrations: (Scale | null)[]; viewports: Viewport[][]; spaces?: Space[][] }
 /** The whole document before a page operation (insert, delete, rotate...), for undoing it. */
-export interface DocSnapshot { doc: Pick<DocState, typeof DOC_KEYS[number]> }
+export interface DocSnapshot {
+  doc: Pick<DocState, typeof DOC_KEYS[number]>;
+  /** Its pdf.js document was closed to save memory; undoing to it opens the file copy again. */
+  cold?: boolean;
+}
 const DOC_KEYS = ['bytes', 'loaded', 'markups', 'importedRefs', 'calibrations', 'viewports', 'dirtyCalibrations',
   'spaces', 'dirtySpaces', 'columns', 'dirtyColumns', 'formValues', 'page', 'layers', 'dirtyLayers', 'bookmarks', 'dirtyBookmarks'] as const;
 /** Page operations kept in the undo history per document (each holds a copy of the file). */
@@ -37,7 +42,29 @@ const docSnapshot = (d: DocState): DocSnapshot => ({ doc: Object.fromEntries(DOC
 const isDocSnap = (e: UndoEntry): e is DocSnapshot => !Array.isArray(e) && 'doc' in e;
 /** Free the pdf.js documents held by undo entries that are being dropped. */
 function dropEntries(entries: UndoEntry[], keep: DocState) {
-  for (const e of entries) if (isDocSnap(e) && e.doc.loaded !== keep.loaded) e.doc.loaded.pdf.loadingTask.destroy();
+  for (const e of entries) if (isDocSnap(e) && e.doc.loaded !== keep.loaded && !e.cold) e.doc.loaded.pdf.loadingTask.destroy();
+}
+
+/** Close a snapshot's pdf.js document once nothing shows it (it is reopened from its bytes if needed). */
+function cool(e: UndoEntry) {
+  if (!isDocSnap(e) || e.cold) return;
+  e.cold = true;
+  const pdf = e.doc.loaded.pdf;
+  setTimeout(() => {
+    // Still shown (e.g. undone to it meanwhile)? Then keep it.
+    if (useApp.getState().docs.some((d) => d.loaded.pdf === pdf)) { e.cold = false; return; }
+    pdf.loadingTask.destroy();
+  }, 1500);
+}
+
+/** A cold snapshot ready to restore: its document opened again from its bytes. */
+async function reopen(e: DocSnapshot): Promise<DocSnapshot> {
+  useApp.setState({ busy: true, status: 'Undoing…' });
+  try {
+    return { doc: { ...e.doc, loaded: await openPdf(e.doc.bytes) } };
+  } finally {
+    useApp.setState({ busy: false });
+  }
 }
 
 export interface DocState {
@@ -182,8 +209,8 @@ interface AppState {
   /** Replace the document's markups (tools that rewrite several at once). */
   setMarkups(markups: Markup[], opts?: { history?: boolean }): void;
   select(ids: string[], add?: boolean): void;
-  undo(): void;
-  redo(): void;
+  undo(): void | Promise<void>;
+  redo(): void | Promise<void>;
   copy(): void;
   /** Paste; `inPlace` keeps the original position (Paste in Place). */
   paste(inPlace?: boolean): void;
@@ -603,19 +630,33 @@ export const useApp = create<AppState>((set, get) => {
         return { selection: add ? [...new Set([...d.selection, ...all])] : all };
       });
     },
-    undo() {
+    async undo() {
+      const d0 = activeDoc();
+      const top = d0?.undo[d0.undo.length - 1];
+      const entry = top && isDocSnap(top) && top.cold ? await reopen(top) : top;
+      if (!entry) return;
+      let reverse: UndoEntry | null = null;
       withDoc((d) => {
-        if (!d.undo.length) return {};
-        const [state, current] = restore(d, d.undo[d.undo.length - 1]);
+        if (!d.undo.length || (d.undo[d.undo.length - 1] !== top)) return {};
+        const [state, current] = restore(d, entry);
+        reverse = current;
         return { ...state, undo: d.undo.slice(0, -1), redo: [...d.redo, current], selection: [], dirty: true };
       });
+      if (reverse) cool(reverse);
     },
-    redo() {
+    async redo() {
+      const d0 = activeDoc();
+      const top = d0?.redo[d0.redo.length - 1];
+      const entry = top && isDocSnap(top) && top.cold ? await reopen(top) : top;
+      if (!entry) return;
+      let reverse: UndoEntry | null = null;
       withDoc((d) => {
-        if (!d.redo.length) return {};
-        const [state, current] = restore(d, d.redo[d.redo.length - 1]);
+        if (!d.redo.length || (d.redo[d.redo.length - 1] !== top)) return {};
+        const [state, current] = restore(d, entry);
+        reverse = current;
         return { ...state, redo: d.redo.slice(0, -1), undo: [...d.undo, current], selection: [], dirty: true };
       });
+      if (reverse) cool(reverse);
     },
     copy() {
       const d = activeDoc();
@@ -685,12 +726,15 @@ export const useApp = create<AppState>((set, get) => {
         const loaded = await openPdf(bytes);
         // The old document goes on the undo stack (Revu undoes page operations too).
         const old = get().docs.find((x) => x.id === d.id)!;
-        let undo = [...old.undo, docSnapshot(old)];
+        const snap = docSnapshot(old);
+        let undo = [...old.undo, snap];
+        // Keep at most MAX_DOC_UNDO file copies, and fewer on machines with little memory.
         const snaps = undo.filter(isDocSnap);
-        if (snaps.length > MAX_DOC_UNDO) {
-          const drop = snaps[0];
-          undo = undo.slice(undo.indexOf(drop) + 1);
-          dropEntries([drop], old);
+        const drop = overBudget(snaps.map((x) => x.doc.bytes.length), undoBudget(), MAX_DOC_UNDO);
+        if (drop) {
+          const last = snaps[drop - 1];
+          undo = undo.slice(undo.indexOf(last) + 1);
+          dropEntries(snaps.slice(0, drop), old);
         }
         dropEntries(old.redo, old);
         set((st) => ({
@@ -703,6 +747,8 @@ export const useApp = create<AppState>((set, get) => {
           } : x),
           status: done,
         }));
+        // The file copy stays for Undo; its pdf.js document is closed to save memory.
+        cool(snap);
         return true;
       } catch (e) {
         console.error(e);

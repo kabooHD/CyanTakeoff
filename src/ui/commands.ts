@@ -41,7 +41,9 @@ export function allCommands(): Command[] {
   ];
 }
 
-const defaults = () => new Map(allCommands().map((x) => [x.id, x.combo ?? '']));
+let defaultsCache: Map<string, string> | null = null;
+/** Default combo of every command (built once: the lists are fixed). */
+const defaults = () => (defaultsCache ??= new Map(allCommands().map((x) => [x.id, x.combo ?? ''])));
 
 /** The shortcut a command has now (custom, else default; '' = none). */
 export function effectiveCombo(id: string, custom: Record<string, string>): string {

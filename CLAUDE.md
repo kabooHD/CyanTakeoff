@@ -31,6 +31,7 @@ playwright-core.
 npm run typecheck && npm test && npm run build
 npx vite preview --port 4173 --strictPort &   # then
 npm run e2e        # drives the app in Chromium, screenshots in test-results/
+npm run perf       # low-end machine measurements (docs/perf.md)
 ```
 Chromium is at `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`. The
 preview server can die between turns: restart it if e2e cannot connect.
@@ -69,7 +70,7 @@ preview server can die between turns: restart it if e2e cannot connect.
   `https://support.bluebeam.com/online-help/revu20/Content/RevuHelp/...`
 - Latest Revu is 21.11 (Sept 2026). No Revu 21 sample files yet.
 
-## Status (2026-10-13)
+## Status (2026-10-14)
 Done: Revu-style workspace and official default shortcuts; markup tools
 (incl. Cloud+, Typewriter, Arc, Dimension, Stamp, Flag, Strikethrough/
 Underline/Squiggly and text Highlight, Image, Snapshot, Hyperlink, File
@@ -100,7 +101,8 @@ password security (src/pdf/crypt.ts: R2-R6 decrypt, AES-256 encrypt;
 src/ui/Security.tsx), Reduce File Size (src/pdf/reduce.ts), XFDF
 (src/pdf/xfdf.ts); Edit Text / Erase Content (src/pdf/editText.ts, using
 the redaction walker's text probe); touch and pen (pinch, pan, long press,
-Pen Mode; in Viewer.tsx); CyanTakeoff (=Revu)
+Pen Mode; in Viewer.tsx); low-end machine pass (src/model/device.ts: undo
+memory budget, cold undo snapshots, canvas limits; docs/perf.md); CyanTakeoff (=Revu)
 and Batch menus; form filling (AcroForm inputs saved into the form) and
 field creation (Tools > field tools, X = signature field, Forms Editor
 Ctrl+Shift+F), image
@@ -127,15 +129,16 @@ filters, reorder, CSV summary); Tool Chest; save/reopen; Revu round-trip.
 
 Next (from `docs/PLAN.md`):
 1. Public test build in local mode (deploy only when the owner says so);
-   before it: low-end machine performance pass; tester
-   outreach by email to Bluebeam-using companies (list compiled later)
+   before it: tester outreach by email to Bluebeam-using companies (list
+   compiled later); a check on real 4 GB hardware
 2. Cloud documents: sign-in, versions, share links (guests join by link
    with a display name), live collaboration, self-hostable
 3. Compare versions, Sets, slip sheets, Spaces, Legends, Dynamic Fill, XLSX
 
 Known gaps: Move/Rotate/Scale of a layer moves its content, not markups on
-it; not yet measured on
-low-end machines (undo keeps up to 10 file copies); need Revu-made samples (none public; wanted list in
+it; low-end performance measured only with CPU throttling (docs/perf.md,
+`npm run perf`); the main script is 1.7 MB (pdf.js and pdf-lib not yet
+loaded on demand); need Revu-made samples (none public; wanted list in
 tests/fixtures/revu/README.md): cutout storage (ours in CTData), custom
 column values (/BSIColumnData kept on edit but not read), .btx tool sets;
 polygon cutouts

@@ -227,10 +227,12 @@ filling, image signatures, redaction and OCR.
   - [x] Layers, second pass: zoom-range visibility, Export usage and Export
     Layer to Page, Flatten > Assign Layer, Move / Rotate / Scale a layer's
     content after placing it (the other Reddit request).
-  - Low-end machines: measure load time, memory and pan/zoom speed on a
-    4 GB laptop with a 100-sheet set; cap undo by memory (not 10 copies of
-    the file); lower render limits when `navigator.deviceMemory` is small;
-    split the 1.5 MB main script so first load is lighter.
+  - [x] Low-end machines (docs/perf.md, `npm run perf`): measured a
+    100-sheet set with 4x CPU throttling and 4 GB memory; undo capped by a
+    memory budget with cold snapshots; lower canvas limits on small
+    machines; cheaper scrolling; heap after browsing 87 -> 27 MB. Still to
+    do: load pdf.js/pdf-lib on first open (lighter first load), and a test
+    on real 4 GB hardware with testers' sets.
   - Speed on large drawing sets as a stated goal (competitors sell on it).
 - Tester outreach (do later, with Claude's help):
   1. Have Claude compile a list of companies publicly known to use

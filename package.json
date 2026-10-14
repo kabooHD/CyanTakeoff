@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc -b",
     "sample": "node scripts/make-sample.mjs",
-    "e2e": "node tests/e2e.mjs"
+    "e2e": "node tests/e2e.mjs",
+    "perf": "node scripts/perf.mjs"
   },
   "dependencies": {
     "@pdf-lib/standard-fonts": "^1.0.0",
