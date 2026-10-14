@@ -150,6 +150,8 @@ export interface MarkupStyle {
   hatch?: HatchDef;
   hatchScale?: number;
   fontSize: number; // points
+  /** Blend mode (PDF /BM); undefined = the type's default (see model/blend.ts). */
+  blend?: import('./blend').BlendMode;
   // Text formatting (Text Box, Callout, Typewriter, Cloud+); undefined = Revu defaults.
   font?: 'Helvetica' | 'Times' | 'Courier';
   bold?: boolean;

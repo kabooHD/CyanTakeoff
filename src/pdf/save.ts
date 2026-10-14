@@ -12,6 +12,7 @@ import type { CustomColumn, Cutout, Markup, MarkupStyle, Pt, Scale, Space, Viewp
 import { spaceTree, type SpaceNode } from '../model/spaces';
 import { cellAnchor, cellX, legendHeader, legendLayout, legendRows, type LegendRow } from '../model/legend';
 import { ROTATION_FIELD } from '../model/rotate';
+import { blendOf } from '../model/blend';
 import { arcPoints, arcThrough, bounds, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import { fitFontSize, quadding, shapeOutline, textStyleOf, toDS, toRC } from '../model/textStyle';
 import { countRadius, countStyleName, countSymbolPolygon, countSymbolStrokes } from '../model/count';
@@ -651,7 +652,7 @@ function buildCount(doc: PDFDocument, m: Markup, page: PageInfo): PDFRef[] {
     o.add('Q');
     const pad = r * 1.3;
     const bbox = [p.x - pad - 1, p.y - pad - 1, p.x + pad + 1, p.y + pad + 1];
-    const gs = ctx.obj({ CA: st.opacity, ca: st.fillOpacity });
+    const gs = ctx.obj({ CA: st.opacity, ca: st.fillOpacity, ...(blendOf(m) !== 'Normal' ? { BM: blendOf(m) } : {}) });
     const ap = ctx.stream(o.out.join('\n'), { Type: 'XObject', Subtype: 'Form', BBox: bbox, Resources: { ExtGState: { GS0: gs } } });
     const verts: number[] = [];
     for (let k = 0; k < 24; k++) {
@@ -717,7 +718,7 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
   const gs = ctx.obj({
     CA: st.opacity,
     ca: m.type === 'textbox' || m.type === 'callout' || m.type === 'note' ? st.opacity : st.fillOpacity,
-    ...(m.type === 'highlight' ? { BM: 'Multiply' } : {}),
+    ...(blendOf(m) !== 'Normal' ? { BM: blendOf(m) } : {}),
   });
   const ap = ctx.stream(ops, {
     Type: 'XObject', Subtype: 'Form', BBox: bbox,

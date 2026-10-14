@@ -21,6 +21,7 @@ import { MEASURE_TYPES } from '../model/measure';
 import { DEFAULT_LINE_HEIGHT, alignOfQuadding, parseDS } from '../model/textStyle';
 import { symbolOfCountStyle } from '../model/count';
 import { LINE_END_TYPES, defaultEnds, lineEndOfName } from '../model/lineEnds';
+import { blendOfName, defaultBlend } from '../model/blend';
 
 /** /LE (an array for lines, a name for callouts) as lineStart/lineEnd, only when they differ from the type's defaults. */
 function readLineEnds(doc: PDFDocument, dict: PDFDict, type: MarkupType): Pick<MarkupStyle, 'lineStart' | 'lineEnd'> {
@@ -147,6 +148,7 @@ function readCT(doc: PDFDocument, dict: PDFDict): CTData | undefined {
 
 function readStyle(doc: PDFDocument, dict: PDFDict, type: MarkupType, ct?: CTData): MarkupStyle {
   const defaults = DEFAULT_STYLES[type];
+  const blend = readBlend(doc, dict);
   const stroke = colorToHex(numbers(doc, getArray(doc, dict, 'C')));
   const fill = colorToHex(numbers(doc, getArray(doc, dict, 'IC')));
   const ca = getNumber(doc, dict, 'CA');
@@ -183,6 +185,7 @@ function readStyle(doc: PDFDocument, dict: PDFDict, type: MarkupType, ct?: CTDat
     lineStyle: ct?.lineStyle ?? (dashed ? 'dashed' : 'solid'),
     ...(ct?.lineDef ? { lineDef: ct.lineDef } : {}),
     ...(ct?.hatch ? { hatch: ct.hatch, hatchScale: ct.hatchScale } : {}),
+    ...(blend && blend !== defaultBlend(type) ? { blend } : {}),
     fontSize,
     ...readLineEnds(doc, dict, type),
     ...(type === 'count' ? { countSymbol: ct?.countSymbol ?? symbolOfCountStyle(getName(doc, dict, 'CountStyle')), countScale: ct?.countScale } : {}),
@@ -646,6 +649,23 @@ const toBase64 = (b: Uint8Array) => {
   for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
   return btoa(s);
 };
+
+/** The blend mode (/BM) of the first graphics state in the annotation's appearance. */
+export function readBlend(doc: PDFDocument, dict: PDFDict): ReturnType<typeof blendOfName> {
+  const ap = getDict(doc, dict, 'AP');
+  const n = ap && lookup(doc, ap.get(N('N')));
+  if (!(n instanceof PDFRawStream)) return undefined;
+  const res = getDict(doc, n.dict, 'Resources');
+  const gss = res && getDict(doc, res, 'ExtGState');
+  if (!gss) return undefined;
+  for (const key of gss.keys()) {
+    const gs = lookup(doc, gss.get(key));
+    const bm = gs instanceof PDFDict ? gs.get(N('BM')) : undefined;
+    const name = bm instanceof PDFName ? bm.decodeText() : bm instanceof PDFArray ? (bm.get(0) as PDFName | undefined)?.decodeText?.() : undefined;
+    if (name) return blendOfName(name);
+  }
+  return undefined;
+}
 
 /** The picture of a CyanTakeoff image stamp, from its appearance (/Im0), as a data: URL. */
 function readImage(doc: PDFDocument, dict: PDFDict): string | undefined {

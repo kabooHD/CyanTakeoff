@@ -312,6 +312,14 @@ displayed value (in the markup's own unit when set), as Revu writes it.
 - Add Layer from Page draws another sheet on the page as a new layer, with
   Align Points when the sheets differ in position or scale.
 
+## Blend Mode (Properties > Appearance)
+- How a markup combines with the content under it: Normal, Multiply,
+  Screen, Overlay, Darken, Lighten, Color Dodge, Color Burn, Hard Light,
+  Soft Light, Difference, Exclusion, Hue, Saturation, Color, Luminosity
+  (the PDF blend modes). Highlights multiply by default; stamps darken.
+- CyanTakeoff: saved as /BM in the appearance's graphics state and read back
+  from it; drawn with CSS mix-blend-mode on screen.
+
 ## Editing markups (move, resize, rotate)
 - Drag a markup to move it; drag a control point to resize. Polygons and
   polylines keep their proportions when resized; Shift resizes length and

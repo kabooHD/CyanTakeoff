@@ -542,6 +542,9 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await rot.fill('45');
     await page.waitForTimeout(200);
     assert(await page.locator('.markup-layer g[data-id][transform^="rotate(-45 "]').count() === 1, 'typing a Rotation turns the box to that angle');
+    await page.getByLabel('Blend mode').selectOption('Multiply');
+    await page.waitForTimeout(200);
+    assert(await page.locator('.markup-layer g[data-id][transform^="rotate(-45 "]').evaluate((g) => g.style.mixBlendMode) === 'multiply', 'Blend Mode draws the markup with that mix-blend-mode');
     await page.evaluate(() => (document.activeElement)?.blur?.());
     await page.locator('.side-right button[title="Properties"]').click();
     await page.keyboard.press('Delete');

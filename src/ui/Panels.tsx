@@ -20,6 +20,7 @@ import { LENGTH_UNITS, SEGMENT_TYPES, displayText } from '../model/measureDispla
 import { placeColumns } from '../model/listColumns';
 import { layoutOf, withLayout } from '../model/layoutProps';
 import { ROTATION_FIELD, withRotation } from '../model/rotate';
+import { BLEND_MODES, defaultBlend, type BlendMode } from '../model/blend';
 import { addCapture, openCapturePreview } from './Capture';
 import { DEFAULT_LINE_HEIGHT, DEFAULT_MARGIN, TEXT_FONTS, textStyleOf } from '../model/textStyle';
 import { COUNT_SYMBOLS, symbolForType } from '../model/count';
@@ -369,6 +370,11 @@ function StyleEditor({ style, type, onChange }: { style: MarkupStyle; type: Mark
         </span>
       </Row>
       <Row label="Opacity"><span className="inline"><input type="range" min={0} max={100} value={Math.round(style.opacity * 100)} onChange={(e) => onChange({ opacity: +e.target.value / 100 })} />{Math.round(style.opacity * 100)}</span></Row>
+      <Row label="Blend Mode">
+        <select aria-label="Blend mode" value={style.blend ?? defaultBlend(type)} onChange={(e) => onChange({ blend: e.target.value === defaultBlend(type) ? undefined : e.target.value as BlendMode })}>
+          {BLEND_MODES.map((b) => <option key={b} value={b}>{b.replace(/([a-z])([A-Z])/g, '$1 $2')}</option>)}
+        </select>
+      </Row>
       {style.fill && <Row label="Fill Opacity"><span className="inline"><input type="range" min={0} max={100} value={Math.round(style.fillOpacity * 100)} onChange={(e) => onChange({ fillOpacity: +e.target.value / 100 })} />{Math.round(style.fillOpacity * 100)}</span></Row>}
       <Row label="Line Width"><input type="number" min={0} max={50} step={0.25} value={style.width} onChange={(e) => onChange({ width: Math.max(0, +e.target.value) })} /></Row>
       <Row label="Line Style"><LineStyleSelect style={style} onChange={onChange} /></Row>

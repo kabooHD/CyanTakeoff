@@ -12,6 +12,7 @@ import { calloutTips, endsOf, lineEndShape, type LineEnd } from '../model/lineEn
 import { textWidth } from './quickCommands';
 import { useApp } from '../model/store';
 import { ROTATION_FIELD, drawnPoints, rotationCenter } from '../model/rotate';
+import { blendOf, cssBlend } from '../model/blend';
 import { cellAnchor, cellX, legendHeader, legendLayout, legendRows, type FontFlags } from '../model/legend';
 
 const pts = (p: Pt[]) => p.map((q) => `${q.x},${q.y}`).join(' ');
@@ -317,7 +318,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
   // A turned box shape is drawn in its own frame, rotated about its centre.
   const rc = m.rotation && ROTATION_FIELD.has(m.type) ? rotationCenter(m) : null;
   return (
-    <g data-id={m.id} transform={rc ? `rotate(${-m.rotation!} ${rc.x} ${rc.y})` : undefined}>
+    <g data-id={m.id} transform={rc ? `rotate(${-m.rotation!} ${rc.x} ${rc.y})` : undefined} style={blendOf(m) !== 'Normal' ? { mixBlendMode: cssBlend(blendOf(m)) as React.CSSProperties['mixBlendMode'] } : undefined}>
       {showAuthorDate && <title>{`${m.subject}${m.author ? ` · ${m.author}` : ''}${m.modified ? ` · ${new Date(m.modified).toLocaleString()}` : ''}${m.comment ? `\n${m.comment}` : ''}`}</title>}
       {hatchArea && st.hatch && (
         <>
