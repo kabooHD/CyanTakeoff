@@ -68,6 +68,11 @@ type Drag =
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 
+/** Capture the pointer for a drag (ignored when the browser refuses, e.g. a pointer that is already gone). */
+function capture(e: { target: EventTarget; pointerId: number }) {
+  try { (e.target as Element).setPointerCapture?.(e.pointerId); } catch { /* not capturable */ }
+}
+
 export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const s = useApp();
   // Split view: pane 1 has its own page and zoom.
@@ -284,6 +289,79 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     el.scrollLeft = left + slot.w / 2 - el.clientWidth / 2;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageIdx, mode, rot, multi]);
+
+  // Touch: two fingers pinch to zoom and drag to pan; a finger outside the
+  // page pans. Handled before the drawing surface sees the touches.
+  const touches = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ dist: number; mid: { x: number; y: number } } | null>(null);
+  useEffect(() => {
+    const el = scrollRef.current!;
+    const local = (x: number, y: number) => { const r = el.getBoundingClientRect(); return { x: x - r.left, y: y - r.top }; };
+    const state = () => {
+      const pts = [...touches.current.values()];
+      const [a, b] = pts;
+      return { dist: Math.hypot(b.x - a.x, b.y - a.y), mid: local((a.x + b.x) / 2, (a.y + b.y) / 2) };
+    };
+    let single: { x: number; y: number; left: number; top: number } | null = null;
+    const down = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.current.size >= 2) {
+        // A second finger: whatever the first one started becomes a pinch.
+        e.stopPropagation();
+        cancelLongPress();
+        setDraft(null);
+        setDrag(null);
+        single = null;
+        pinch.current = state();
+        return;
+      }
+      if (!(e.target as Element).closest?.('.markup-layer, .form-field, input, textarea, button')) {
+        single = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop };
+        e.stopPropagation();
+      }
+    };
+    const move = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch' || !touches.current.has(e.pointerId)) return;
+      touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinch.current && touches.current.size >= 2) {
+        e.stopPropagation();
+        const now = state(), was = pinch.current;
+        const factor = now.dist / (was.dist || 1);
+        if (Math.abs(factor - 1) > 0.01) {
+          // The page point under the old midpoint goes under the new one.
+          anchor.current = { px: (el.scrollLeft + was.mid.x - left) / zoom, py: (el.scrollTop + was.mid.y - top) / zoom, cx: now.mid.x, cy: now.mid.y };
+          s.setViewZoom(pane, zoom * factor);
+          pinch.current = now;
+        } else {
+          el.scrollLeft -= now.mid.x - was.mid.x;
+          el.scrollTop -= now.mid.y - was.mid.y;
+          pinch.current = { dist: was.dist, mid: now.mid };
+        }
+      } else if (single) {
+        e.stopPropagation();
+        el.scrollLeft = single.left - (e.clientX - single.x);
+        el.scrollTop = single.top - (e.clientY - single.y);
+      }
+    };
+    const up = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      touches.current.delete(e.pointerId);
+      if (touches.current.size < 2) pinch.current = null;
+      if (!touches.current.size) single = null;
+    };
+    el.addEventListener('pointerdown', down, true);
+    el.addEventListener('pointermove', move, true);
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('pointercancel', up, true);
+    return () => {
+      el.removeEventListener('pointerdown', down, true);
+      el.removeEventListener('pointermove', move, true);
+      window.removeEventListener('pointerup', up, true);
+      window.removeEventListener('pointercancel', up, true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom, left, top, pane]);
 
   // Wheel zooms around the cursor (Revu default). Shift/Ctrl+wheel scrolls.
   useEffect(() => {
@@ -631,13 +709,25 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       if (tool === 'select') {
         const raw = toPage(e);
         setDrag({ kind: 'band', start: raw, cur: raw, add: true, right: { x: e.clientX, y: e.clientY } });
-        (e.target as Element).setPointerCapture?.(e.pointerId);
+        capture(e);
       }
       return;
     }
+    // Touch: a finger pans in Pen Mode, and in Select where it does not touch a markup;
+    // pressing and holding opens the context menu.
+    if (e.pointerType === 'touch' && e.button === 0) {
+      const at = toPage(e);
+      const onMarkup = markups.some((m) => hitTest(m, at, 14 / zoom));
+      startLongPress(e);
+      if (s.toggles.penMode || ((tool === 'select' || tool === 'pan') && !onMarkup)) {
+        setDrag({ kind: 'pan', sx: e.clientX, sy: e.clientY, left: el.scrollLeft, top: el.scrollTop });
+        capture(e);
+        return;
+      }
+    }
     if (e.button === 1 || (e.button === 0 && tool === 'pan')) {
       setDrag({ kind: 'pan', sx: e.clientX, sy: e.clientY, left: el.scrollLeft, top: el.scrollTop });
-      (e.target as Element).setPointerCapture?.(e.pointerId);
+      capture(e);
       e.preventDefault();
       return;
     }
@@ -655,14 +745,14 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
 
     if (tool === 'dynamic-fill') {
       fillDown(raw);
-      (e.target as Element).setPointerCapture?.(e.pointerId);
+      capture(e);
       return;
     }
 
     if (tool === 'zoom') { zoomAt(e.altKey ? 0.5 : 2, e.clientX - el.getBoundingClientRect().left, e.clientY - el.getBoundingClientRect().top); return; }
 
     if (tool === 'select') {
-      const tol = 5 / zoom;
+      const tol = (e.pointerType === 'touch' ? 14 : 5) / zoom;
       // The viewport highlighted in the Measurements panel: drag its edge to move, a corner to resize.
       const av = viewports.find((v) => v.id === s.activeViewport);
       if (av) {
@@ -797,7 +887,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
           // Ctrl+drag: this point gets a curve handlebar, dragged out until release (Revu).
           const handles: Handles = [...(draft?.handles ?? (draft?.points ?? []).map(() => null)), null];
           setDraft({ tool: s.tool, points: pts, cursor: p, handles, curving: pts.length - 1 });
-          (e.target as Element).setPointerCapture?.(e.pointerId);
+          capture(e);
         } else setDraft({ tool: s.tool, points: pts, cursor: p, handles: draft?.handles ? [...draft.handles, null] : undefined });
         break;
       }
@@ -819,7 +909,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       }
       case 'freehand':
         setDraft({ tool: s.tool, points: [raw], cursor: raw });
-        (e.target as Element).setPointerCapture?.(e.pointerId);
+        capture(e);
         break;
       case 'point':
         if (s.tool === 'legend') placeLegend(p);
@@ -839,7 +929,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       case 'erase': {
         eraseSnapshot.current = doc.markups;
         eraseAt(raw);
-        (e.target as Element).setPointerCapture?.(e.pointerId);
+        capture(e);
         break;
       }
       case 'count': {
@@ -918,6 +1008,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
 
   const onPointerMove = (e: React.PointerEvent) => {
     const raw = toPage(e);
+    if (longPress.current && Math.hypot(e.clientX - longPress.current.x, e.clientY - longPress.current.y) > 8) cancelLongPress();
     setCursor(raw, scaleFor(raw));
     if (s.tool === 'dynamic-fill') { fillMove(raw); setFillCursor(raw); }
     if (s.tool === 'eraser') { setFillCursor(raw); if (eraseSnapshot.current) { eraseAt(raw); return; } }
@@ -997,6 +1088,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
+    cancelLongPress();
     buttonDown.current = false;
     if (draft?.curving !== undefined) { setDraft({ ...draft, curving: undefined }); return; }
     if (eraseSnapshot.current) {
@@ -1099,6 +1191,21 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
 
   // The browser's own menu is suppressed; the right button is handled on pointer-up.
   const onContextMenu = (e: React.MouseEvent) => e.preventDefault();
+
+  // ----- touch: long press = right-click -----
+  const longPress = useRef<{ x: number; y: number; t: number } | null>(null);
+  const cancelLongPress = () => { if (longPress.current) { clearTimeout(longPress.current.t); longPress.current = null; } };
+  const startLongPress = (e: React.PointerEvent) => {
+    cancelLongPress();
+    const at = { clientX: e.clientX, clientY: e.clientY };
+    const t = window.setTimeout(() => {
+      longPress.current = null;
+      setDrag(null);
+      setDraft(null);
+      rightClick(at);
+    }, 550);
+    longPress.current = { x: e.clientX, y: e.clientY, t };
+  };
 
   const rightClick = (e: { clientX: number; clientY: number }) => {
     if (draft) { finishPoly(); return; }

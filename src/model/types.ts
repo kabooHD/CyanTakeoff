@@ -230,4 +230,6 @@ export interface Toggles {
   dimmer: boolean;
   /** View > Full-Screen Crosshair. */
   crosshair: boolean;
+  /** Pen Mode (tablets): a finger pans and zooms, only the pen draws. */
+  penMode: boolean;
 }

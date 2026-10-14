@@ -1702,6 +1702,73 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.evaluate(() => document.activeElement?.blur());
 }
 
+// Touch and pen: pinch to zoom, finger pans, long press opens the menu, Pen Mode.
+{
+  const ptr = (type, id, x, y, kind = 'touch') => page.evaluate(([type, id, x, y, kind]) => {
+    const el = document.elementFromPoint(x, y);
+    el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, composed: true, pointerId: id, pointerType: kind, clientX: x, clientY: y,
+      button: type === 'pointermove' ? -1 : 0, buttons: type === 'pointerup' ? 0 : 1, isPrimary: id === 11 }));
+  }, [type, id, x, y, kind]);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(500);
+  const zoomOf = async () => Number((await page.locator('.sb-zoom').first().innerText()).replace('%', ''));
+  const vb = await page.locator('.viewer').first().boundingBox();
+  const cx = vb.x + vb.width / 2, cy = vb.y + vb.height / 2;
+  const z0 = await zoomOf();
+  await ptr('pointerdown', 11, cx - 50, cy);
+  await ptr('pointerdown', 12, cx + 50, cy);
+  for (let k = 1; k <= 5; k++) { await ptr('pointermove', 11, cx - 50 - k * 20, cy); await ptr('pointermove', 12, cx + 50 + k * 20, cy); }
+  await ptr('pointerup', 11, cx - 150, cy); await ptr('pointerup', 12, cx + 150, cy);
+  await page.waitForTimeout(400);
+  const z1 = await zoomOf();
+  assert(z1 > z0 * 1.8, `pinch out zooms in (${z0}% -> ${z1}%)`);
+  const scroller = page.locator('.viewer').first();
+  const sl0 = await scroller.evaluate((e) => e.scrollLeft);
+  const markups0 = await page.locator('.ml-table tbody tr.selected').count();
+  // One finger on an empty part of the page, in Select: pans (no band selection).
+  const lb = await page.locator('.page .markup-layer').boundingBox();
+  const px = Math.max(lb.x + 20, vb.x + 40), py = Math.max(lb.y + 20, vb.y + 40);
+  await ptr('pointerdown', 21, px + 100, py);
+  for (let k = 1; k <= 4; k++) await ptr('pointermove', 21, px + 100 - k * 25, py);
+  await ptr('pointerup', 21, px, py);
+  await page.waitForTimeout(200);
+  const sl1 = await scroller.evaluate((e) => e.scrollLeft);
+  assert(sl1 - sl0 > 60 && await page.locator('.ml-table tbody tr.selected').count() === markups0, `a finger drag pans the view (${sl0} -> ${sl1})`);
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(500);
+  // Long press on a markup: its context menu.
+  const area = page.locator('.page .markup-layer polygon, .page .markup-layer path').first();
+  const ab = await area.boundingBox();
+  await ptr('pointerdown', 31, ab.x + ab.width / 2, ab.y + ab.height / 2);
+  await page.waitForTimeout(800);
+  await ptr('pointerup', 31, ab.x + ab.width / 2, ab.y + ab.height / 2);
+  assert(await page.getByRole('menuitem', { name: 'Add to My Tools' }).count() === 1, 'long press opens the markup menu');
+  await page.keyboard.press('Escape');
+  await page.mouse.click(5, 500);
+  // Pen Mode: with the Rectangle tool a finger pans, the pen draws.
+  await page.locator('.menubar-item > button', { hasText: /^View$/ }).click();
+  await page.getByRole('menuitem', { name: 'Pen Mode (finger pans, pen draws)' }).click();
+  const rows0 = await page.locator('.ml-table tbody tr').count();
+  await page.keyboard.press('r');
+  const lb2 = await page.locator('.page .markup-layer').boundingBox();
+  const qx = lb2.x + lb2.width * 0.3, qy = lb2.y + lb2.height * 0.85;
+  await ptr('pointerdown', 41, qx, qy);
+  for (let k = 1; k <= 4; k++) await ptr('pointermove', 41, qx + k * 20, qy + k * 10);
+  await ptr('pointerup', 41, qx + 80, qy + 40);
+  await page.waitForTimeout(200);
+  assert(await page.locator('.ml-table tbody tr').count() === rows0, 'in Pen Mode a finger does not draw');
+  await ptr('pointerdown', 51, qx, qy, 'pen');
+  for (let k = 1; k <= 4; k++) await ptr('pointermove', 51, qx + k * 20, qy + k * 10, 'pen');
+  await ptr('pointerup', 51, qx + 80, qy + 40, 'pen');
+  await page.waitForTimeout(300);
+  assert(await page.locator('.ml-table tbody tr').count() === rows0 + 1, 'the pen draws the rectangle');
+  await page.keyboard.press('Control+z');
+  await page.locator('.menubar-item > button', { hasText: /^View$/ }).click();
+  await page.getByRole('menuitem', { name: 'Pen Mode (finger pans, pen draws)' }).click();
+  await page.keyboard.press('Escape');
+}
+
 // Print (Ctrl+P): sheets are prepared in the page, then the browser's print dialog opens.
 {
   await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });

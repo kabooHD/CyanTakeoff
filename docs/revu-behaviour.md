@@ -258,6 +258,12 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - With the Area or Volume tool, clicking a cutout converts it into its own
   measurement (Shift: all cutouts of that markup); the cutout stays.
 
+## Touch and pen
+Revu on tablets: pinch to zoom, two fingers to pan, the pen draws, and a
+press-and-hold acts as a right-click. Ours: the same; a finger also pans in
+Select when it does not touch a markup, and View > Pen Mode makes every
+finger touch pan/zoom so only the pen draws (palm-friendly).
+
 ## Edit Text, Erase Content
 Revu edits the PDF's own text in place; replacing text in a font that is
 not editable can be skipped or done with another font. Ours: Tools > Edit

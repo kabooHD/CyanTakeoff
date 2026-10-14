@@ -364,7 +364,7 @@ export const useApp = create<AppState>((set, get) => {
     toolLocked: false,
     preset: null,
     toolDefaults: { ...DEFAULT_STYLES, ...(prefs.toolDefaults ?? {}) },
-    toggles: { snap: false, grid: false, content: true, markup: true, reuse: false, sync: false, rulers: false, dimmer: false, crosshair: false, ...(prefs.toggles ?? {}) },
+    toggles: { snap: false, grid: false, content: true, markup: true, reuse: false, sync: false, rulers: false, dimmer: false, crosshair: false, penMode: false, ...(prefs.toggles ?? {}) },
     dimLevel: prefs.dimLevel ?? 50,
     rulerUnit: prefs.rulerUnit ?? 'in',
     customLineStyles: prefs.customLineStyles ?? [],

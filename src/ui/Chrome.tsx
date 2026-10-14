@@ -105,6 +105,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { sep: true },
       { label: 'Rulers', shortcut: 'Ctrl+R', checked: s.toggles.rulers, action: () => s.toggle('rulers') },
       { label: 'Full-Screen Crosshair', checked: s.toggles.crosshair, action: () => s.toggle('crosshair') },
+      { label: 'Pen Mode (finger pans, pen draws)', checked: s.toggles.penMode, action: () => s.toggle('penMode') },
       { label: 'Dimmer', shortcut: 'Ctrl+F5', checked: s.toggles.dimmer, action: () => s.toggle('dimmer') },
       ...[25, 50, 75].map((n) => ({ label: `    Dimmer ${n}%`, checked: s.dimLevel === n, action: () => { s.setView({ dimLevel: n }); if (!s.toggles.dimmer) s.toggle('dimmer'); } })),
       { label: 'Show Grid', shortcut: 'Shift+F9', checked: s.toggles.grid, action: () => s.toggle('grid') },

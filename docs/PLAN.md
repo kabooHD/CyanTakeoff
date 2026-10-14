@@ -210,7 +210,9 @@ filling, image signatures, redaction and OCR.
 - [x] Edit Text (rewrite a run of the drawing's text in its own font and
   colour when possible, else a standard font) and Erase Content (remove
   everything under a rectangle); undoable
-- [ ] Touch and pen support
+- [x] Touch and pen: two-finger pinch zoom and pan, finger pans in Select
+  (and anywhere off the page), long press = right-click, larger finger
+  hit targets, View > Pen Mode (finger pans, only the pen draws)
 
 ### Next 2: public test build in local mode (days)
 - Host on a VPS (static site + HTTPS), with a feedback link
@@ -254,7 +256,7 @@ filling, image signatures, redaction and OCR.
   "anyone can join with a link, on any device"
 
 ### Next 4: after the public test
-Compare against earlier versions of a cloud document, touch support.
+Compare against earlier versions of a cloud document.
 
 ### Later
 Certificate digital signatures, form field creation, Revu tool set (.btx)
