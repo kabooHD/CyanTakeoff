@@ -34,6 +34,7 @@ import { StampDialog } from './ui/HeaderFooter';
 import { PasswordPrompt, SecurityDialog, useSecurityDialog } from './ui/Security';
 import { ReduceDialog } from './ui/ReduceSize';
 import { SheetsDialog } from './ui/Sheets';
+import { TagDialogs } from './ui/Tags';
 import { PrefsDialogs } from './ui/Prefs';
 import { SignatureDialog } from './ui/Signature';
 import { runApplyRedactions } from './ui/redactUi';
@@ -292,6 +293,7 @@ export function App() {
       <SpaceDialog />
       <PagesDialog />
       <CompareDialog />
+      <TagDialogs />
       <BatchCompareDialog />
       <PrintDialog />
       <MultiplyDialog />

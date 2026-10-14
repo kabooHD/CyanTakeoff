@@ -127,6 +127,20 @@ displayed value (in the markup's own unit when set), as Revu writes it.
 ## Sets, Batch Link, Slip Sheet
 - Sets (Alt+2): several PDFs browsed as one set of sheets. CyanTakeoff:
   the open documents, listed by page label, with a filter.
+- Tags (Sets panel > Tags…): values per sheet. Standard tags: Sheet
+  Number, Sheet Name, Discipline, Revision (on by default), Drawing
+  Number, Revision Number, Sheet Type; custom tags with a type (text,
+  number, date). Click a cell and type in the field at the top; Ctrl+click
+  several cells to set them at once; AutoMark (⌖) reads a tag from the
+  same region of every sheet; tags can be reordered and removed (which
+  clears them on every sheet). Sheet Number defaults to the page label;
+  Discipline and Sheet Type derive from it (NCS letters and first digit)
+  when empty. Ours: values are kept in the browser by file name and page
+  (Revu keeps them in the Set file).
+- Export Drawing Log (Sets panel): pick and order the data (tags plus
+  File Name, Page Label, Page Index), export as CSV or PDF, title with
+  the Set name prepended and the date appended, Add to Set opens the PDF
+  log as a document. Rows are sorted by Sheet Number.
 - Page labels: sheet numbers such as A-101; can be generated from the
   title block. Saved as the PDF's /PageLabels.
 - Batch Link: turns sheet references in the drawings into hyperlinks to

@@ -7,6 +7,7 @@ import { findSheetNumber, sheetReferences } from '../model/sheets';
 import { writePageLabels } from '../pdf/pages';
 import { pageText } from './toolActions';
 import { inRect } from '../model/measure';
+import { useTagDialogs } from './Tags';
 
 export const useSheetsDialog = create<{ open: 'labels' | 'batch-link' | null }>(() => ({ open: null }));
 
@@ -160,6 +161,8 @@ export function SetsPanel() {
       <div className="prop-actions">
         <button disabled={docs.length < 1} onClick={() => useSheetsDialog.setState({ open: 'batch-link' })}>Batch Link…</button>
         <button disabled={!docs.length} onClick={() => useSheetsDialog.setState({ open: 'labels' })}>Page Labels…</button>
+        <button disabled={!docs.length} onClick={() => useTagDialogs.setState({ open: 'tags' })}>Tags…</button>
+        <button disabled={!docs.length} onClick={() => useTagDialogs.setState({ open: 'log' })}>Export Drawing Log…</button>
       </div>
     </div>
   );

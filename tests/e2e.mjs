@@ -871,6 +871,23 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Alt+2');
   await page.locator('.set-sheet', { hasText: 'C-101' }).first().click();
   assert((await page.locator('.statusbar input').first().inputValue()) === 'C-101', 'Sets panel jumps to sheet C-101');
+  // Tags: Sheet Number from the labels, Discipline derived; a Sheet Name typed in; the drawing log as CSV.
+  {
+    await page.getByRole('button', { name: 'Tags…' }).click();
+    const td = page.getByRole('dialog', { name: 'Tags' });
+    assert((await td.getByLabel('Discipline of C-101').innerText()) === 'Civil', 'Discipline is derived from the sheet number');
+    await td.getByLabel('Sheet Name of C-101').click();
+    await td.getByLabel('Tag value').fill('Site Plan');
+    assert((await td.getByLabel('Sheet Name of C-101').innerText()) === 'Site Plan', 'a tag value typed in the field goes into the selected cell');
+    await td.getByRole('button', { name: 'Close' }).click();
+    await page.getByRole('button', { name: 'Export Drawing Log…' }).click();
+    const ld = page.getByRole('dialog', { name: 'Export Drawing Log' });
+    const [dl] = await Promise.all([page.waitForEvent('download'), ld.getByRole('button', { name: 'Done' }).click()]);
+    await dl.saveAs(`${OUT}/drawing-log.csv`);
+    const log = readFileSync(`${OUT}/drawing-log.csv`, 'utf8');
+    assert(log.startsWith('Sheet Number,Sheet Name,Discipline') && log.includes('C-101,Site Plan,Civil'), `the drawing log CSV has the tags in order (${log.split('\n')[0]})`);
+    assert(/^(Set|Sample Floor Plan) Drawing Log\.csv$/.test(dl.suggestedFilename()), `the Set name is prepended to the log title (${dl.suggestedFilename()})`);
+  }
   await page.keyboard.press('Alt+2');
   // Slip sheet a new revision (the original sample) over this one: matched by sheet number, links carried forward.
   await openMenu('Document', 'Slip Sheet…');

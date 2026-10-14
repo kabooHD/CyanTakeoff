@@ -556,3 +556,17 @@ label.button, a.button { display: inline-block; padding: 2px 8px; border: 1px so
 .flag-edit label { display: flex; align-items: center; gap: 6px; }
 .flag-edit input[type=text], .flag-edit input:not([type]) { flex: 1; min-width: 0; }
 .thumb-flag { margin-left: 4px; color: var(--accent); }
+
+/* Set tags and drawing log */
+.tags-dialog { max-width: 92vw; }
+.tags-table-wrap { max-height: 50vh; overflow: auto; border: 1px solid var(--border, #ccc); margin: 6px 0; }
+.tags-table { border-collapse: collapse; font-size: 12px; min-width: 100%; }
+.tags-table th, .tags-table td { border: 1px solid var(--border, #ddd); padding: 3px 6px; text-align: left; white-space: nowrap; }
+.tags-table th { position: sticky; top: 0; background: var(--panel-bg, #f4f4f4); }
+.tags-table td.selected { background: var(--accent-soft); }
+.tags-table tbody td:not(:first-child) { cursor: cell; min-width: 90px; }
+.tag-head-actions { margin-left: 6px; }
+.tag-head-actions button { border: 0; background: none; padding: 0 2px; cursor: pointer; opacity: 0.6; }
+.tag-head-actions button:hover { opacity: 1; }
+.log-elements { display: flex; flex-direction: column; gap: 2px; }
+.log-element { display: flex; align-items: center; gap: 6px; }

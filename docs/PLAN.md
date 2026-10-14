@@ -223,6 +223,8 @@ filling, image signatures, redaction and OCR.
 - [x] Help > Find Tools + Commands (search box over menus and tools)
 - [x] Flags panel (linked Flag markups, unlinked flags with actions, thumbnail
   indicator)
+- [x] Sets: Tags (standard/custom, AutoMark, derived Discipline/Sheet Type)
+  and Export Drawing Log (CSV/PDF)
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData
