@@ -490,6 +490,34 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Shift+F'); await click(57, 34);
   await page.keyboard.press('k'); await drag([44, 26], [50, 21]); await click(52, 27); await page.keyboard.type('Check this'); await page.keyboard.press('Escape');
   await page.keyboard.press('Shift+C'); await click(44, 4); await click(54, 4); await click(49, 8);
+  // Measurement captions: Shift+drag moves the caption, the orange anchor rotates it, Reset Caption Position restores it.
+  await page.keyboard.press('Shift+Alt+L'); await click(44, 38); await click(54, 38);
+  {
+    const cap = page.locator('.measure-label', { hasText: `10'-0"` }).last();
+    await cap.waitFor();
+    const x0 = Number(await cap.getAttribute('x'));
+    const cb = await cap.boundingBox();
+    await page.keyboard.down('Shift');
+    await page.mouse.move(cb.x + cb.width / 2, cb.y + cb.height / 2); await page.mouse.down();
+    await page.mouse.move(cb.x + cb.width / 2 + 40, cb.y + cb.height / 2 + 30, { steps: 5 }); await page.mouse.up();
+    await page.keyboard.up('Shift');
+    await page.waitForTimeout(200);
+    assert(Number(await cap.getAttribute('x')) > x0 + 5, 'Shift+drag moves the measurement caption');
+    const anchor = page.locator('.caption-anchor');
+    assert(await anchor.count() === 1, 'a selected measurement shows the caption anchor');
+    const ab = await anchor.boundingBox(); const cb2 = await cap.boundingBox();
+    await page.mouse.move(ab.x + ab.width / 2, ab.y + ab.height / 2); await page.mouse.down();
+    await page.mouse.move(cb2.x + cb2.width / 2, cb2.y - 60, { steps: 6 }); await page.mouse.up();
+    await page.waitForTimeout(200);
+    assert(/rotate\(-90 /.test((await cap.getAttribute('transform')) ?? ''), `dragging the anchor rotates the caption in 15° steps (${await cap.getAttribute('transform')})`);
+    const mid = await toScreen(49, 38);
+    await page.mouse.click(mid.x, mid.y, { button: 'right' });
+    await page.getByRole('menuitem', { name: 'Reset Caption Position' }).click();
+    await page.waitForTimeout(200);
+    assert(!(await cap.getAttribute('transform')) && Math.abs(Number(await cap.getAttribute('x')) - x0) < 1, 'Reset Caption Position puts the caption back');
+    await page.keyboard.press('Delete');
+    await page.waitForTimeout(200);
+  }
   // Rise/Drop on a length (Properties): 10 ft + 2 ft rise reads 12'-0"; then undone.
   await page.keyboard.press('Shift+Alt+L'); await click(44, 33); await click(54, 33);
   await page.locator('.side-right button[title="Properties"]').click();

@@ -52,6 +52,10 @@ resizes the markup), and Add to My Tools / Set as Default (the markup's
 appearance becomes the tool's default).
 
 ## Measurement display (Properties)
+Captions can be moved (Shift+drag; not Radius, Diameter and Angle),
+turned by dragging the orange anchor beside them (15° steps, Shift for
+1°), and put back with right-click > Reset Caption Position; the offset
+and angle are kept with the markup (CTData) and drawn in the saved file.
 Revu's measurement properties: Show Caption (which captions show, or
 none), Show Segment Values (each segment's length, aligned on, inside or
 outside the line), Show Centroid, and the Length / Area / Volume unit of

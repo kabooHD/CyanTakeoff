@@ -17,6 +17,7 @@ import { applyCutout, ellipsePolygon } from '../model/cutouts';
 import { expandGroups } from '../model/arrange';
 import { rgbaOf, wheelZoomFactor } from '../model/prefs';
 import { cssFamily, textStyleOf } from '../model/textStyle';
+import { MOVABLE_CAPTION, captionPosition, captionText, snapCaptionAngle } from '../model/measureDisplay';
 import { mergeCounts, nearestCountIndex, splitAll, splitCount } from '../model/count';
 import { autosizedBox, withBox } from '../model/textBox';
 import { textWidth } from './quickCommands';
@@ -82,6 +83,19 @@ export const viewerApi = {
   viewSize: () => ({ w: 800, h: 600 }),
 };
 
+/** A selected measurement's caption: its centre, size (page units) and the rotation anchor to its right. */
+function captionBox(m: Markup, zoom: number): { at: Pt; w: number; h: number; anchor: Pt } | null {
+  if (!MEASURE_TYPES_WITH_CAPTION.has(m.type) || m.points.length < 2) return null;
+  const text = captionText(m);
+  if (!text) return null;
+  const at = captionPosition(m, m.points);
+  const w = textWidth(text, m.style.fontSize) + 6, h = m.style.fontSize * 1.3;
+  const a = ((m.display?.captionAngle ?? 0) * Math.PI) / 180;
+  const d = w / 2 + 10 / zoom;
+  return { at, w, h, anchor: { x: at.x + Math.cos(a) * d, y: at.y - Math.sin(a) * d } };
+}
+const MEASURE_TYPES_WITH_CAPTION = new Set(['length', 'polylength', 'perimeter', 'area', 'volume', 'angle', 'radius', 'diameter']);
+
 type Draft = { tool: ToolId; points: Pt[]; cursor: Pt | null; dragFrom?: { x: number; y: number }; target?: string;
   /** Curved segments drawn with Ctrl+drag: handlebars per point, and the point whose handlebar is being dragged. */
   handles?: Handles; curving?: number };
@@ -89,6 +103,9 @@ type Drag =
   | { kind: 'pan'; sx: number; sy: number; left: number; top: number }
   | { kind: 'move'; start: Pt; snapshot: Markup[]; ids: string[]; moved: boolean }
   | { kind: 'vertex'; id: string; index: number; snapshot: Markup[]; moved: boolean }
+  /** Shift+drag a measurement caption (offset), or drag its anchor to turn it. */
+  | { kind: 'caption'; id: string; start: Pt; orig: Pt; snapshot: Markup[]; moved: boolean }
+  | { kind: 'captionRotate'; id: string; center: Pt; snapshot: Markup[]; moved: boolean }
   | { kind: 'band'; start: Pt; cur: Pt; add: boolean; right?: { x: number; y: number } }
   /** Move (corner -1) or resize (corner 0..3) the highlighted viewport. */
   | { kind: 'viewport'; id: string; corner: number; start: Pt; orig: [Pt, Pt]; rect: [Pt, Pt] }
@@ -896,6 +913,17 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
           }
         }
       }
+      // Measurement captions (Revu): the anchor handle turns the caption; Shift+drag on the caption moves it.
+      if (doc.selection.length === 1) {
+        const sm = markups.find((x) => x.id === doc.selection[0]);
+        const cap = sm && captionBox(sm, zoom);
+        if (cap) {
+          if (dist(cap.anchor, raw) <= 7 / zoom) { setDrag({ kind: 'captionRotate', id: sm.id, center: cap.at, snapshot: doc.markups, moved: false }); capture(e); return; }
+          if (e.shiftKey && MOVABLE_CAPTION.has(sm.type) && Math.abs(raw.x - cap.at.x) <= cap.w / 2 && Math.abs(raw.y - cap.at.y) <= cap.h / 2) {
+            setDrag({ kind: 'caption', id: sm.id, start: raw, orig: sm.display?.captionOffset ?? { x: 0, y: 0 }, snapshot: doc.markups, moved: false }); capture(e); return;
+          }
+        }
+      }
       const hit = [...markups].reverse().find((m) => hitTest(m, raw, tol));
       if (hit && s.painter) {
         // Format Painter: apply the picked-up style to the clicked markup (and its group).
@@ -1144,6 +1172,14 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
           return { points: pts };
         }, { history: false });
         if (!drag.moved) setDrag({ ...drag, moved: true });
+      } else if (drag.kind === 'caption') {
+        const off = { x: drag.orig.x + raw.x - drag.start.x, y: drag.orig.y + raw.y - drag.start.y };
+        s.updateMarkups([drag.id], (m) => ({ display: { ...m.display, captionOffset: off } }), { history: false });
+        if (!drag.moved) setDrag({ ...drag, moved: true });
+      } else if (drag.kind === 'captionRotate') {
+        const deg = snapCaptionAngle((-Math.atan2(raw.y - drag.center.y, raw.x - drag.center.x) * 180) / Math.PI, e.shiftKey);
+        s.updateMarkups([drag.id], (m) => ({ display: { ...m.display, captionAngle: deg || undefined } }), { history: false });
+        if (!drag.moved) setDrag({ ...drag, moved: true });
       } else if (drag.kind === 'bezier') {
         const orig = drag.snapshot.find((x) => x.id === drag.id);
         if (orig) {
@@ -1227,7 +1263,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     }
     if (s.tool === 'dynamic-fill') fillUp();
     if (drag) {
-      if ((drag.kind === 'move' || drag.kind === 'vertex') && drag.moved) s.pushUndo(drag.snapshot);
+      if ((drag.kind === 'move' || drag.kind === 'vertex' || drag.kind === 'caption' || drag.kind === 'captionRotate') && drag.moved) s.pushUndo(drag.snapshot);
       if (drag.kind === 'bezier') s.pushUndo(drag.snapshot);
       if (drag.kind === 'band') selectInBand(drag);
       if (drag.kind === 'viewport' && drag.rect !== drag.orig) {
@@ -1382,6 +1418,10 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     } else if (hit) {
       if (!selected.has(hit.id)) s.select([hit.id]);
       const ids = selected.has(hit.id) ? doc.selection : [hit.id];
+      if ((hit.display?.captionOffset || hit.display?.captionAngle) && !hit.locked) {
+        items.push({ label: 'Reset Caption Position', action: () => s.updateMarkups([hit.id], (x) => ({ display: { ...x.display, captionOffset: undefined, captionAngle: undefined } })) });
+        items.push({ sep: true });
+      }
       if (hit.type === 'callout' && !hit.locked && hit.points.length > 2) {
         // Callout leaders (Revu): Add Leader at the clicked point; Delete Leader on a leader's tip.
         const tips = [hit.points[0], ...hit.points.slice(3)];
@@ -1635,6 +1675,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
                       </g>
                     );
                   }))}
+                  {doc.selection.length === 1 && (() => { const cap = captionBox(m, zoom); return cap ? <circle className="caption-anchor" cx={cap.anchor.x} cy={cap.anchor.y} r={3.5 / zoom} fill="#ff8c00" stroke="#fff" strokeWidth={1 / zoom} style={{ cursor: 'grab' }}><title>Drag to rotate the caption (Shift: 1° steps); Shift+drag the caption to move it</title></circle> : null; })()}
                   {doc.selection.length === 1 && handlePoints(m).map((h, i) => (
                     <rect key={i} x={h.x - 3.5 / zoom} y={h.y - 3.5 / zoom} width={7 / zoom} height={7 / zoom}
                       fill="#fff" stroke="#1a73e8" strokeWidth={1 / zoom} />

@@ -14,6 +14,9 @@ export interface MeasureDisplay {
   lengthUnit?: LengthUnit;
   areaUnit?: LengthUnit;
   volumeUnit?: LengthUnit;
+  /** Caption moved from its default place (page units) and turned (degrees counter-clockwise). */
+  captionOffset?: Pt;
+  captionAngle?: number;
 }
 
 const INCHES: Record<LengthUnit, number> = { in: 1, ft: 12, 'ft-in': 12, yd: 36, mm: 1 / 25.4, cm: 1 / 2.54, m: 1000 / 25.4 };
@@ -79,3 +82,34 @@ export function segmentValues(m: Markup, offset = 8): { at: Pt; text: string }[]
   }
   return out;
 }
+
+/** Where a measurement's caption sits by default (page space, from the markup's points). */
+export function captionAnchor(type: Markup['type'], P: Pt[]): Pt {
+  if (type === 'length' || type === 'polylength' || type === 'radius' || type === 'diameter' || type === 'dimension') return { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 - 3 };
+  if (type === 'angle' && P[1]) return { x: P[1].x + 8, y: P[1].y - 8 };
+  const n = P.length;
+  if (n < 3) return P[0];
+  let a = 0, cx = 0, cy = 0;
+  for (let i = 0; i < n; i++) {
+    const p = P[i], q = P[(i + 1) % n], f = p.x * q.y - q.x * p.y;
+    a += f; cx += (p.x + q.x) * f; cy += (p.y + q.y) * f;
+  }
+  if (Math.abs(a) < 1e-9) return { x: P.reduce((t, p) => t + p.x, 0) / n, y: P.reduce((t, p) => t + p.y, 0) / n };
+  return { x: cx / (3 * a), y: cy / (3 * a) };
+}
+
+/** The caption's place: its anchor moved by the offset the user dragged it to. */
+export function captionPosition(m: Pick<Markup, 'type' | 'display'>, P: Pt[]): Pt {
+  const a = captionAnchor(m.type, P), o = m.display?.captionOffset;
+  return o ? { x: a.x + o.x, y: a.y + o.y } : a;
+}
+
+/** Caption rotation while dragging its anchor: 15° steps, 1° with `fine` (Shift), in degrees counter-clockwise. */
+export function snapCaptionAngle(deg: number, fine: boolean): number {
+  const step = fine ? 1 : 15;
+  const a = Math.round(deg / step) * step;
+  return ((a % 360) + 360) % 360;
+}
+
+/** Types whose caption can be moved (Revu: not Radius, Diameter and Angle). */
+export const MOVABLE_CAPTION = new Set(['length', 'polylength', 'perimeter', 'area', 'volume']);

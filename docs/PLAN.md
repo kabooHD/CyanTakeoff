@@ -249,6 +249,8 @@ filling, image signatures, redaction and OCR.
   tokens, PDF export, Import Stamp (PDF)
 - [x] Dynamic Fill: settings (fill/boundary size and colour, hide markups),
   Tool Chest tool for the created markups, Preferences > Measure defaults
+- [x] Measurement captions: move (Shift+drag), rotate (anchor, 15° steps),
+  Reset Caption Position
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

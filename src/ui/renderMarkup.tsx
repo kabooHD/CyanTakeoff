@@ -1,5 +1,5 @@
 import { hasCurves, svgPath } from '../model/curves';
-import { captionText, segmentValues } from '../model/measureDisplay';
+import { captionPosition, captionText, segmentValues } from '../model/measureDisplay';
 import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTileWH, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type LineStyleDef } from '../model/lineStyles';
 import { calloutAttach } from '../pdf/save';
 import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
@@ -100,11 +100,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
   let label: { at: Pt; text: string } | null = null;
   const caption = captionText(m, meas);
   if (meas && caption && m.type !== 'count' && P.length > 1) {
-    const at = m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter' || m.type === 'dimension'
-      ? { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 - 3 }
-      : m.type === 'angle' && P[1] ? { x: P[1].x + 8, y: P[1].y - 8 }
-        : centroid(P);
-    label = { at, text: caption };
+    label = { at: captionPosition(m, P), text: caption };
   }
   const segments = meas && m.display?.segments ? segmentValues(m) : [];
   const centroidAt = meas && m.display?.centroid && P.length > 2 ? centroid(P) : null;
@@ -338,7 +334,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
           fontFamily="Helvetica, Arial, sans-serif" className="seq-label">{m.label}</text>;
       })()}
       {label && (
-        <text x={label.at.x} y={label.at.y} fontSize={m.style.fontSize} fill={st.color}
+        <text x={label.at.x} y={label.at.y} fontSize={m.style.fontSize} fill={st.color} transform={m.display?.captionAngle ? `rotate(${-m.display.captionAngle} ${label.at.x} ${label.at.y})` : undefined}
           textAnchor="middle" dominantBaseline="middle" className="measure-label">{label.text}</text>
       )}
       {segments.map((sg, i) => (

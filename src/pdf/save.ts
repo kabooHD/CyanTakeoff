@@ -1,6 +1,6 @@
 import { writeLayers, type LayerSet } from './layers';
 import { writeBookmarks, type Bookmark } from './bookmarks';
-import { captionText, displayText } from '../model/measureDisplay';
+import { captionAnchor, captionText, displayText } from '../model/measureDisplay';
 import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTileWH, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type HatchDef } from '../model/lineStyles';
 import { flattenPath, hasCurves, pdfPath, segments } from '../model/curves';
 import { hasSignatures, incrementalUpdate, loadForUpdate } from './incremental';
@@ -11,7 +11,7 @@ import {
 import type { CustomColumn, Cutout, Markup, MarkupStyle, Pt, Scale, Space, Viewport } from '../model/types';
 import { spaceTree, type SpaceNode } from '../model/spaces';
 import { LEGEND_HEADERS, legendLayout, legendRows, type LegendRow } from '../model/legend';
-import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
+import { arcPoints, arcThrough, bounds, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import { fitFontSize, quadding, shapeOutline, textStyleOf, toDS, toRC } from '../model/textStyle';
 import { countRadius, countStyleName, countSymbolPolygon, countSymbolStrokes } from '../model/count';
 import { calloutTips, endsOf, leName, lineEndShape, type EndShape } from '../model/lineEnds';
@@ -526,16 +526,19 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
   }
 
   if (meas && m.type !== 'count') {
-    const pos = m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter' || m.type === 'dimension'
-      ? { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 }
-      : m.type === 'angle' ? P[1]
-        : centroid(P);
+    // PDF space has y up: the page-space anchor's lift/offset flips in y.
+    const anchor = captionAnchor(m.type, P.map((p) => ({ x: p.x, y: -p.y })));
+    const off = m.display?.captionOffset;
+    const pos = { x: anchor.x + (off?.x ?? 0), y: -anchor.y - (off?.y ?? 0) };
     const size = st.fontSize;
     const t = safeText(font, captionText(m, meas) ?? '');
     const w = font.widthOfTextAtSize(t, size);
-    const q = proj(fr, pos);
-    const lift = m.type === 'angle' ? 8 : m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter' || m.type === 'dimension' ? 3 : 0;
-    textAt(o, font, t, size, q.u - w / 2 + (m.type === 'angle' ? 8 + w / 2 : 0), q.v + lift, rgb, fr);
+    const deg = m.display?.captionAngle ?? 0;
+    const a = (deg * Math.PI) / 180, cs = Math.cos(a), sn = Math.sin(a);
+    const rot = (v: Pt): Pt => ({ x: v.x * cs - v.y * sn, y: v.x * sn + v.y * cs });
+    const cfr = deg ? { right: rot(fr.right), up: rot(fr.up) } : fr;
+    const q = proj(cfr, pos);
+    textAt(o, font, t, size, q.u - w / 2, q.v - size * 0.35, rgb, cfr);
   }
   o.add('Q');
   return { fontsUsed: o.fonts, ops: o.out.join('\n'), bbox: [o.minX - pad - 2, o.minY - pad - 2, o.maxX + pad + 2, o.maxY + pad + 2], hatch: hatchArea ? st.hatch : undefined };
