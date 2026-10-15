@@ -5,7 +5,7 @@
 // verification uses WebCrypto (RSA PKCS#1 v1.5 and ECDSA).
 import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFNumber, PDFRef, PDFString, StandardFonts, type PDFPage } from 'pdf-lib';
 import type forgeNs from 'node-forge';
-import { incrementalUpdate, keepPageContents, loadForUpdate } from './incremental';
+import { hasSignatures, incrementalUpdate, keepPageContents, loadForUpdate } from './incremental';
 
 type Forge = typeof forgeNs;
 let forgeP: Promise<Forge> | null = null;
@@ -59,9 +59,13 @@ export async function certificateInfo(p12: Uint8Array, password: string): Promis
   return { name: cn(cert.subject), issuer: cn(cert.issuer), notAfter: cert.validity.notAfter };
 }
 
+export type HashAlgo = 'sha256' | 'sha384' | 'sha512';
+
 export interface SignOptions {
   p12: Uint8Array;
   password: string;
+  /** Digest algorithm (Preferences > Signature); SHA-256 by default. */
+  hash?: HashAlgo;
   reason?: string;
   location?: string;
   /** Visible signature: page index and rectangle in PDF space. Omit for an invisible signature. */
@@ -74,18 +78,20 @@ export interface SignOptions {
   tsa?: string;
   /** How to send the timestamp request (default: HTTP POST to `tsa`). */
   fetchTimestamp?: (request: Uint8Array) => Promise<Uint8Array>;
+  /** Certify the document (DocMDP): 1 no changes allowed, 2 form filling and signing, 3 also annotations. */
+  certify?: 1 | 2 | 3;
 }
 
 /** RFC 3161 TimeStampReq for a SHA-256 hash of `data`, asking for the TSA's certificate. */
-export async function timestampRequest(data: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
+export async function timestampRequest(data: Uint8Array<ArrayBuffer>, algo: HashAlgo = 'sha256'): Promise<Uint8Array> {
   const forge = await loadForge();
   const a = forge.asn1, U = a.Class.UNIVERSAL, T = a.Type;
-  const hash = toBinary(new Uint8Array(await crypto.subtle.digest('SHA-256', data)));
+  const hash = toBinary(new Uint8Array(await crypto.subtle.digest(HASH[OID[algo]], data)));
   const nonce = toBinary(crypto.getRandomValues(new Uint8Array(8))).replace(/^[\x80-\xff]/, '\x01');
   const req = a.create(U, T.SEQUENCE, true, [
     a.create(U, T.INTEGER, false, '\x01'),
     a.create(U, T.SEQUENCE, true, [
-      a.create(U, T.SEQUENCE, true, [a.create(U, T.OID, false, a.oidToDer(OID.sha256).getBytes()), a.create(U, T.NULL, false, '')]),
+      a.create(U, T.SEQUENCE, true, [a.create(U, T.OID, false, a.oidToDer(OID[algo]).getBytes()), a.create(U, T.NULL, false, '')]),
       a.create(U, T.OCTETSTRING, false, hash),
     ]),
     a.create(U, T.INTEGER, false, nonce),
@@ -142,7 +148,12 @@ export async function signPdf(pdf: Uint8Array, opts: SignOptions): Promise<Uint8
     M: PDFString.of(pdfDate(date)), Name: PDFHexString.fromText(name),
     ...(opts.reason ? { Reason: PDFHexString.fromText(opts.reason) } : {}),
     ...(opts.location ? { Location: PDFHexString.fromText(opts.location) } : {}),
+    ...(opts.certify ? { Reference: [{ Type: 'SigRef', TransformMethod: 'DocMDP', TransformParams: { Type: 'TransformParams', P: opts.certify, V: '1.2' }, DigestMethod: 'SHA256' }] } : {}),
   }));
+  if (opts.certify) {
+    if (hasSignatures(doc)) throw new Error('A document can only be certified by its first signature.');
+    doc.catalog.set(N('Perms'), ctx.obj({ DocMDP: sig }));
+  }
   const form = doc.getForm();
   const acro = form.acroForm.dict;
   acro.set(N('SigFlags'), PDFNumber.of(3)); // signatures exist; append only
@@ -197,7 +208,7 @@ export async function signPdf(pdf: Uint8Array, opts: SignOptions): Promise<Uint8
   p7.addCertificate(cert);
   chain.forEach((c) => p7.addCertificate(c));
   p7.addSigner({
-    key, certificate: cert, digestAlgorithm: forge.pki.oids.sha256,
+    key, certificate: cert, digestAlgorithm: forge.pki.oids[opts.hash ?? 'sha256'],
     authenticatedAttributes: [
       { type: forge.pki.oids.contentType, value: forge.pki.oids.data },
       { type: forge.pki.oids.messageDigest },
@@ -213,7 +224,7 @@ export async function signPdf(pdf: Uint8Array, opts: SignOptions): Promise<Uint8
     const si = kids(signerInfos[signerInfos.length - 1])[0];
     const siKids = kids(si);
     const sigValue = fromBinary(siKids[siKids.length - 1].value as string);
-    const req = await timestampRequest(sigValue);
+    const req = await timestampRequest(sigValue, opts.hash ?? 'sha256');
     const resp = a.fromDer(toBinary(opts.fetchTimestamp ? await opts.fetchTimestamp(req) : await postTimestamp(opts.tsa!, req)));
     const [status, token] = kids(resp);
     const code = (kids(status)[0]?.value as string ?? '\x02').charCodeAt(0);
@@ -246,6 +257,8 @@ export interface SignatureInfo {
   detail: string;
   /** False when the document has later revisions (changes after this signature). */
   coversDocument: boolean;
+  /** DocMDP certification level when this signature certifies the document (1 no changes, 2 forms, 3 forms and markups). */
+  certified?: 1 | 2 | 3;
   /** Signing time (or now) within the certificate's validity period. */
   certInDate: boolean;
   selfSigned: boolean;
@@ -473,6 +486,15 @@ export async function verifySignatures(pdf: Uint8Array, trusted: Uint8Array[] = 
     const info: SignatureInfo = { field: name, signer: 'Unknown', issuer: '', status: 'unknown', detail: '', coversDocument: false, certInDate: false, selfSigned: false, trusted: false };
     const text = (k: string) => { const x = v.lookup(N(k)); return x instanceof PDFString || x instanceof PDFHexString ? x.decodeText() : undefined; };
     info.reason = text('Reason'); info.location = text('Location');
+    const refs = v.lookup(N('Reference'));
+    if (refs instanceof PDFArray) {
+      for (const r of refs.asArray()) {
+        const sr = r instanceof PDFDict ? r : doc.context.lookup(r);
+        const tp = sr instanceof PDFDict ? sr.lookup(N('TransformParams')) : undefined;
+        const pv = tp instanceof PDFDict ? tp.get(N('P')) : undefined;
+        if (sr instanceof PDFDict && String(sr.get(N('TransformMethod'))) === '/DocMDP') info.certified = (pv instanceof PDFNumber ? pv.asNumber() : 1) as 1 | 2 | 3;
+      }
+    }
     out.push(info);
     try {
       const br = (v.lookup(N('ByteRange')) as PDFArray).asArray().map((x) => (x as PDFNumber).asNumber());

@@ -151,12 +151,16 @@ filling, image signatures, redaction and OCR.
 
 ### Now: closing the remaining gaps (before the public test)
 - [x] View modes: Single Page, Continuous, Side by Side, Continuous Side by
-  Side (Ctrl+4 to Ctrl+7), Rotate View (Ctrl+Shift+Plus/Minus)
+  Side (Ctrl+4 to Ctrl+7), Rotate View (Ctrl+Shift+Plus/Minus), Show Cover
+  Page in Side-by-Side, Dark Mode, Disable Line Weights, Always Show Reply
+  Indicators, split view menu (Toggle Split, Switch, Unsplit) with
+  Synchronize Document / Page
 - [x] Undo across page operations (the last 10 per document)
 - [x] Compare: alignment points and vector comparison
 - [x] Forms editor: create, rename and delete fields
 - [x] Certificate digital signatures (sign with a .pfx/.p12, verify)
-- [x] OCR in more languages; redaction that removes content without
+- [x] OCR in more languages (18, any script via a glyphless Unicode font);
+  redaction that removes content without
   rasterising the page
 - [x] Searched for public Revu tool sets (.btx), custom-column and cutout
   samples: none exist. Edited Revu markups now keep keys we do not write
@@ -164,26 +168,31 @@ filling, image signatures, redaction and OCR.
   tests/fixtures/revu/README.md)
 
 ### Now: Revu parity, third pass (owner: "do all")
-- [x] Print (Ctrl+P): page range, Document & Markups / Document Only /
-  Markups Only, paper size (Auto or fixed), scaling, pages per sheet,
+- [x] Print (Ctrl+P): page range (incl. pages selected in Thumbnails),
+  Document & Markups / Document Only / Markups Only, paper size (Auto or
+  fixed), scaling (incl. Fit/Reduce to Margins), margins, Center, pages per sheet,
   auto-rotate, copies/collate/reverse, Dim Page Content, preview; layers
   print when shown and their Print usage is on
 - [x] Rulers (Ctrl+R, units by right-click), Full-Screen Crosshair, Dimmer
   (Ctrl+F5, 25/50/75%), Previous/Next View (Alt+Left/Right)
 - [x] Bookmarks editing: Add Bookmark (Ctrl+B) at the current view, before/
   after/child, rename, delete, drag to reorder or nest (Ctrl+drag copies),
-  Set to Current View, Properties, from page labels, Audit, Export CSV;
+  Set to Current View, Properties, Action (page, view, Place, web address,
+  other file), from page labels, Audit, Export CSV;
   saved to /Outlines keeping untouched items and actions
 - [x] Line styles (15 standard incl. center/hidden/phantom/double and
   utility lines with text; Line Style Editor: lines, offsets, dash/space/
   dot/text) and hatch patterns (10 standard; Hatch Pattern Editor; saved as
-  PDF tiling patterns); custom sets import/export as JSON
+  PDF tiling patterns); custom sets import/export as JSON; AutoCAD .pat
+  import
 - [x] Spell check: underline while typing (browser), Check Spelling (F7)
   through markup text, comments, replies and text fields (Ignore Once/All,
   Add to Dictionary, Change/Change All), Markup Spelling Mistakes on PDF
-  text (Squiggly markups, suggestions in the comment); English dictionary
+  text (Squiggly markups, suggestions in the comment); 11 dictionaries
+  (English US/UK, French, German, Spanish, Italian, Dutch, Portuguese,
+  Polish, Swedish, Danish)
 - [x] VisualSearch (Search panel > Visual): Get Rectangle, sensitivity,
-  multiple rotations, current page/document/all open documents, result
+  multiple rotations, Filter by Color, current page/document/all open documents, result
   thumbnails; Count / Highlight / Mark for Redaction on checked results
 - [x] Sequences: Tool Chest > Sequence: Define (1/A/a, start, increment,
   digits, prefix, suffix), Reset, Remove; markups placed number themselves;
@@ -198,7 +207,8 @@ filling, image signatures, redaction and OCR.
 - [x] Header & Footer (6 positions, fields: page, pages, page label, date,
   time, file name, Bates), Bates Numbering (prefix/start/digits/suffix),
   Watermark (text, font, colour, opacity, rotation, behind/in front); page
-  ranges, preview; written as pagination artifacts and removable
+  ranges, preview, all open documents at once; written as pagination
+  artifacts and removable
 - [x] Password security: open RC4/AES-128/AES-256 protected files (password
   prompt; permissions honoured when opened with the open password), saving
   keeps the same passwords; Security (Ctrl+L) sets/removes AES-256
@@ -206,10 +216,160 @@ filling, image signatures, redaction and OCR.
 - [x] Reduce File Size (unused objects, compression, thumbnails, private
   data, metadata, JPEG downsampling by placed dpi, object streams)
 - [x] XFDF export/import of markups (standard XFDF plus our measurement data
-  in a namespaced element; Revu measurements round-trip)
+  in a namespaced element; Revu measurements round-trip; stamp artwork in
+  <appearance>)
+- [x] Measurements panel menu: Show Measurement Tools, Snap Orthogonal,
+  Snap to Content, Highlight Viewports
+- [x] Help > Find Tools + Commands (search box over menus and tools)
+- [x] Flags panel (linked Flag markups, unlinked flags with actions, thumbnail
+  indicator)
+- [x] Sets: Tags (standard/custom, AutoMark, derived Discipline/Sheet Type)
+  and Export Drawing Log (CSV/PDF)
+- [x] Thumbnails toolbar: Cut/Copy/Paste Pages, Re-Label, Export/Email/Print
+  Pages, Labels (Page Label, Page Scale), size slider
+- [x] Search panel: Markups / Form Fields / File Properties scopes, Select All,
+  Check Options (Hyperlink, Redaction, Count, Highlight, Underline, Squiggly,
+  Strikethrough), Clear
+- [x] Properties panel document mode: File Properties, Custom Properties,
+  File Attachments
+- [x] Preferences dialog (Ctrl+K): General, Navigation, Markup, Sketch,
+  Forms, Signature
+- [x] Text formatting: font, size/Auto, bold/italic/underline/strikethrough,
+  alignment, line space, margin, text colour, box shape (saved as DS/RC/Q)
+- [x] Count: Resume Count, Delete from Group, Split Counts / Split All /
+  Merge Counts, symbols and scale, Create Count in the Tool Chest
+- [x] Callout leaders (Add / Delete Leader) and line end styles (Start/End,
+  size) for lines, arrows, polylines and callouts
+- [x] Markup Summary dialog: Columns, Filter & Sort, Output (PDF/CSV/XML/
+  Excel/Print, totals, ID columns, units, replies, append and hyperlink,
+  page breaks, thumbnails)
+- [x] Markups List: Import/Export XFDF entries, Capture Summary, Export
+  Capture Media, Legend column
+- [x] Stamps: Create Stamp (templates, size, border, opacity), dynamic text
+  tokens, PDF export, Import Stamp (PDF)
+- [x] Dynamic Fill: settings (fill/boundary size and colour, hide markups),
+  Tool Chest tool for the created markups, Preferences > Measure defaults
+- [x] Measurement captions: move (Shift+drag), rotate (anchor, 15° steps),
+  Reset Caption Position
+- [x] Manage Columns: choice items with Subject/numeric value/CSV import/custom
+  text, Number min/max, Text multiline, Save to / Delete from Profile
+- [x] Legend options: Show Title / Show Column Headers, title and header
+  size and style, extra columns (Markups List fields, custom columns),
+  Source Pages custom range, symbol size, margin, alignment, text colour;
+  right-click Legend › Create New Legend / add to a Legend, Apply to All
+  Pages, Copy Legend to Snapshot
+- [x] Bookmarks: Save Collapse State (outline /Count sign), Export Bookmarks
+  (PDF) over the open files
+- [x] Markup rotation: orange handle, 15° steps (Shift: free), angle readout,
+  Rotation in Properties > Layout for box shapes (src/model/rotate.ts)
+- [x] Blend Mode (Properties > Appearance; /BM; highlights Multiply, stamps
+  Darken by default)
+- [x] Select tool band direction (left-to-right inside, right-to-left
+  touching); Set Scale > Pages > Selected from Thumbnails; Length caption
+  leader line (Show Caption Leader Line)
+- [x] Tools > Form > Automatically Create Form Fields (src/model/autoFields.ts)
+- [x] Forms Editor: Show All Pages, Order Tabs (Row/Column/Unspecified with
+  ▲▼), field alignment toolbar (src/model/fieldLayout.ts)
+- [x] Sets: revision stacks (Auto/Wildcard/Off), Select Latest/Previous
+  Revisions, previous revisions display, Superseded stamp, Set Options
+  (Show / Sort By / Sort Order), Print Set, Search Set (src/model/revisions.ts)
+- [x] File > Create > From File / From Multiple Files (images to PDF; Open takes
+  images too); Window > Hide/Show Panels (Shift+F4)
+- [x] Preferences: Document (opening layout, max zoom), Grid & Snap (spacing,
+  sensitivity, colour), Markups List (zoom fit on select, wrap comments),
+  Layers (hide children, on page only), Spelling (upper case, custom words)
+- [x] Purple scale handles (proportional scaling about the opposite corner,
+  Shift free); Ctrl+drag a box corner keeps its proportions (src/model/scale.ts)
+- [x] Cloud Size and Invert, Highlight checkbox (Multiply), Length Flip Text
+- [x] Note icons (PDF /Name: Comment, Key, Note, Help, Star...) in Properties
+- [x] Image Mask Color / Tolerance and Encoding (src/model/imageMask.ts,
+  src/ui/imageTools.ts)
+- [x] Print: Even/Odd/Landscape/Portrait/First/Last page filters, Print
+  Spaces, pages-per-sheet order and border
+- [x] Slip Sheet options: insert before / replace, copy markups, Superseded
+  stamp, match by label (wildcard filter) or index, CSV report
+  (src/model/slipSheet.ts)
+- [x] Batch Link options: terms from labels or file names, Highlight Links /
+  outline / invisible, keep or replace existing links, CSV report
+  (src/model/batchLink.ts)
+- [x] Flatten Markups: per-type checkboxes, All / Exclude Filtered /
+  Currently Selected scope, Overlay Text on the assigned layer, Capture
+  media attached as a summary PDF
+- [x] Markups List custom column filters (conditions with AND / OR) and
+  dimming of markups filtered out of the list
+- [x] Highlight tool: Enable Text Highlighting preference, Ctrl+drag free box
+- [x] Markups List: Wall Area, Rise/Drop, Sequence columns; saved filter in
+  use checked / starred when changed; Shift+click row ranges
+- [x] Layers panel right-click: Flatten Markups (Assign Layer preset),
+  Unflatten Markups
+- [x] Text Box > Add Leader (callout behaviour); a callout's last leader
+  deleted makes it a text box
+- [x] Split Document by page count / ranges / top-level bookmarks / file
+  size (src/model/split.ts); Batch > Split Documents; File > Close All
+- [x] Tool Chest items: Duplicate, Change Colors, Offset as, Add Item to My
+  Tools (Recent Tools), My Tools hot keys 1-9
+- [x] Sets: New / Open / Save / Close Set (.ctset.json, src/model/setFile.ts),
+  Publish: Combine / Package, Stack Multi-Page Documents
+- [x] Length / Dimension leader offset: the middle handle moves the line
+  beside its points (PDF /LL, /LLE; Revu files render in place)
+- [x] Callout: box-only drag (Alt+drag: all), Shift+click a tip deletes the
+  leader; Polylength / Perimeter segment Split / Split All
+- [x] Window menu: every panel listed; Auto-Hide Tabs, Auto-Hide Panel Access
+- [x] Markups List Group items (toggle, summed measurements); pen strokes
+  within a second grouped (Enter separates)
+- [x] Image tool: drag a rectangle to fit the picture
+- [x] Shape tools: drag draws a rectangle (Shift: square); Preferences >
+  Markup > Drag Behavior for Shapes; required form fields tinted red
+- [x] Preferences > Document: display when opening, Rotate all pages by
+  default, Remember last page
+- [x] Preferences: Find Hyperlinks in PDF Content, Automatically Reorder
+  Bookmarks, Redirect Links on Slip Sheet, Lock Panning in Fit Width, Enable
+  Single Key Shortcuts (forms), Enable Spell Check and its colour
+- [x] Multi-selection scale handles; Preferences > Markup: Scale Appearance
+  Properties for Grouped Markups, Retain Layer when copying, Print Pop-Ups;
+  Measure: Automatically Split Count Measurements by Space
+- [x] Save Mode (Maintain Revisions / Publish Without Revisions / Publish
+  Compressed) and File > Revert As… (earlier revisions open as documents)
+- [x] Preferences > General: Reopen Files from Last Session on Startup
+- [x] Capture: photos attached to a markup (Properties > Capture, right-click
+  Capture > From Camera / From File, drop an image on a markup; media icon on
+  the drawing, Capture column, viewer with Delete/Export), kept in CTData
+- [x] File > Create Layered PDF, File > Open Recent
+- [x] Batch > Compare Documents / Overlay Pages over open files (pairing by
+  name+index or page label with Match Filter, CSV report)
+- [x] Batch > Sign & Seal (invisible signature on every open document);
+  Document > Insert Layered Pages (a PDF's pages become layers here)
+- [x] Properties: Layout section (X, Y, Width, Height, editable) and Set
+  as Default
+- [x] Measurement display: Show Caption, Show Segment Values (aligned),
+  Show Centroid, per-measurement length/area/volume units, Width/Height
+- [x] Tool Chest: Symbol/Detail view, tool set scale, Hide/show sets,
+  Recent Tools options, Comment Persistence, Update Tool Set Item on
+  Reuse, size slider, apply a tool's properties to selected markups
+- [x] Markups List: right-click menu, Hide Markups, Saved Filters, section
+  grouping, X/Y, centre, document and real-world size columns
+- [x] File: New PDF from Template (templates kept in the browser)
+- [x] File: Export as Image (PNG/JPEG), Export Text, Publish as Flattened /
+  Uncompressed; Edit > Undo History; Markup > Crop Image; Certify Document
+  (DocMDP) and Validate Signatures
+- [x] Color Processing (grayscale, black and white, colorize, LSH, modify
+  colours; JPEG images), Archive as PDF/A-1b (XMP, output intent, report),
+  Repair PDF (rebuild, broken entries, open graphics states)
+- [x] Batch over the open documents: Apply Stamp, Rotate Pages, Crop Pages,
+  Page Setup, Security, Reduce File Size, OCR, Print (one job), Header &
+  Footer, Watermark, Bates
+- [x] Form data: Import (FDF/XFDF/CSV), Export (FDF/XML/CSV), Merge Data over
+  open documents, Reset, Highlight Fields, Migrate Typewritten Text, Button
+  fields
+- [x] Number Pages (styles, prefix, start, range), Create Page Labels from
+  Bookmarks, Page Setup (media size, auto scale/percent, alignment, offset;
+  annotations and scales follow)
+- [x] Review Text (replace selected text / insert text at cursor: strikeout
+  + caret with the text in the note) and Create Hyperlinks from URLs
 - [x] Edit Text (rewrite a run of the drawing's text in its own font and
-  colour when possible, else a standard font) and Erase Content (remove
-  everything under a rectangle); undoable
+  colour when possible, else a standard font), Erase Content (remove
+  everything under a rectangle) and Cut Content (to the clipboard as a
+  snapshot, then removed; paste to move content); undoable
 - [x] Touch and pen: two-finger pinch zoom and pan, finger pans in Select
   (and anywhere off the page), long press = right-click, larger finger
   hit targets, View > Pen Mode (finger pans, only the pen draws)
@@ -239,7 +399,9 @@ filling, image signatures, redaction and OCR.
   image stamps; export/import), status models (Manage Status: custom
   models and states with colour and text, default for new markups,
   who/when recorded), Edit Action on any markup (Ctrl+Shift+E), Offset (O:
-  distance, Replace Markup, miter limit, Offset as), Camera (Ctrl+Alt+I),
+  distance, Replace Markup, miter limit, Offset as), Multiply (parallel
+  copies), Hide / Show Hidden Markups, Cut, Sketch to Scale (polygon,
+  polyline, rectangle, ellipse by typed sizes), Camera (Ctrl+Alt+I),
   Search > Replace Checked (rewrites the page text)
 - [x] Signatures: trust list with certificate chain checks, RFC 3161
   timestamps (request when signing, check when verifying)

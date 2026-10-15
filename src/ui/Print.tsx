@@ -3,29 +3,33 @@
 // in (as saved), laid out per the options, rendered page by page and handed
 // to the browser's print dialog. Layers print when they are shown and their
 // Print usage is on; markups on hidden layers stay off the paper too.
+import { rotateOut, type ViewRotation } from '../model/layout';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { create } from 'zustand';
 import { PDFDocument, PDFName } from 'pdf-lib';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { serialize, useApp, type DocState } from '../model/store';
 import { parsePageRange } from '../model/measure';
-import { DEFAULT_PRINT, PAPER_SIZES, layoutSheets, printOrder, renderScale, type PrintOptions, type Sheet } from '../model/print';
+import { DEFAULT_PRINT, PAPER_SIZES, layoutSheets, printOrder, renderScale, type PrintOptions, type Sheet, filterPages, type PageFilter, popupLayout } from '../model/print';
 import { loadForRender } from '../pdf/document';
 import { layerShown } from './layersView';
 import { PERM, allowed } from '../pdf/crypt';
 import { deviceMemoryGB } from '../model/device';
+import { selectedPages, useThumbSel } from './Panels';
+import { FilesRow, batchHint, targets } from './filesRow';
 
-type Range = 'all' | 'current' | 'custom';
+type Range = 'all' | 'current' | 'selected' | 'custom' | PageFilter;
 type Content = 'both' | 'document' | 'markups';
-export interface PrintSettings extends PrintOptions { content: Content; dim: boolean; dpi: number }
-const DEFAULTS: PrintSettings = { ...DEFAULT_PRINT, content: 'both', dim: false, dpi: 150 };
+export interface PrintSettings extends PrintOptions { content: Content; dim: boolean; dpi: number; /** Print Spaces (Revu): the Spaces' outlines on the printout. */ spaces: boolean }
+const DEFAULTS: PrintSettings = { ...DEFAULT_PRINT, content: 'both', dim: false, dpi: 150, spaces: false };
 const LS = 'cyantakeoff:print';
 
-export const usePrintDialog = create<{ open: boolean }>(() => ({ open: false }));
-export const openPrint = () => {
+export const usePrintDialog = create<{ open: boolean; range?: Range }>(() => ({ open: false }));
+/** `range` presets the page range (Thumbnails > Print Pages uses 'selected'). */
+export const openPrint = (range?: Range) => {
   const s = useApp.getState(), d = s.docs.find((x) => x.id === s.activeId);
   if (d && !allowed(d.security, PERM.print)) { s.setStatus('Printing is not allowed by this file\'s security settings.'); return; }
-  usePrintDialog.setState({ open: true });
+  usePrintDialog.setState({ open: true, range });
 };
 
 function loadSettings(): PrintSettings {
@@ -73,23 +77,68 @@ async function renderPage(d: DocState, src: Sources, page: number, scale: number
     }).promise;
     return c;
   };
-  if (o.content === 'document') return draw(src.full, false);
-  if (o.content === 'markups') return draw(src.markupsOnly!, true);
-  if (!o.dim) return draw(src.full, true);
+  // Print Spaces: each Space's outline, in its colour, over the page (page space turned with the page).
+  const withSpaces = (c: HTMLCanvasElement) => {
+    const spaces = o.spaces ? d.spaces[page] ?? [] : [];
+    if (!spaces.length) return c;
+    const info = d.loaded.pages[page];
+    const ctx = c.getContext('2d')!;
+    for (const sp of spaces) {
+      const pts = sp.points.map((q) => rotateOut(q.x, q.y, info.width, info.height, rotate as ViewRotation));
+      ctx.beginPath();
+      pts.forEach((q, i) => (i ? ctx.lineTo(q.x * scale, q.y * scale) : ctx.moveTo(q.x * scale, q.y * scale)));
+      ctx.closePath();
+      ctx.globalAlpha = Math.max(0.08, Math.min(1, sp.opacity)); ctx.fillStyle = sp.color; ctx.fill();
+      ctx.globalAlpha = 1; ctx.strokeStyle = sp.color; ctx.lineWidth = Math.max(1, scale); ctx.stroke();
+      ctx.font = `${Math.max(8, 11 * scale)}px Helvetica, Arial, sans-serif`; ctx.fillStyle = sp.color;
+      ctx.fillText(sp.title, pts[0].x * scale + 3 * scale, pts[0].y * scale + 12 * scale);
+    }
+    return c;
+  };
+  // Print Pop-Ups (Preferences > Markup): each Note's comment in a box beside it, at the Pop-Up Opacity.
+  const withPopups = (c: HTMLCanvasElement) => {
+    const prefs = useApp.getState().prefs;
+    if (!prefs.printPopups) return c;
+    const info = d.loaded.pages[page];
+    const turned = rotate % 180 !== 0;
+    const ctx = c.getContext('2d')!;
+    for (const m of d.markups) {
+      if (m.page !== page || m.type !== 'note' || !m.comment.trim()) continue;
+      const at = rotateOut(m.points[0].x, m.points[0].y, info.width, info.height, rotate as ViewRotation);
+      const box = popupLayout(at, m.comment, turned ? { w: info.height, h: info.width } : { w: info.width, h: info.height });
+      ctx.save();
+      ctx.scale(scale, scale);
+      ctx.globalAlpha = Math.max(0, Math.min(1, prefs.popupOpacity / 100));
+      ctx.fillStyle = '#fff8b0'; ctx.strokeStyle = m.style.color; ctx.lineWidth = 1;
+      ctx.fillRect(box.x, box.y, box.w, box.h); ctx.strokeRect(box.x, box.y, box.w, box.h);
+      ctx.fillStyle = '#000'; ctx.font = 'bold 10px Helvetica, Arial, sans-serif';
+      ctx.fillText(`${m.author}  ${m.created.slice(0, 10)}`, box.x + 4, box.y + 12);
+      ctx.font = '10px Helvetica, Arial, sans-serif';
+      box.lines.forEach((l, i) => ctx.fillText(l, box.x + 4, box.y + 12 + 13 * (i + 1)));
+      ctx.restore();
+    }
+    return c;
+  };
+  if (o.content === 'document') return withSpaces(await draw(src.full, false));
+  if (o.content === 'markups') return withSpaces(withPopups(await draw(src.markupsOnly!, true)));
+  if (!o.dim) return withSpaces(withPopups(await draw(src.full, true)));
   // Dim Page Content: faded page, markups at full strength on top.
   const base = await draw(src.full, false), top = await draw(src.markupsOnly!, true, true);
   const ctx = base.getContext('2d')!;
   ctx.globalAlpha = 0.65; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, base.width, base.height);
   ctx.globalAlpha = 1; ctx.drawImage(top, 0, 0);
   top.width = top.height = 0;
-  return base;
+  return withSpaces(withPopups(base));
 }
 
 export function pagesToPrint(d: DocState, range: Range, custom: string): number[] {
   const n = d.loaded.pages.length;
+  const all = Array.from({ length: n }, (_, i) => i);
   if (range === 'current') return [d.page];
+  if (range === 'selected') return selectedPages(d);
   if (range === 'custom') return parsePageRange(custom, n);
-  return Array.from({ length: n }, (_, i) => i);
+  if (range === 'all') return all;
+  return filterPages(all, range, d.loaded.pages.map((p) => ({ w: p.width, h: p.height })));
 }
 
 export function sheetsFor(d: DocState, pages: number[], o: PrintSettings): Sheet[] {
@@ -106,57 +155,67 @@ function cleanup() {
   document.getElementById('print-page-style')?.remove();
 }
 
+/** A document and its laid-out sheets; Batch > Print prints several in one job. */
+export interface PrintJob { d: DocState; sheets: Sheet[] }
+
 /** Build the print sheets in the page and open the browser's print dialog. */
-export async function printSheets(d: DocState, sheets: Sheet[], o: PrintSettings) {
+export async function printSheets(jobs: PrintJob[], o: PrintSettings) {
   const s = useApp.getState();
+  // Markups List > Hide Markups also keeps them off the paper (Revu).
+  if (s.toggles.hideMarkups && o.content !== 'document') o = { ...o, content: 'document' };
   cleanup();
   useApp.setState({ busy: true });
-  const src = await prepare(d, o.content === 'markups' || (o.content === 'both' && o.dim));
+  const sources: Sources[] = [];
   try {
     const root = document.createElement('div');
     root.id = 'print-root';
     // One named @page per sheet size, so Auto paper keeps each sheet's own size.
-    const sizes = [...new Set(sheets.map((sh) => `${pt(sh.w)} ${pt(sh.h)}`))];
+    const allSheets = jobs.flatMap((j) => j.sheets);
+    const sizes = [...new Set(allSheets.map((sh) => `${pt(sh.w)} ${pt(sh.h)}`))];
     const style = document.createElement('style');
     style.id = 'print-page-style';
     style.textContent = sizes.map((sz, i) => `@page cts${i} { size: ${sz}; margin: 0 }`).join('\n') + `\n@page { margin: 0 }`;
-    const done = new Map<string, string>(); // page@scale/rotation -> image URL (copies reuse it)
     let k = 0;
-    const total = sheets.reduce((n, sh) => n + sh.items.length, 0);
-    for (const sh of sheets) {
-      const el = document.createElement('div');
-      el.className = 'print-sheet';
-      Object.assign(el.style, { width: pt(sh.w), height: pt(sh.h), page: `cts${sizes.indexOf(`${pt(sh.w)} ${pt(sh.h)}`)}` });
-      for (const it of sh.items) {
-        s.setStatus(`Preparing page ${++k} of ${total} for printing…`);
-        const page = d.loaded.pages[it.page];
-        const [w, h] = it.rotate ? [page.height, page.width] : [page.width, page.height];
-        const rs = renderScale(w, h, it.scale, o.dpi, deviceMemoryGB() <= 4 ? 8_000_000 : 16_777_216);
-        const key = `${it.page}@${rs}/${it.rotate}`;
-        let url = done.get(key);
-        if (!url) {
-          const c = await renderPage(d, src, it.page, rs, it.rotate, o);
-          const blob = await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('Page too large to print'))), 'image/png'));
-          c.width = c.height = 0;
-          url = URL.createObjectURL(blob);
-          done.set(key, url);
+    const total = allSheets.reduce((n, sh) => n + sh.items.length, 0);
+    for (const { d, sheets } of jobs) {
+      const src = await prepare(d, o.content === 'markups' || (o.content === 'both' && o.dim));
+      sources.push(src);
+      const done = new Map<string, string>(); // page@scale/rotation -> image URL (copies reuse it)
+      for (const sh of sheets) {
+        const el = document.createElement('div');
+        el.className = 'print-sheet';
+        Object.assign(el.style, { width: pt(sh.w), height: pt(sh.h), page: `cts${sizes.indexOf(`${pt(sh.w)} ${pt(sh.h)}`)}` });
+        for (const it of sh.items) {
+          s.setStatus(`Preparing page ${++k} of ${total} for printing…`);
+          const page = d.loaded.pages[it.page];
+          const [w, h] = it.rotate ? [page.height, page.width] : [page.width, page.height];
+          const rs = renderScale(w, h, it.scale, o.dpi, deviceMemoryGB() <= 4 ? 8_000_000 : 16_777_216);
+          const key = `${it.page}@${rs}/${it.rotate}`;
+          let url = done.get(key);
+          if (!url) {
+            const c = await renderPage(d, src, it.page, rs, it.rotate, o);
+            const blob = await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('Page too large to print'))), 'image/png'));
+            c.width = c.height = 0;
+            url = URL.createObjectURL(blob);
+            done.set(key, url);
+          }
+          const img = document.createElement('img');
+          img.src = url;
+          img.alt = `Page ${page.label}`;
+          Object.assign(img.style, { left: pt(it.x), top: pt(it.y), width: pt(it.w), height: pt(it.h), ...(o.border && o.perSheet > 1 ? { outline: '0.5pt solid #000', outlineOffset: '-0.5pt' } : {}) });
+          el.appendChild(img);
         }
-        const img = document.createElement('img');
-        img.src = url;
-        img.alt = `Page ${page.label}`;
-        Object.assign(img.style, { left: pt(it.x), top: pt(it.y), width: pt(it.w), height: pt(it.h) });
-        el.appendChild(img);
+        root.appendChild(el);
       }
-      root.appendChild(el);
     }
     document.head.appendChild(style);
     document.body.appendChild(root);
     await Promise.all([...root.querySelectorAll('img')].map((img) => img.decode().catch(() => undefined)));
-    s.setStatus(`Printing ${sheets.length} sheet${sheets.length === 1 ? '' : 's'}`);
+    s.setStatus(`Printing ${allSheets.length} sheet${allSheets.length === 1 ? '' : 's'}${jobs.length > 1 ? ` from ${jobs.length} documents` : ''}`);
     window.addEventListener('afterprint', cleanup, { once: true });
     window.print();
   } finally {
-    src.destroy();
+    for (const src of sources) src.destroy();
     useApp.setState({ busy: false });
   }
 }
@@ -169,18 +228,22 @@ export function PrintDialog() {
 
 function PrintForm({ d }: { d: DocState }) {
   const [o, setO] = useState<PrintSettings>(loadSettings);
-  const [range, setRange] = useState<Range>('all');
+  const [range, setRange] = useState<Range>(() => usePrintDialog.getState().range ?? 'all');
   const [custom, setCustom] = useState(`1-${d.loaded.pages.length}`);
   const [sheet, setSheet] = useState(0);
+  const thumbSel = useThumbSel((x) => x.sel[d.id]);
+  const [all, setAll] = useState(() => batchHint.take());
+  const [unit, setUnit] = useState<'in' | 'mm'>(() => /^(en-US|en-CA)/.test(navigator.language) ? 'in' : 'mm');
   const set = (p: Partial<PrintSettings>) => { setO((x) => ({ ...x, ...p })); setSheet(0); };
   const close = () => usePrintDialog.setState({ open: false });
-  const pages = useMemo(() => pagesToPrint(d, range, custom), [d, range, custom]);
+  const pages = useMemo(() => pagesToPrint(d, range, custom), [d, range, custom, thumbSel]); // eslint-disable-line react-hooks/exhaustive-deps
   const sheets = useMemo(() => sheetsFor(d, pages, o), [d, pages, o]);
   const fixedPaper = o.paper !== 'auto';
   const ok = async () => {
     try { localStorage.setItem(LS, JSON.stringify(o)); } catch { /* storage unavailable */ }
     close();
-    try { await printSheets(d, sheets, o); } catch (e) { useApp.getState().setStatus(`Print failed: ${(e as Error).message}`); }
+    const jobs: PrintJob[] = targets(d, all).map((t) => ({ d: t, sheets: t === d ? sheets : sheetsFor(t, pagesToPrint(t, range === 'selected' ? 'all' : range, custom), o) }));
+    try { await printSheets(jobs, o); } catch (e) { useApp.getState().setStatus(`Print failed: ${(e as Error).message}`); }
   };
   return (
     <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>
@@ -188,7 +251,7 @@ function PrintForm({ d }: { d: DocState }) {
         <div className="modal-title">Print</div>
         <div className="print-body">
           <div className="print-preview">
-            <Preview d={d} sheet={sheets[Math.min(sheet, sheets.length - 1)]} />
+            <Preview d={d} sheet={sheets[Math.min(sheet, sheets.length - 1)]} margins={fixedPaper && (o.scaling === 'fitMargins' || o.scaling === 'reduceMargins') ? o.margins : undefined} />
             <div className="print-nav">
               <button aria-label="Previous sheet" disabled={sheet <= 0} onClick={() => setSheet(sheet - 1)}>‹</button>
               <span>{sheets.length ? `Sheet ${Math.min(sheet, sheets.length - 1) + 1} of ${sheets.length}` : 'No pages'}</span>
@@ -201,10 +264,15 @@ function PrintForm({ d }: { d: DocState }) {
               <select aria-label="Page range" value={range} onChange={(e) => { setRange(e.target.value as Range); setSheet(0); }}>
                 <option value="all">All Pages</option>
                 <option value="current">Current ({d.loaded.pages[d.page]?.label})</option>
+                <option value="selected" disabled={!selectedPages(d).length}>Selected ({selectedPages(d).length})</option>
                 <option value="custom">Custom</option>
+                <option value="even">Even Pages</option><option value="odd">Odd Pages</option>
+                <option value="landscape">Landscape Pages</option><option value="portrait">Portrait Pages</option>
+                <option value="first">First Page</option><option value="last">Last Page</option>
               </select>
               {range === 'custom' && <input aria-label="Custom pages" value={custom} onChange={(e) => { setCustom(e.target.value); setSheet(0); }} placeholder="1-3, 5, 9" style={{ width: 110 }} />}
             </div>
+            <FilesRow all={all} setAll={setAll} />
             <div className="form-row"><span>Print</span>
               <select aria-label="Print content" value={o.content} onChange={(e) => set({ content: e.target.value as Content })}>
                 <option value="both">Document &amp; Markups</option>
@@ -227,6 +295,8 @@ function PrintForm({ d }: { d: DocState }) {
                 <option value="none">None</option>
                 <option value="fit">Fit to Paper</option>
                 <option value="reduce">Reduce to Paper</option>
+                <option value="fitMargins">Fit to Margins</option>
+                <option value="reduceMargins">Reduce to Margins</option>
                 <option value="custom">Custom Scale</option>
               </select>
               {o.scaling === 'custom' && fixedPaper && <><input aria-label="Custom scale" type="number" min={1} max={1000} value={o.customScale} onChange={(e) => set({ customScale: Number(e.target.value) || 100 })} style={{ width: 64 }} />%</>}
@@ -236,6 +306,11 @@ function PrintForm({ d }: { d: DocState }) {
                 {[1, 2, 4, 6, 9, 16].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
               <label><input type="checkbox" disabled={!fixedPaper} checked={o.autoRotate} onChange={(e) => set({ autoRotate: e.target.checked })} /> Auto-rotate</label>
+              <label><input type="checkbox" disabled={!fixedPaper} checked={o.center} onChange={(e) => set({ center: e.target.checked })} /> Center</label>
+            </div>
+            <div className="form-row"><span>Margins</span>
+              <Margins value={o.margins} unit={unit} disabled={!fixedPaper} onChange={(margins) => set({ margins })} />
+              <select aria-label="Margin unit" value={unit} onChange={(e) => setUnit(e.target.value as 'in' | 'mm')}><option value="in">in</option><option value="mm">mm</option></select>
             </div>
             <div className="form-row"><span>Copies</span>
               <input aria-label="Copies" type="number" min={1} max={99} value={o.copies} onChange={(e) => set({ copies: Math.max(1, Math.min(99, Number(e.target.value) || 1)) })} style={{ width: 56 }} />
@@ -244,7 +319,16 @@ function PrintForm({ d }: { d: DocState }) {
             </div>
             <div className="form-row"><span>Options</span>
               <label><input type="checkbox" disabled={o.content !== 'both'} checked={o.dim} onChange={(e) => set({ dim: e.target.checked })} /> Dim Page Content</label>
+              <label><input type="checkbox" checked={o.spaces} onChange={(e) => set({ spaces: e.target.checked })} /> Print Spaces</label>
             </div>
+            {o.perSheet > 1 && fixedPaper && (
+              <div className="form-row"><span>Layout</span>
+                <select aria-label="Sheet order" value={o.sheetOrder ?? 'rows'} onChange={(e) => set({ sheetOrder: e.target.value as 'rows' | 'columns' })}>
+                  <option value="rows">Across, then down</option><option value="columns">Down, then across</option>
+                </select>
+                <label><input type="checkbox" checked={!!o.border} onChange={(e) => set({ border: e.target.checked })} /> Border around each page</label>
+              </div>
+            )}
             <div className="form-row"><span>Quality</span>
               <select aria-label="Print quality" value={o.dpi} onChange={(e) => set({ dpi: Number(e.target.value) })}>
                 <option value={150}>Standard (150 dpi)</option>
@@ -265,8 +349,24 @@ function PrintForm({ d }: { d: DocState }) {
   );
 }
 
+/** Top/right/bottom/left margin fields, shown in inches or millimetres, kept in points. */
+function Margins({ value, unit, disabled, onChange }: { value: [number, number, number, number]; unit: 'in' | 'mm'; disabled: boolean; onChange: (m: [number, number, number, number]) => void }) {
+  const k = unit === 'in' ? 72 : 72 / 25.4, step = unit === 'in' ? 0.05 : 1;
+  const names = ['Top', 'Right', 'Bottom', 'Left'];
+  return (
+    <span className="print-margins">
+      {value.map((v, i) => (
+        <input key={names[i]} aria-label={`${names[i]} margin`} title={names[i]} type="number" min={0} step={step} disabled={disabled}
+          value={Math.round((v / k) * 100) / 100}
+          onChange={(e) => { const m = [...value] as [number, number, number, number]; m[i] = Math.max(0, Number(e.target.value) || 0) * k; onChange(m); }}
+          style={{ width: 52 }} />
+      ))}
+    </span>
+  );
+}
+
 /** The sheet as it will print: paper, and each page's thumbnail in its place. */
-function Preview({ d, sheet }: { d: DocState; sheet?: Sheet }) {
+function Preview({ d, sheet, margins }: { d: DocState; sheet?: Sheet; margins?: [number, number, number, number] }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const c = ref.current;
@@ -291,8 +391,14 @@ function Preview({ d, sheet }: { d: DocState; sheet?: Sheet }) {
         ctx.strokeStyle = '#c00'; ctx.lineWidth = 1; ctx.strokeRect(it.x * k, it.y * k, it.w * k, it.h * k);
         ctx.restore();
       }
+      if (margins) {
+        const [mt, mr, mb, ml] = margins;
+        ctx.setLineDash([3, 3]); ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
+        ctx.strokeRect(ml * k, mt * k, (sheet.w - ml - mr) * k, (sheet.h - mt - mb) * k);
+        ctx.setLineDash([]);
+      }
     })();
     return () => { stop = true; };
-  }, [d, sheet]);
+  }, [d, sheet, margins]);
   return <canvas ref={ref} className="print-canvas" aria-label="Print preview" />;
 }

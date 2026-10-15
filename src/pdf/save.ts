@@ -1,16 +1,36 @@
 import { writeLayers, type LayerSet } from './layers';
 import { writeBookmarks, type Bookmark } from './bookmarks';
-import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTile, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type HatchDef } from '../model/lineStyles';
+import { captionAnchor, captionLeaderLine, captionText, displayText, LEADER_EXT, drawnLine, leaderLine } from '../model/measureDisplay';
+import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTileWH, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type HatchDef } from '../model/lineStyles';
 import { flattenPath, hasCurves, pdfPath, segments } from '../model/curves';
 import { hasSignatures, incrementalUpdate, loadForUpdate } from './incremental';
 import {
   PDFArray, PDFDict, PDFDocument, PDFHexString, PDFRef, PDFString, StandardFonts,
   type PDFFont, type PDFObject,
 } from 'pdf-lib';
-import type { CustomColumn, Cutout, Markup, Pt, Scale, Space, Viewport } from '../model/types';
+import type { CustomColumn, Cutout, Markup, MarkupStyle, Pt, Scale, Space, Viewport } from '../model/types';
 import { spaceTree, type SpaceNode } from '../model/spaces';
-import { LEGEND_HEADERS, legendLayout, legendRows, type LegendRow } from '../model/legend';
-import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
+import { cellAnchor, cellX, legendHeader, legendLayout, legendRows, type LegendRow } from '../model/legend';
+import { ROTATION_FIELD } from '../model/rotate';
+import { blendOf } from '../model/blend';
+import { arcPoints, arcThrough, bounds, cloudArcLength, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
+import { fitFontSize, quadding, shapeOutline, textStyleOf, toDS, toRC } from '../model/textStyle';
+import { countRadius, countStyleName, countSymbolPolygon, countSymbolStrokes } from '../model/count';
+import { calloutTips, endsOf, leName, lineEndShape, type EndShape } from '../model/lineEnds';
+
+/** Paint a line end: filled shapes in the line colour, open ones stroked. */
+function drawEnd(o: Ops, e: EndShape, rgb: string) {
+  if (e.fill) { o.add(`${rgb} rg`); o.poly(e.fill, true); o.add('B'); }
+  for (const s of e.strokes) { o.poly(s, false); o.add('S'); }
+  if (e.circle) { o.add(`${rgb} rg`); o.ellipse({ x: e.circle.c.x - e.circle.r, y: e.circle.c.y - e.circle.r }, { x: e.circle.c.x + e.circle.r, y: e.circle.c.y + e.circle.r }); o.add('B'); }
+}
+/** The Start and End of a line or polyline (PDF space). */
+function lineEnds(o: Ops, m: Markup, P: Pt[], rgb: string) {
+  if (P.length < 2) return;
+  const { start, end, size } = endsOf(m.type, m.style);
+  drawEnd(o, lineEndShape(start, P[1], P[0], size), rgb);
+  drawEnd(o, lineEndShape(end, P[P.length - 2], P[P.length - 1], size), rgb);
+}
 import { refKey, removeAnnots, type CTData, type PageInfo } from './document';
 import { COLUMNS_KEY, isRulerViewport } from './importAnnots';
 import { writeFields, type FieldValue } from './forms';
@@ -38,6 +58,8 @@ export function calloutAttach(tip: Pt, a: Pt, c: Pt): Pt {
 /** Collects content-stream operators and the bounding box of what is drawn. */
 class Ops {
   out: string[] = [];
+  /** Font resources used by the text (/Helv ... ). */
+  fonts = new Set<string>();
   minX = Infinity; minY = Infinity; maxX = -Infinity; maxY = -Infinity;
   add(s: string) { this.out.push(s); }
   grow(p: Pt, pad = 0) {
@@ -109,28 +131,87 @@ const at = (fr: Frame, u: number, v: number): Pt => ({ x: u * fr.right.x + v * f
 const proj = (fr: Frame, p: Pt) => ({ u: p.x * fr.right.x + p.y * fr.right.y, v: p.x * fr.up.x + p.y * fr.up.y });
 
 /** Draw text with its baseline origin at frame coordinates (u, v). */
-function textAt(o: Ops, font: PDFFont, s: string, size: number, u: number, v: number, rgb: string, fr: Frame = textFrame(0)) {
+function textAt(o: Ops, font: PDFFont, s: string, size: number, u: number, v: number, rgb: string, fr: Frame = textFrame(0), fname = 'Helv') {
   const t = safeText(font, s);
   const w = font.widthOfTextAtSize(t, size);
   for (const [du, dv] of [[0, -size * 0.25], [w, -size * 0.25], [0, size], [w, size]]) o.grow(at(fr, u + du, v + dv));
   const p = at(fr, u, v);
   const m = `${fr.right.x} ${fr.right.y} ${fr.up.x} ${fr.up.y} ${f(p.x)} ${f(p.y)}`;
-  o.add(`BT ${rgb} rg /Helv ${f(size)} Tf ${m} Tm ${font.encodeText(t).toString()} Tj ET`);
+  o.fonts.add(fname);
+  o.add(`BT ${rgb} rg /${fname} ${f(size)} Tf ${m} Tm ${font.encodeText(t).toString()} Tj ET`);
   return w;
 }
 
-/** Wrapped lines of text laid out from the top of box (a, c), in the page's reading direction. */
-function textInBox(o: Ops, font: PDFFont, text: string, size: number, a: Pt, c: Pt, rgb: string, fr: Frame, align: 'left' | 'center' = 'left') {
+/** The standard 14 fonts used for text boxes, by resource name. */
+export type FontSet = Record<string, PDFFont>;
+const FONT_NAMES: Record<string, StandardFonts> = {
+  Helv: StandardFonts.Helvetica, HeBo: StandardFonts.HelveticaBold, HeOb: StandardFonts.HelveticaOblique, HeBO: StandardFonts.HelveticaBoldOblique,
+  TiRo: StandardFonts.TimesRoman, TiBo: StandardFonts.TimesRomanBold, TiIt: StandardFonts.TimesRomanItalic, TiBI: StandardFonts.TimesRomanBoldItalic,
+  Cour: StandardFonts.Courier, CoBo: StandardFonts.CourierBold, CoOb: StandardFonts.CourierOblique, CoBO: StandardFonts.CourierBoldOblique,
+};
+/** Embed the standard fonts the text markups need (Helvetica is always there). */
+export async function embedTextFonts(doc: PDFDocument, helv: PDFFont, markups: Markup[] = []): Promise<FontSet> {
+  const out: FontSet = { Helv: helv };
+  const needed = new Set(markups.filter((m) => ['textbox', 'callout', 'typewriter', 'cloudplus'].includes(m.type)).map((m) => fontNameOf(m.style)));
+  // Legends: title and headers are bold by default; italic is an option.
+  for (const m of markups) if (m.type === 'legend' && m.legend) for (const fl of [m.legend.titleStyle ?? { bold: true }, m.legend.headerStyle ?? { bold: true }]) needed.add(fl.bold && fl.italic ? 'HeBO' : fl.bold ? 'HeBo' : fl.italic ? 'HeOb' : 'Helv');
+  for (const name of needed) if (name !== 'Helv' && FONT_NAMES[name]) out[name] = await doc.embedFont(FONT_NAMES[name]);
+  return out;
+}
+/** Resource name of the font a text style asks for. */
+export function fontNameOf(st: MarkupStyle): string {
+  const t = textStyleOf(st);
+  const fam = t.font === 'Times' ? 'Ti' : t.font === 'Courier' ? 'Co' : 'He';
+  if (fam === 'He') return t.bold && t.italic ? 'HeBO' : t.bold ? 'HeBo' : t.italic ? 'HeOb' : 'Helv';
+  if (fam === 'Ti') return t.bold && t.italic ? 'TiBI' : t.bold ? 'TiBo' : t.italic ? 'TiIt' : 'TiRo';
+  return t.bold && t.italic ? 'CoBO' : t.bold ? 'CoBo' : t.italic ? 'CoOb' : 'Cour';
+}
+
+/**
+ * The text of a text box laid out in box (a, c) with its formatting:
+ * font, alignment, vertical alignment, line spacing, margin, underline and
+ * strikethrough, text colour, auto size.
+ */
+function formattedText(o: Ops, fonts: FontSet, st: MarkupStyle, text: string, a: Pt, c: Pt, fr: Frame) {
+  const t = textStyleOf(st);
+  const fname = fontNameOf(st);
+  const font = fonts[fname] ?? fonts.Helv;
   const cs = [a, c].map((q) => proj(fr, q));
   const u0 = Math.min(cs[0].u, cs[1].u), u1 = Math.max(cs[0].u, cs[1].u);
   const v0 = Math.min(cs[0].v, cs[1].v), v1 = Math.max(cs[0].v, cs[1].v);
-  let v = v1 - size - 2;
-  for (const line of wrap(font, text, size, u1 - u0 - 6)) {
+  const boxW = u1 - u0, boxH = v1 - v0;
+  const width = (s: string, size: number) => font.widthOfTextAtSize(safeText(font, s), size);
+  const size = t.autoSize ? fitFontSize(text.split(/\r?\n/), boxW, boxH, t.lineHeight, t.margin, width) : st.fontSize;
+  const lines = wrap(font, text, size, boxW - 2 * t.margin);
+  const lh = size * t.lineHeight;
+  const total = lines.length * lh;
+  const rgb = hexToRgb(t.textColor).map(f).join(' ');
+  // First baseline: the top margin plus the ascent; middle/bottom move the block down.
+  const slack = Math.max(0, boxH - 2 * t.margin - total);
+  let v = v1 - t.margin - size * 0.9 - (t.valign === 'middle' ? slack / 2 : t.valign === 'bottom' ? slack : 0);
+  for (const line of lines) {
     if (v < v0 - size * 0.3) break;
-    const w = font.widthOfTextAtSize(safeText(font, line), size);
-    textAt(o, font, line, size, align === 'center' ? (u0 + u1 - w) / 2 : u0 + 3, v, rgb, fr);
-    v -= size * 1.2;
+    const w = width(line, size);
+    const u = t.align === 'center' ? (u0 + u1 - w) / 2 : t.align === 'right' ? u1 - t.margin - w : u0 + t.margin;
+    textAt(o, font, line, size, u, v, rgb, fr, fname);
+    if (t.underline || t.strike) {
+      const lw = Math.max(0.5, size * 0.06);
+      const draw = (dv: number) => { const p0 = at(fr, u, v + dv), p1 = at(fr, u + w, v + dv); o.add(`q ${rgb} RG ${f(lw)} w [] 0 d ${f(p0.x)} ${f(p0.y)} m ${f(p1.x)} ${f(p1.y)} l S Q`); };
+      if (t.underline) draw(-size * 0.15);
+      if (t.strike) draw(size * 0.3);
+    }
+    v -= lh;
   }
+}
+
+/** The box outline for a text box shape (PDF space): a polygon, or null for rectangle/circle. */
+function boxShape(o: Ops, st: MarkupStyle, x0: number, y0: number, x1: number, y1: number, paint: string) {
+  const shape = st.shape ?? 'rectangle';
+  if (shape === 'circle') { o.ellipse({ x: x0, y: y0 }, { x: x1, y: y1 }); o.add(paint); return; }
+  const poly = shapeOutline(shape, { minX: x0, minY: y1, maxX: x1, maxY: y0 }); // page space has y down: swap
+  if (poly) { o.poly(poly, true); o.add(paint); return; }
+  o.poly([{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], true);
+  o.add(paint);
 }
 
 /** A path with curved segments (m, l, c; closed with h). */
@@ -153,7 +234,7 @@ function pdfHandles(m: Markup, page: PageInfo): Markup['handles'] {
   });
 }
 
-function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], rot = 0, rows: LegendRow[] = []) {
+function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], rot = 0, rows: LegendRow[] = [], fonts: FontSet = { Helv: font }, columns?: CustomColumn[]) {
   const fr = textFrame(rot);
   const o = new Ops();
   const st = m.style;
@@ -186,12 +267,18 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
   switch (m.type) {
     case 'dimension': {
       const size = Math.max(7, st.width * 5);
-      o.moveTo(P[0]); o.lineTo(P[1]); o.add('S');
-      arrowHead(o, P[1], P[0], size); arrowHead(o, P[0], P[1], size);
-      const ang = Math.atan2(P[1].y - P[0].y, P[1].x - P[0].x) + Math.PI / 2;
-      for (const p of [P[0], P[1]]) {
-        o.moveTo({ x: p.x + Math.cos(ang) * 8, y: p.y + Math.sin(ang) * 8 });
-        o.lineTo({ x: p.x - Math.cos(ang) * 8, y: p.y - Math.sin(ang) * 8 }); o.add('S');
+      const L = drawnLine(m, P, true);
+      o.moveTo(L[0]); o.lineTo(L[1]); o.add('S');
+      arrowHead(o, L[1], L[0], size); arrowHead(o, L[0], L[1], size);
+      if (m.leader) {
+        const l = leaderLine(P, m.leader, true);
+        o.moveTo(P[0]); o.lineTo(l.ea); o.add('S'); o.moveTo(P[1]); o.lineTo(l.eb); o.add('S');
+      } else {
+        const ang = Math.atan2(P[1].y - P[0].y, P[1].x - P[0].x) + Math.PI / 2;
+        for (const p of [P[0], P[1]]) {
+          o.moveTo({ x: p.x + Math.cos(ang) * 8, y: p.y + Math.sin(ang) * 8 });
+          o.lineTo({ x: p.x - Math.cos(ang) * 8, y: p.y - Math.sin(ang) * 8 }); o.add('S');
+        }
       }
       break;
     }
@@ -200,11 +287,11 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
       break;
     case 'typewriter':
       o.grow(P[0]); o.grow(P[1]);
-      textInBox(o, font, m.text ?? '', st.fontSize, P[0], P[1], rgb, fr);
+      formattedText(o, fonts, st, m.text ?? '', P[0], P[1], fr);
       break;
     case 'cloudplus': {
       const cloud = rectCorners(P[0], P[1]);
-      const segs = cloudSegments(cloud, Math.max(14, st.width * 8));
+      const segs = cloudSegments(cloud, cloudArcLength(st.width, st.cloudSize), st.cloudInvert);
       segs.forEach(([p0, c1, c2, p1], i) => { if (!i) o.moveTo(p0); o.curveTo(c1, c2, p1); });
       o.add('h S');
       if (P.length >= 4) {
@@ -213,7 +300,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
         const from = { x: Math.max(cb.minX, Math.min(cb.maxX, target.x)), y: Math.max(cb.minY, Math.min(cb.maxY, target.y)) };
         o.moveTo(from); o.lineTo(calloutAttach(from, P[2], P[3])); o.add('S');
         o.poly(rectCorners(P[2], P[3]), true); o.add(paint);
-        textInBox(o, font, m.text ?? '', st.fontSize, P[2], P[3], rgb, fr);
+        formattedText(o, fonts, st, m.text ?? '', P[2], P[3], fr);
       }
       break;
     }
@@ -237,7 +324,16 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
     }
     case 'stamp': {
       const b = bounds(P);
-      o.poly(rectCorners({ x: b.minX, y: b.minY }, { x: b.maxX, y: b.maxY }), true); o.add('S');
+      if (m.stampBorder === 'rounded') {
+        const r = Math.min(6, b.w / 4, b.h / 4), k = 0.5523;
+        o.moveTo({ x: b.minX + r, y: b.minY });
+        o.lineTo({ x: b.maxX - r, y: b.minY }); o.curveTo({ x: b.maxX - r + r * k, y: b.minY }, { x: b.maxX, y: b.minY + r - r * k }, { x: b.maxX, y: b.minY + r });
+        o.lineTo({ x: b.maxX, y: b.maxY - r }); o.curveTo({ x: b.maxX, y: b.maxY - r + r * k }, { x: b.maxX - r + r * k, y: b.maxY }, { x: b.maxX - r, y: b.maxY });
+        o.lineTo({ x: b.minX + r, y: b.maxY }); o.curveTo({ x: b.minX + r - r * k, y: b.maxY }, { x: b.minX, y: b.maxY - r + r * k }, { x: b.minX, y: b.maxY - r });
+        o.lineTo({ x: b.minX, y: b.minY + r }); o.curveTo({ x: b.minX, y: b.minY + r - r * k }, { x: b.minX + r - r * k, y: b.minY }, { x: b.minX + r, y: b.minY });
+        o.add('h S');
+      } else if (m.stampBorder !== 'none') { o.poly(rectCorners({ x: b.minX, y: b.minY }, { x: b.maxX, y: b.maxY }), true); o.add('S'); }
+      else { o.grow({ x: b.minX, y: b.minY }); o.grow({ x: b.maxX, y: b.maxY }); }
       const text = m.text ?? '';
       const size = Math.min(b.h * 0.42, (b.w * 1.6) / Math.max(4, text.length));
       const c = { x: b.minX + b.w / 2, y: b.minY + b.h / 2 };
@@ -253,28 +349,40 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
     case 'legend': {
       if (!m.legend) break;
       // The table, drawn in the page's reading direction from the top-left corner.
-      const L = legendLayout(m.legend, rows, st.fontSize);
+      const L = legendLayout(m.legend, rows, st.fontSize, columns);
+      const z = L.sizes;
       const cs = P.map((q) => proj(fr, q));
       const u0 = Math.min(...cs.map((c) => c.u)), v0 = Math.max(...cs.map((c) => c.v));
       const pt = (u: number, v: number) => at(fr, u0 + u, v0 - v);
       const box = [pt(0, 0), pt(L.w, 0), pt(L.w, L.h), pt(0, L.h)];
+      const lw = st.width > 0 ? Math.min(st.width, 4) : 0;
       o.add(`${fillRgb ?? '1 1 1'} rg`); o.poly(box, true); o.add('f');
-      o.add(`${rgb} RG 0.8 w`); o.poly(box, true); o.add('S');
-      o.add('0.4 w');
-      for (let k = 0; k <= rows.length; k++) { o.moveTo(pt(0, L.title + L.row * k)); o.lineTo(pt(L.w, L.title + L.row * k)); o.add('S'); }
+      if (lw) { o.add(`${rgb} RG ${f(lw)} w`); o.poly(box, true); o.add('S'); }
+      if (lw) {
+        o.add(`${f(lw * 0.5)} w`);
+        const ys = [...(z.showTitle ? [L.title] : []), ...(z.showHeaders ? [L.title + L.header] : [])];
+        for (let k = 1; k < rows.length; k++) ys.push(L.title + L.header + L.row * k);
+        for (const y of ys) { o.moveTo(pt(0, y)); o.lineTo(pt(L.w, y)); o.add('S'); }
+      }
       const fs = st.fontSize;
-      const put = (t: string, u: number, v: number, align: 'start' | 'end' | 'middle') => {
+      const textRgb = m.legend.textColor ? hexToRgb(m.legend.textColor).map(f).join(' ') : rgb;
+      const put = (t: string, u: number, v: number, align: 'start' | 'end' | 'middle', size = fs, flags?: { bold?: boolean; italic?: boolean }) => {
         const s2 = safeText(font, t);
-        const w = font.widthOfTextAtSize(s2, fs);
+        const want = flags?.bold && flags?.italic ? 'HeBO' : flags?.bold ? 'HeBo' : flags?.italic ? 'HeOb' : 'Helv';
+        const fname = fonts[want] ? want : 'Helv';
+        const fnt = fonts[fname] ?? font;
+        const w = fnt.widthOfTextAtSize(s2, size);
         const du = align === 'end' ? -w : align === 'middle' ? -w / 2 : 0;
-        textAt(o, font, s2, fs, u0 + u + du, v0 - v - fs * 0.35, rgb, fr);
+        textAt(o, fnt, s2, size, u0 + u + du, v0 - v - size * 0.35, textRgb, fr, fname);
       };
-      put(m.legend.title, L.w / 2, L.title / 2, 'middle');
+      if (z.showTitle) put(m.legend.title, L.w / 2, L.title / 2, 'middle', z.title, m.legend.titleStyle ?? { bold: true });
       let cx = 0;
       L.cols.forEach((c) => {
-        if (c.id !== 'symbol') put(LEGEND_HEADERS[c.id], c.id === 'description' ? cx + 5 : cx + c.w - 5, L.title + L.row / 2, c.id === 'description' ? 'start' : 'end');
+        const a = cellAnchor(c.id, z.align, columns);
+        const tx = cellX(a, cx, c.w, z.margin);
+        if (c.id !== 'symbol' && z.showHeaders) put(legendHeader(c.id, columns), tx, L.title + L.header / 2, a, z.header, m.legend!.headerStyle ?? { bold: true });
         rows.forEach((r, k) => {
-          const cy = L.title + L.row * (k + 1.5);
+          const cy = L.title + L.header + L.row * (k + 0.5);
           if (c.id === 'symbol') {
             const [rr, gg, bb] = hexToRgb(r.style.color).map(f);
             const fillC = (r.style.fill ? hexToRgb(r.style.fill) : hexToRgb(r.style.color)).map(f).join(' ');
@@ -284,8 +392,10 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
               o.add(r.style.fill || r.type === 'count' ? 'B' : 'S');
             } else { o.moveTo(pt(cx + c.w * 0.1, cy)); o.lineTo(pt(cx + c.w * 0.9, cy)); o.add('S'); }
             o.add('Q');
-          } else if (c.id === 'description') put(r.description, cx + 5, cy, 'start');
-          else put(c.id === 'quantity' ? String(r.quantity) : r.measurement, cx + c.w - 5, cy, 'end');
+          } else {
+            const v = c.id === 'description' ? r.description : c.id === 'quantity' ? String(r.quantity) : c.id === 'measurement' ? r.measurement : r.cells[c.id] ?? '';
+            put(v, tx, cy, a);
+          }
         });
         cx += c.w;
       });
@@ -303,6 +413,12 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
     case 'redaction':
       for (const [a, c] of rectPairs(P)) { o.poly(rectCorners(a, c), true); o.add(fillRgb && st.width > 0 ? 'B' : fillRgb ? 'f' : 'S'); }
       break;
+    case 'caret': {
+      const r = bounds(P);
+      o.poly([{ x: r.minX, y: r.minY }, { x: r.minX + r.w / 2, y: r.maxY }, { x: r.maxX, y: r.minY }], false);
+      o.add('S');
+      break;
+    }
     case 'strikeout': case 'underline': case 'squiggly':
       for (const [a, c] of rectPairs(P)) {
         const r = bounds([a, c]);
@@ -317,10 +433,15 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
         o.add('S');
       }
       break;
-    case 'line': case 'arrow': case 'length':
-      o.moveTo(P[0]); o.lineTo(P[1]); o.add(lineOp);
-      if (m.type === 'arrow') arrowHead(o, P[0], P[1], Math.max(8, st.width * 5));
-      if (m.type === 'length') {
+    case 'line': case 'arrow': case 'length': {
+      const L = drawnLine(m, P, true);
+      o.moveTo(L[0]); o.lineTo(L[1]); o.add(lineOp);
+      if (m.type === 'arrow' || m.type === 'line') lineEnds(o, m, P, rgb);
+      if (m.type === 'length' && m.leader) {
+        // leader lines from the measured points past the line (PDF /LL, /LLE)
+        const l = leaderLine(P, m.leader, true);
+        o.moveTo(P[0]); o.lineTo(l.ea); o.add('S'); o.moveTo(P[1]); o.lineTo(l.eb); o.add('S');
+      } else if (m.type === 'length') {
         // end ticks
         const ang = Math.atan2(P[1].y - P[0].y, P[1].x - P[0].x) + Math.PI / 2;
         for (const p of P) {
@@ -330,9 +451,11 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
         }
       }
       break;
+    }
     case 'polyline': case 'polylength': case 'perimeter': case 'pen': case 'angle':
       if (hasCurves(m.handles)) curvedPath(o, P, m.handles, false); else o.poly(P, false);
       o.add(m.type === 'angle' ? 'S' : lineOp);
+      if (m.type === 'polyline' || m.type === 'polylength') lineEnds(o, m, P, rgb);
       break;
     case 'radius':
       if (P.length > 2) {
@@ -359,7 +482,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
       } else o.add(paint);
       break;
     case 'cloud': {
-      const segs = cloudSegments(P, Math.max(14, st.width * 8));
+      const segs = cloudSegments(P, cloudArcLength(st.width, st.cloudSize), st.cloudInvert);
       segs.forEach(([p0, c1, c2, p1], i) => { if (!i) o.moveTo(p0); o.curveTo(c1, c2, p1); });
       o.add('h ' + paint);
       break;
@@ -393,24 +516,14 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
       const x0 = Math.min(a.x, c.x), x1 = Math.max(a.x, c.x);
       const y0 = Math.min(a.y, c.y), y1 = Math.max(a.y, c.y);
       if (m.type === 'callout') {
-        const tip = P[0];
-        const attach = calloutAttach(tip, a, c);
-        o.moveTo(tip); o.lineTo(attach); o.add('S');
-        arrowHead(o, attach, tip, Math.max(8, st.width * 5));
+        for (const tip of calloutTips(P)) {
+          const attach = calloutAttach(tip, a, c);
+          o.moveTo(tip); o.lineTo(attach); o.add('S');
+          drawEnd(o, lineEndShape(endsOf(m.type, st).end, attach, tip, endsOf(m.type, st).size), rgb);
+        }
       }
-      o.poly([{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], true);
-      o.add(paint);
-      // Lay the text out in the page's reading direction (rotated pages).
-      const cs = [{ x: x0, y: y0 }, { x: x1, y: y1 }].map((q) => proj(fr, q));
-      const u0 = Math.min(cs[0].u, cs[1].u), u1 = Math.max(cs[0].u, cs[1].u);
-      const v0 = Math.min(cs[0].v, cs[1].v), v1 = Math.max(cs[0].v, cs[1].v);
-      const size = st.fontSize;
-      let v = v1 - size - 2;
-      for (const line of wrap(font, m.text ?? '', size, u1 - u0 - 6)) {
-        if (v < v0) break;
-        textAt(o, font, line, size, u0 + 3, v, rgb, fr);
-        v -= size * 1.2;
-      }
+      boxShape(o, st, x0, y0, x1, y1, paint);
+      formattedText(o, fonts, st, m.text ?? '', { x: x0, y: y0 }, { x: x1, y: y1 }, fr);
       break;
     }
   }
@@ -443,19 +556,42 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
   }
 
   if (meas && m.type !== 'count') {
-    const pos = m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter' || m.type === 'dimension'
-      ? { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 }
-      : m.type === 'angle' ? P[1]
-        : centroid(P);
+    // PDF space has y up: the page-space anchor's lift/offset flips in y.
+    const anchor = captionAnchor(m.type, drawnLine(m, P, true).map((p) => ({ x: p.x, y: -p.y })));
+    const off = m.display?.captionOffset;
+    const pos = { x: anchor.x + (off?.x ?? 0), y: -anchor.y - (off?.y ?? 0) };
     const size = st.fontSize;
-    const t = safeText(font, meas.text);
+    const t = safeText(font, captionText(m, meas) ?? '');
     const w = font.widthOfTextAtSize(t, size);
-    const q = proj(fr, pos);
-    const lift = m.type === 'angle' ? 8 : m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter' || m.type === 'dimension' ? 3 : 0;
-    textAt(o, font, t, size, q.u - w / 2 + (m.type === 'angle' ? 8 + w / 2 : 0), q.v + lift, rgb, fr);
+    const deg = m.display?.captionAngle ?? 0;
+    const a = (deg * Math.PI) / 180, cs = Math.cos(a), sn = Math.sin(a);
+    const rot = (v: Pt): Pt => ({ x: v.x * cs - v.y * sn, y: v.x * sn + v.y * cs });
+    const cfr = deg ? { right: rot(fr.right), up: rot(fr.up) } : fr;
+    const q = proj(cfr, pos);
+    textAt(o, font, t, size, q.u - w / 2, q.v - size * 0.35, rgb, cfr);
+    // A moved Length caption keeps a leader line to the middle of its line (Revu).
+    if (captionLeaderLine(m, P)) {
+      const L = drawnLine(m, P, true);
+      o.add(`q ${f(Math.min(st.width || 1, 1))} w`);
+      o.moveTo({ x: (L[0].x + L[1].x) / 2, y: (L[0].y + L[1].y) / 2 });
+      o.lineTo(pos);
+      o.add('S Q');
+    }
   }
   o.add('Q');
-  return { ops: o.out.join('\n'), bbox: [o.minX - pad - 2, o.minY - pad - 2, o.maxX + pad + 2, o.maxY + pad + 2], hatch: hatchArea ? st.hatch : undefined };
+  let ops = o.out.join('\n');
+  let bbox = [o.minX - pad - 2, o.minY - pad - 2, o.maxX + pad + 2, o.maxY + pad + 2];
+  if (m.rotation && ROTATION_FIELD.has(m.type)) {
+    // A turned box shape: the drawing is rotated about its centre (counter-clockwise, PDF space).
+    const b = bounds(P);
+    const cx = b.minX + b.w / 2, cy = b.minY + b.h / 2;
+    const a = (m.rotation * Math.PI) / 180, cs = Math.cos(a), sn = Math.sin(a);
+    ops = `q ${f(cs)} ${f(sn)} ${f(-sn)} ${f(cs)} ${f(cx - cx * cs + cy * sn)} ${f(cy - cx * sn - cy * cs)} cm\n${ops}\nQ`;
+    const corners = [[bbox[0], bbox[1]], [bbox[2], bbox[1]], [bbox[2], bbox[3]], [bbox[0], bbox[3]]].map(([x, y]) => ({ x: cx + (x - cx) * cs - (y - cy) * sn, y: cy + (x - cx) * sn + (y - cy) * cs }));
+    const rb = bounds(corners);
+    bbox = [rb.minX, rb.minY, rb.maxX, rb.maxY];
+  }
+  return { fontsUsed: o.fonts, ops, bbox, hatch: hatchArea ? st.hatch : undefined };
 }
 
 const SUBTYPE: Record<Markup['type'], string> = {
@@ -466,7 +602,7 @@ const SUBTYPE: Record<Markup['type'], string> = {
   textbox: 'FreeText', callout: 'FreeText', note: 'Text',
   angle: 'PolyLine', radius: 'Polygon', diameter: 'Circle',
   dimension: 'Line', typewriter: 'FreeText', cloudplus: 'Polygon', arc: 'PolyLine', flag: 'Text', stamp: 'Stamp',
-  strikeout: 'StrikeOut', underline: 'Underline', squiggly: 'Squiggly', image: 'Stamp', link: 'Link', attachment: 'FileAttachment',
+  strikeout: 'StrikeOut', underline: 'Underline', squiggly: 'Squiggly', caret: 'Caret', image: 'Stamp', link: 'Link', attachment: 'FileAttachment',
   legend: 'Stamp', redaction: 'Redact',
 };
 
@@ -490,17 +626,25 @@ function ctData(m: Markup, P: Pt[]): CTData {
     statusModel: m.statusModel, statusBy: m.statusBy, statusDate: m.statusDate,
     depth: m.depth, fillOpacity: m.style.fillOpacity, lineStyle: m.style.lineStyle,
     seq: m.seq,
+    display: m.display,
+    capture: m.capture?.length ? m.capture : undefined,
+    valign: m.style.valign, margin: m.style.margin, autoSize: m.style.autoSize || undefined, shape: m.style.shape,
+    countSymbol: m.style.countSymbol, countScale: m.style.countScale,
+    cloudSize: m.style.cloudSize, cloudInvert: m.style.cloudInvert || undefined,
     lineDef: m.style.lineDef, hatch: m.style.hatch, hatchScale: m.style.hatch ? m.style.hatchScale : undefined,
-    points: m.type === 'count' || m.type === 'arc' || m.type === 'cloudplus' ? P.flatMap((p) => [p.x, p.y]) : undefined,
+    points: m.type === 'count' || m.type === 'arc' || m.type === 'cloudplus' || (m.type === 'callout' && P.length > 3) ? P.flatMap((p) => [p.x, p.y]) : undefined,
     comment: measure(m) || m.type === 'cloudplus' || m.type === 'stamp' ? m.comment || undefined : undefined,
     text: m.type === 'stamp' || m.type === 'cloudplus' ? m.text : undefined,
     subtitle: m.type === 'stamp' ? m.subtitle : undefined,
+    stampBorder: m.type === 'stamp' ? m.stampBorder : undefined,
     groupId: m.groupId,
     slope: m.slope,
     rise: m.rise,
     custom: m.custom && Object.keys(m.custom).length ? m.custom : undefined,
     legend: m.legend,
     checked: m.checked || undefined,
+    rotation: m.rotation || undefined,
+    imageSource: m.imageSource, mask: m.mask, imageEncoding: m.imageEncoding,
     handles: hasCurves(m.handles) ? m.handles!.map((h) => (h ? [h.in.x, h.in.y, h.out.x, h.out.y] : null)) : undefined,
   };
 }
@@ -513,16 +657,24 @@ function buildCount(doc: PDFDocument, m: Markup, page: PageInfo): PDFRef[] {
   const ctx = doc.context;
   const P = toPdf(m, page);
   const st = m.style;
-  const r = 6;
+  const sym = st.countSymbol ?? 'circle';
+  const r = countRadius(st.countScale) * 1.2;
   const refs: PDFRef[] = [];
   P.forEach((p, i) => {
     const o = new Ops();
     o.add('q /GS0 gs');
-    o.add(`${hexToRgb(st.fill ?? st.color).map(f).join(' ')} rg ${hexToRgb(st.color).map(f).join(' ')} RG 0.75 w`);
-    o.ellipse({ x: p.x - r, y: p.y - r }, { x: p.x + r, y: p.y + r });
-    o.add('B Q');
-    const bbox = [p.x - r - 1, p.y - r - 1, p.x + r + 1, p.y + r + 1];
-    const gs = ctx.obj({ CA: st.opacity, ca: st.fillOpacity });
+    o.add(`${hexToRgb(st.fill ?? st.color).map(f).join(' ')} rg ${hexToRgb(st.color).map(f).join(' ')} RG 0.75 w 1 J`);
+    // PDF space has y up: the polygon helpers draw in page space, so flip their y about the point.
+    const flip = (q: Pt): Pt => ({ x: q.x, y: 2 * p.y - q.y });
+    const poly = countSymbolPolygon(sym, p, r);
+    const strokes = countSymbolStrokes(sym, p, r);
+    if (poly) { o.poly(poly.map(flip), true); o.add('B'); }
+    else if (strokes.length) { o.add(`${f(Math.max(1.5, r * 0.35))} w`); for (const [a, b] of strokes) { o.moveTo(flip(a)); o.lineTo(flip(b)); } o.add('S'); }
+    else o.ellipse({ x: p.x - r, y: p.y - r }, { x: p.x + r, y: p.y + r }), o.add('B');
+    o.add('Q');
+    const pad = r * 1.3;
+    const bbox = [p.x - pad - 1, p.y - pad - 1, p.x + pad + 1, p.y + pad + 1];
+    const gs = ctx.obj({ CA: st.opacity, ca: st.fillOpacity, ...(blendOf(m) !== 'Normal' ? { BM: blendOf(m) } : {}) });
     const ap = ctx.stream(o.out.join('\n'), { Type: 'XObject', Subtype: 'Form', BBox: bbox, Resources: { ExtGState: { GS0: gs } } });
     const verts: number[] = [];
     for (let k = 0; k < 24; k++) {
@@ -537,7 +689,7 @@ function buildCount(doc: PDFDocument, m: Markup, page: PageInfo): PDFRef[] {
       Contents: PDFHexString.fromText(m.label ? `${m.label}\r${P.length}` : String(P.length)),
       M: PDFString.of(pdfDate(new Date(m.modified))), CreationDate: PDFString.of(pdfDate(new Date(m.created))),
       F: 4, C: hexToRgb(st.color), IC: hexToRgb(st.fill ?? st.color), CA: st.opacity,
-      BS: { Type: 'Border', W: 0, S: 'S' }, CountStyle: 'Circle', NumCounts: P.length, MeasurementTypes: 128,
+      BS: { Type: 'Border', W: 0, S: 'S' }, CountStyle: countStyleName(sym), NumCounts: P.length, MeasurementTypes: 128,
       AP: { N: ctx.register(ap) },
     };
     if (m.scale) entries.BBMeasure = writeMeasure(doc, m.scale);
@@ -550,17 +702,17 @@ function buildCount(doc: PDFDocument, m: Markup, page: PageInfo): PDFRef[] {
 
 /** A hatch as a PDF tiling pattern (tile drawn y-up, so it matches the screen). */
 function hatchPattern(doc: PDFDocument, h: HatchDef, scale: number | undefined, color: string): PDFRef {
-  const t = hatchTile(h, scale);
+  const [t, th] = hatchTileWH(h, scale);
   const rgb = hexToRgb(color).map(f).join(' ');
   const ops = [`${rgb} RG ${rgb} rg ${f(hatchLineWidth(t))} w 2 J`];
-  for (const [x1, y1, x2, y2] of h.lines) ops.push(`${f(x1 * t)} ${f((1 - y1) * t)} m ${f(x2 * t)} ${f((1 - y2) * t)} l S`);
+  for (const [x1, y1, x2, y2] of h.lines) ops.push(`${f(x1 * t)} ${f((1 - y1) * th)} m ${f(x2 * t)} ${f((1 - y2) * th)} l S`);
   for (const [x, y, r0] of h.dots) {
-    const r = Math.max(0.3, r0 * t), cx = x * t, cy = (1 - y) * t, k = r * 0.5523;
+    const r = Math.max(0.3, r0 * t), cx = x * t, cy = (1 - y) * th, k = r * 0.5523;
     ops.push(`${f(cx + r)} ${f(cy)} m ${f(cx + r)} ${f(cy + k)} ${f(cx + k)} ${f(cy + r)} ${f(cx)} ${f(cy + r)} c ${f(cx - k)} ${f(cy + r)} ${f(cx - r)} ${f(cy + k)} ${f(cx - r)} ${f(cy)} c `
       + `${f(cx - r)} ${f(cy - k)} ${f(cx - k)} ${f(cy - r)} ${f(cx)} ${f(cy - r)} c ${f(cx + k)} ${f(cy - r)} ${f(cx + r)} ${f(cy - k)} ${f(cx + r)} ${f(cy)} c f`);
   }
   return doc.context.register(doc.context.stream(ops.join('\n'), {
-    Type: 'Pattern', PatternType: 1, PaintType: 1, TilingType: 1, BBox: [0, 0, t, t], XStep: t, YStep: t, Resources: {},
+    Type: 'Pattern', PatternType: 1, PaintType: 1, TilingType: 1, BBox: [0, 0, t, th], XStep: t, YStep: th, Resources: {},
   }));
 }
 
@@ -574,7 +726,7 @@ function quads(P: Pt[]): number[] {
 
 const base64ToBytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
 
-function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, image?: PDFRef, pageRefs: PDFRef[] = [], rows: LegendRow[] = []): PDFRef[] {
+function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, image?: PDFRef, pageRefs: PDFRef[] = [], rows: LegendRow[] = [], fonts: FontSet = { Helv: font }, columns?: CustomColumn[]): PDFRef[] {
   if (m.type === 'count') return buildCount(doc, m, page);
   const ctx = doc.context;
   const P = toPdf(m, page);
@@ -582,18 +734,18 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
   if (handles) m = { ...m, handles };
   const ct = ctData(m, P);
   const cutouts = m.cutouts?.map((c) => ({ ...c, points: c.points.map((q) => toPdfPt(q, page)), handles: hasCurves(c.handles) ? pdfHandles({ ...m, points: c.points, handles: c.handles }, page) : undefined }));
-  const { ops, bbox, hatch } = buildAppearance(m, P, font, cutouts, (page.viewport as { rotation?: number }).rotation ?? 0, rows);
+  const { ops, bbox, hatch, fontsUsed } = buildAppearance(m, P, font, cutouts, (page.viewport as { rotation?: number }).rotation ?? 0, rows, fonts, columns);
   if (cutouts?.length) ct.cutouts = cutouts.map((c) => ({ kind: c.kind, points: c.points.flatMap((q) => [q.x, q.y]), handles: c.handles?.map((h) => (h ? [h.in.x, h.in.y, h.out.x, h.out.y] : null)) }));
   const st = m.style;
   const gs = ctx.obj({
     CA: st.opacity,
     ca: m.type === 'textbox' || m.type === 'callout' || m.type === 'note' ? st.opacity : st.fillOpacity,
-    ...(m.type === 'highlight' ? { BM: 'Multiply' } : {}),
+    ...(blendOf(m) !== 'Normal' ? { BM: blendOf(m) } : {}),
   });
   const ap = ctx.stream(ops, {
     Type: 'XObject', Subtype: 'Form', BBox: bbox,
     Resources: {
-      Font: { Helv: font.ref }, ExtGState: { GS0: gs }, ...(image ? { XObject: { Im0: image } } : {}),
+      Font: { Helv: font.ref, ...Object.fromEntries([...fontsUsed].filter((n) => n !== 'Helv' && fonts[n]).map((n) => [n, fonts[n].ref])) }, ExtGState: { GS0: gs }, ...(image ? { XObject: { Im0: image } } : {}),
       ...(hatch ? { Pattern: { HP0: hatchPattern(doc, hatch, m.style.hatchScale, m.style.fill ?? m.style.color) } } : {}),
     },
   });
@@ -608,12 +760,12 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
     T: PDFHexString.fromText(m.author),
     Subj: PDFHexString.fromText(m.subject),
     // Like Revu, a measurement's /Contents is its displayed value.
-    Contents: PDFHexString.fromText(m.type === 'textbox' || m.type === 'callout' || m.type === 'typewriter' || m.type === 'cloudplus' ? m.text ?? '' : meas ? meas.text : m.comment),
+    Contents: PDFHexString.fromText(m.type === 'textbox' || m.type === 'callout' || m.type === 'typewriter' || m.type === 'cloudplus' ? m.text ?? '' : meas ? displayText(m, meas) : m.comment),
     Label: PDFHexString.fromText(m.label),
     FillOpacity: st.fillOpacity,
     M: PDFString.of(now),
     CreationDate: PDFString.of(pdfDate(new Date(m.created))),
-    F: m.locked ? 4 | 128 : 4, // print (+ locked)
+    F: 4 | (m.locked ? 128 : 0) | (m.hidden ? 2 : 0), // print (+ locked, hidden)
     C: hexToRgb(st.color),
     CA: st.opacity,
     BS: { Type: 'Border', W: st.width, ...(lineDash(lineStyleOf(st), st.width) ? { S: 'D', D: lineDash(lineStyleOf(st), st.width) } : { S: 'S' }) },
@@ -625,7 +777,8 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
   switch (SUBTYPE[m.type]) {
     case 'Line':
       entries.L = flat(P);
-      entries.LE = m.type === 'dimension' ? [N('OpenArrow'), N('OpenArrow')] : [N('None'), N(m.type === 'arrow' ? 'OpenArrow' : 'None')];
+      if ((m.type === 'length' || m.type === 'dimension') && m.leader) { entries.LL = m.leader; entries.LLE = LEADER_EXT; }
+      entries.LE = m.type === 'dimension' ? [N('OpenArrow'), N('OpenArrow')] : [N(leName(endsOf(m.type, st).start)), N(leName(endsOf(m.type, st).end))];
       break;
     case 'PolyLine':
       // An arc is written as its curve; the three picked points stay in CTData.
@@ -637,7 +790,7 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
       // Revu writes a radius as [arc start, center, arc end]; a full circle ends at its start.
       entries.Vertices = flat(m.type === 'radius' ? [P[1], P[0], P[2] ?? P[1]] : m.type === 'cloudplus' ? rectCorners(P[0], P[1]) : flattenPath(P, m.handles, true, 16));
       if (hasCurves(m.handles)) entries.Path = pdfPath(P, m.handles, true, (p) => [p.x, p.y]);
-      if (m.type === 'cloud' || m.type === 'cloudplus') entries.BE = { S: 'C', I: 1 };
+      if (m.type === 'cloud' || m.type === 'cloudplus') entries.BE = { S: 'C', I: st.cloudSize ?? 1 };
       break;
     case 'StrikeOut': case 'Underline': case 'Squiggly':
       entries.QuadPoints = quads(P);
@@ -676,12 +829,16 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
       entries.C = hexToRgb(st.fill ?? st.color);
       break;
     case 'FreeText': {
-      const [r, g, b] = hexToRgb(st.color);
-      entries.DA = PDFString.of(`${f(r)} ${f(g)} ${f(b)} rg /Helv ${f(st.fontSize)} Tf`);
+      const [r, g, b] = hexToRgb(st.textColor ?? st.color);
+      entries.DA = PDFString.of(`${f(r)} ${f(g)} ${f(b)} rg /${fontNameOf(st)} ${f(st.fontSize)} Tf`);
+      // Text style as Revu writes it: /DS (CSS-like), /RC (XHTML), /Q (alignment).
+      entries.DS = PDFString.of(toDS(st));
+      entries.RC = PDFHexString.fromText(toRC(m.text ?? '', st));
+      entries.Q = quadding(st.align ?? 'left');
       if (m.type === 'callout') {
         entries.IT = 'FreeTextCallout';
         entries.CL = flat([P[0], calloutAttach(P[0], P[1], P[2])]);
-        entries.LE = N('OpenArrow');
+        entries.LE = N(leName(endsOf(m.type, st).end));
       }
       const box = m.type === 'callout' ? [P[1], P[2]] : [P[0], P[1]];
       const bx = [Math.min(box[0].x, box[1].x), Math.min(box[0].y, box[1].y), Math.max(box[0].x, box[1].x), Math.max(box[0].y, box[1].y)];
@@ -699,7 +856,7 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
       break;
     }
     case 'Text':
-      entries.Name = m.type === 'flag' ? 'Flag' : 'Comment';
+      entries.Name = m.type === 'flag' ? 'Flag' : m.noteIcon ?? 'Comment';
       entries.Rect = [P[0].x, P[0].y - 20, P[0].x + 18, P[0].y];
       break;
   }
@@ -731,12 +888,16 @@ export interface SaveInput {
   dirtySpaces?: Set<number>;
   /** Custom column definitions, when changed. */
   columns?: CustomColumn[];
+  /** The document's custom columns, for Legends that show them (always given). */
+  legendColumns?: CustomColumn[];
   /** Form field values that changed, by field name. */
   formValues?: Record<string, FieldValue>;
   /** Layers, when the layer list changed. */
   layers?: LayerSet | null;
   /** Bookmarks, when they changed. */
   bookmarks?: Bookmark[];
+  /** Save Mode (Preferences > Document): 'revisions' appends an incremental update, 'compressed' uses object streams; default a plain rewrite. */
+  saveMode?: 'revisions' | 'publish' | 'compressed';
 }
 
 /** A Revu-style /NM: 16 random capital letters. */
@@ -783,6 +944,7 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
   if (input.bookmarks) writeBookmarks(doc, input.bookmarks);
   const layerRef = (id: string) => layerRefs.get(id) ?? (/^(\d+)R(\d*)$/.test(id) ? PDFRef.of(Number(id.split('R')[0]), Number(id.split('R')[1] || 0)) : undefined);
   const font = await doc.embedFont(StandardFonts.Helvetica);
+  const fonts = await embedTextFonts(doc, font, input.markups);
   if (input.formValues && Object.keys(input.formValues).length) writeFields(doc, input.formValues, font);
   const pageRefs = doc.getPages().map((pg) => pg.ref);
   // Groups are written as Revu writes them: members point to the first via /IRT with /RT /Group.
@@ -808,8 +970,8 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
       annots = doc.context.obj([]);
       page.node.set(N('Annots'), annots);
     }
-    const rows = m.type === 'legend' && m.legend ? legendRows(m.legend, input.markups, m.page) : [];
-    const built = buildAnnot(doc, font, m, input.pages[m.page], image, pageRefs, rows);
+    const rows = m.type === 'legend' && m.legend ? legendRows(m.legend, input.markups, m.page, { pageCount: input.pages.length, columns: input.legendColumns, pageLabels: input.pages.map((p) => p.label) }) : [];
+    const built = buildAnnot(doc, font, m, input.pages[m.page], image, pageRefs, rows, fonts, input.legendColumns);
     if (m.source) carryOver(doc, PDFRef.of(m.source.objectNumber, m.source.generation), built[0]);
     const oc = m.layer ? layerRef(m.layer) : undefined;
     if (oc) for (const r of built) (doc.context.lookup(r) as PDFDict).set(N('OC'), oc);
@@ -902,5 +1064,10 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
     if (entries.length) page.node.set(N('VP'), ctx.obj(entries));
     else page.node.delete(N('VP'));
   }
-  return signed ? incrementalUpdate(input.original, doc) : doc.save({ useObjectStreams: false });
+  if (signed) return incrementalUpdate(input.original, doc);
+  if (input.saveMode === 'revisions') {
+    // Maintain Revisions: the earlier versions stay in the file (File > Revert As). Encrypted files cannot: rewritten instead.
+    try { return await incrementalUpdate(input.original, doc); } catch { /* falls through to a rewrite */ }
+  }
+  return doc.save({ useObjectStreams: input.saveMode === 'compressed' });
 }

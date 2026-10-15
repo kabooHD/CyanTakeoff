@@ -48,6 +48,26 @@ describe('bookmarks in the PDF', () => {
     expect(root.get(PDFName.of('Count'))?.toString()).toBe('4');
   });
 
+  it('reads actions (web, other file, Place) and writes edited ones', async () => {
+    const { doc } = await withOutline();
+    let bm = readBookmarks(doc);
+    expect(bm[1].action).toEqual({ uri: 'https://example.com' });
+    expect(bm[0].kids[0].action).toEqual({ dest: 'lvl1' });
+    expect(bm[0].kids[0].page).toBe(1);
+    bm = [
+      { ...bm[0], destEdited: true, action: { file: 'details.pdf', page: 3 }, page: null },
+      { ...bm[1], destEdited: true, action: undefined, page: 2, fit: 'Fit', args: [] },
+      { id: 'n', title: 'Level 1 again', page: 1, open: false, kids: [], action: { dest: 'lvl1' }, destEdited: true },
+    ];
+    writeBookmarks(doc, bm);
+    const again = await PDFDocument.load(await doc.save());
+    const r = readBookmarks(again);
+    expect(r[0].action).toEqual({ file: 'details.pdf', page: 3 });
+    expect(r[0].page).toBeNull();
+    expect(r[1].page).toBe(2); expect(r[1].action).toBeUndefined();
+    expect(r[2]).toMatchObject({ page: 1, action: { dest: 'lvl1' } });
+  });
+
   it('deleting every bookmark removes the outline', async () => {
     const { doc } = await withOutline();
     writeBookmarks(doc, []);

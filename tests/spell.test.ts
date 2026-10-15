@@ -21,3 +21,20 @@ describe('dictionary', () => {
     expect(sp.suggest('hardwre')).toContain('hardware');
   });
 });
+
+describe('other languages', () => {
+  it('French and German dictionaries are served and spell their words', { timeout: 60000 }, async () => {
+    const { readFileSync, existsSync } = await import('node:fs');
+    const { default: nspell } = await import('nspell');
+    const load = (l: string) => nspell(readFileSync(`node_modules/dictionary-${l}/index.aff`, 'utf8'), readFileSync(`node_modules/dictionary-${l}/index.dic`, 'utf8'));
+    const fr = load('fr');
+    expect(fr.correct('fenêtre')).toBe(true);
+    expect(fr.correct('fenetre')).toBe(false);
+    const de = load('de');
+    expect(de.correct('Fenster')).toBe(true);
+    for (const l of ['en', 'en-gb', 'fr', 'de', 'es', 'it', 'nl', 'pt', 'pl', 'sv', 'da']) {
+      expect(existsSync(`node_modules/dictionary-${l}/index.dic`), l).toBe(true);
+      expect(existsSync(`node_modules/dictionary-${l}/license`), l).toBe(true);
+    }
+  });
+});

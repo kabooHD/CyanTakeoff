@@ -5,6 +5,9 @@ import type { MenuItem } from './ContextMenu';
 import { markupBounds } from './hit';
 import { autosizeTextBoxes, editAction, removeSelectedFromGroup } from './quickCommands';
 import { startOffset } from './OffsetBar';
+import { useMultiply } from './Multiply';
+import { hideSelected, showHiddenMarkups } from './quickCommands';
+import { startCropImage } from './cropImage';
 
 export function arrangeItems(): MenuItem[] {
   const s = useApp.getState();
@@ -20,6 +23,11 @@ export function arrangeItems(): MenuItem[] {
     { label: 'Ungroup', shortcut: 'Ctrl+Shift+G', disabled: !grouped, action: () => s.arrange(ungroup) },
     { label: 'Remove Selected from Group', shortcut: 'Ctrl+Shift+Alt+G', disabled: !grouped, action: removeSelectedFromGroup },
     { label: 'Offset…', shortcut: 'O', disabled: sel.length !== 1, action: () => startOffset() },
+    { label: 'Multiply…', disabled: none, action: () => useMultiply.setState({ open: true }) },
+    { label: 'Crop Image…', disabled: !(sel.length === 1 && sel[0].type === 'image'), action: startCropImage },
+    { label: 'Hide', disabled: none || sel.every((m) => m.hidden), action: () => hideSelected(true) },
+    { label: 'Show', disabled: !sel.some((m) => m.hidden), action: () => hideSelected(false) },
+    { label: 'Show Hidden Markups', disabled: !d?.markups.some((m) => m.hidden), action: showHiddenMarkups },
     { label: 'Edit Action…', shortcut: 'Ctrl+Shift+E', disabled: none, action: () => editAction() },
     { label: 'Autosize Text Box', shortcut: 'Alt+Z', disabled: !sel.some((m) => m.type === 'textbox' || m.type === 'callout'), action: autosizeTextBoxes },
     { label: locked ? 'Unlock' : 'Lock', shortcut: 'Ctrl+Shift+L', disabled: none, action: s.toggleLock },

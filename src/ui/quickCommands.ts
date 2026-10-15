@@ -1,8 +1,14 @@
 // Small Revu commands: Autosize Text Box (Alt+Z), Remove Selected from Group,
 // Save All, Refresh (F5), Full Screen (F11), Balance (Shift+F12).
-import { activeDoc, useApp } from '../model/store';
+import { activeDoc, useApp, type LeftPanel, type RightPanel } from '../model/store';
 import { autosizedBox, withBox } from '../model/textBox';
 import { removeFromGroup } from '../model/arrange';
+
+/** File > Close All (Ctrl+Shift+W): every open document, asking about unsaved changes as Close does. */
+export function closeAll() {
+  const s = useApp.getState();
+  for (const d of [...s.docs]) s.closeDoc(d.id);
+}
 
 let measureCtx: CanvasRenderingContext2D | null = null;
 /** Width of a line of text in Helvetica at `size` points. */
@@ -75,3 +81,29 @@ export function editAction(ids?: string[]) {
 }
 
 export const balanceSplit = () => useApp.setState({ splitRatio: 0.5 });
+
+/** Edit > Hide: hidden markups stay in the list (greyed) but are not drawn or printed. */
+export function hideSelected(hidden = true) {
+  const s = useApp.getState();
+  const d = s.docs.find((x) => x.id === s.activeId);
+  if (!d?.selection.length) return;
+  s.updateMarkups(d.selection, () => ({ hidden: hidden || undefined }));
+  s.setStatus(hidden ? `${d.selection.length} markup${d.selection.length === 1 ? '' : 's'} hidden (Edit > Show Hidden Markups brings them back)` : 'Markups shown');
+}
+export function showHiddenMarkups() {
+  const s = useApp.getState();
+  const d = s.docs.find((x) => x.id === s.activeId);
+  const ids = d?.markups.filter((m) => m.hidden).map((m) => m.id) ?? [];
+  if (!ids.length) { s.setStatus('No hidden markups in this document'); return; }
+  s.updateMarkups(ids, () => ({ hidden: undefined }));
+  s.setStatus(`${ids.length} hidden markup${ids.length === 1 ? '' : 's'} shown`);
+}
+
+/** The panels put away by Hide/Show Panels (Shift+F4), restored by the next call. */
+let hiddenPanels: { left: LeftPanel; right: RightPanel; markupsList: boolean } | null = null;
+/** Window > Hide/Show Panels (Revu): every panel away, then back as they were. */
+export function hideShowPanels() {
+  const st = useApp.getState();
+  if (st.left || st.right || st.markupsList) { hiddenPanels = { left: st.left, right: st.right, markupsList: st.markupsList }; st.setPanels({ left: null, right: null, markupsList: false }); }
+  else st.setPanels(hiddenPanels ?? { left: 'thumbnails', right: 'properties', markupsList: true });
+}

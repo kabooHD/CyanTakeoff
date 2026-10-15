@@ -52,4 +52,17 @@ describe('rotate view', () => {
     expect(rotateOut(0, 0, 100, 50, 90)).toEqual({ x: 50, y: 0 });
     expect(rotateOut(0, 0, 100, 50, 270)).toEqual({ x: 0, y: 100 });
   });
+
+  it('Show Cover Page in Side-by-Side puts the first page alone, then pairs 2-3', () => {
+    const sizes = Array.from({ length: 5 }, () => ({ w: 100, h: 100 }));
+    const view = { w: 1000, h: 1000 };
+    expect(shownPages('side', 5, 0, true)).toEqual([0]);
+    expect(shownPages('side', 5, 2, true)).toEqual([1, 2]);
+    expect(shownPages('side', 5, 4, true)).toEqual([3, 4]);
+    expect(shownPages('side', 5, 2, false)).toEqual([2, 3]);
+    const { slots } = layoutPages(sizes, 'continuous-side', 0, 10, view, true);
+    expect(slots[0].index).toBe(0);
+    expect(slots[1].y).toBeGreaterThan(slots[0].y); // page 2 starts a new row
+    expect(slots[2].y).toBe(slots[1].y); // 2 and 3 share a row
+  });
 });

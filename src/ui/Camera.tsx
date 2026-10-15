@@ -5,8 +5,11 @@ import { useEffect, useRef, useState } from 'react';
 import { create } from 'zustand';
 import { useApp } from '../model/store';
 import { loadImage } from './toolActions';
+import { attachCapture, shrinkPhoto } from './Capture';
 
-export const useCamera = create<{ open: boolean }>(() => ({ open: false }));
+export const useCamera = create<{ open: boolean; forMarkup?: string }>(() => ({ open: false }));
+/** Right-click > Capture > From Camera: the photo is attached to the markup. */
+export const openCameraFor = (forMarkup: string) => useCamera.setState({ open: true, forMarkup });
 
 /** Place a photo: the next click on the drawing puts it there. */
 function place(url: string, w: number, h: number) {
@@ -16,12 +19,13 @@ function place(url: string, w: number, h: number) {
   useApp.getState().setStatus('Click on the drawing to place the photo.');
 }
 
-async function fromFile() {
+async function fromFile(forMarkup?: string) {
   const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*' });
   input.setAttribute('capture', 'environment');
   const f = await new Promise<File | null>((resolve) => { input.onchange = () => resolve(input.files?.[0] ?? null); input.oncancel = () => resolve(null); input.click(); });
   const file = f ?? null;
   if (!file) return;
+  if (forMarkup) { attachCapture(forMarkup, await shrinkPhoto(file)); return; }
   const img = await loadImage(file);
   place(img.url, img.w, img.h);
 }
@@ -35,7 +39,7 @@ function CameraView() {
   const video = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
-  const close = () => useCamera.setState({ open: false });
+  const close = () => useCamera.setState({ open: false, forMarkup: undefined });
   useEffect(() => {
     let stream: MediaStream | null = null;
     let alive = true;
@@ -56,8 +60,10 @@ function CameraView() {
     c.width = v.videoWidth; c.height = v.videoHeight;
     c.getContext('2d')!.drawImage(v, 0, 0);
     const url = c.toDataURL('image/jpeg', 0.85);
+    const forMarkup = useCamera.getState().forMarkup;
     close();
-    place(url, c.width, c.height);
+    if (forMarkup) attachCapture(forMarkup, { name: 'camera.jpg', data: url });
+    else place(url, c.width, c.height);
   };
   return (
     <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>
@@ -66,7 +72,7 @@ function CameraView() {
         <div className="scale-dialog">
           {error ? <p className="muted">{error}</p> : <video ref={video} className="camera-video" playsInline muted />}
           <div className="modal-actions">
-            <button onClick={() => { close(); fromFile(); }}>Choose Photo…</button>
+            <button onClick={() => { const f = useCamera.getState().forMarkup; close(); fromFile(f); }}>Choose Photo…</button>
             <span className="spacer" />
             <button className="primary" disabled={!ready} onClick={capture}>Take Photo</button>
             <button onClick={close}>Cancel</button>

@@ -1,16 +1,37 @@
+import type { LengthUnit } from '../model/types';
 import { BookmarksPanel } from './BookmarksPanel';
 import { updateTool, useSequenceDialog } from './SequenceDialog';
 import { HatchSelect, LineStyleSelect } from './LineStyles';
 import { LayersPanel } from './LayersPanel';
 import { LinksPanel } from './LinksPanel';
+import { FlagsPanel } from './FlagsPanel';
+import { DocumentProps } from './DocumentProps';
+import { flaggedPages } from '../model/flags';
 import { StatusSelect } from './StatusModels';
 import { FileAccessPanel } from './FileAccess';
 import { layerIds } from '../pdf/layers';
 import { SignaturesPanel } from './DigitalSignature';
 import { useEffect, useRef, useState } from 'react';
+import { startOffset, useOffset } from './OffsetBar';
+import { create } from 'zustand';
+import { TOOLS } from '../tools/tools';
+import { applyToolProperties } from '../model/toolScale';
+import { scaleAt, areaLabel, volumeLabel } from '../model/measure';
+import { LENGTH_UNITS, SEGMENT_TYPES, displayText } from '../model/measureDisplay';
+import { placeColumns } from '../model/listColumns';
+import { layoutOf, withLayout } from '../model/layoutProps';
+import { ROTATION_FIELD, withRotation } from '../model/rotate';
+import { BLEND_MODES, defaultBlend, type BlendMode } from '../model/blend';
+import { NOTE_ICONS, NOTE_ICON_LABELS, type NoteIcon } from '../model/noteIcons';
+import { setImageSettings } from './imageTools';
+import { addCapture, openCapturePreview } from './Capture';
+import { DEFAULT_LINE_HEIGHT, DEFAULT_MARGIN, TEXT_FONTS, textStyleOf } from '../model/textStyle';
+import { COUNT_SYMBOLS, symbolForType } from '../model/count';
+import { LINE_ENDS, LINE_END_TYPES, defaultEnds, endsOf } from '../model/lineEnds';
+import { usePageSetup } from './PageSetup';
 import { useApp, useActiveDoc, type DocState } from '../model/store';
 import { DECIMAL_PRECISIONS, FRACTION_PRECISIONS, SCALE_PRESETS, formatNumber, measure, precisionOf, unitLabel, withPrecision } from '../model/measure';
-import type { Markup, MarkupStyle, MarkupType, Scale, ToolPreset, ToolSet } from '../model/types';
+import type { CustomColumn, Markup, MarkupStyle, MarkupType, Scale, ToolPreset, ToolSet } from '../model/types';
 import { toolById } from '../tools/tools';
 import { Icon } from './icons';
 import { SpacesPanel } from './SpacesPanel';
@@ -19,19 +40,31 @@ import { SetsPanel } from './Sheets';
 import { pickFile } from './toolActions';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { openPagesDialog } from './PagesDialog';
-import { deletePages, movePage, rotatePages } from '../pdf/pages';
-import { legendKey } from '../model/legend';
+import { deletePages, extractPages, movePage, rotatePages, writePageLabels } from '../pdf/pages';
+import { readBookmarks, writeBookmarks } from '../pdf/bookmarks';
+import { isPageOrdered, reorderByPage } from '../model/bookmarkOrder';
+import { PDFDocument } from 'pdf-lib';
+import { serialize } from '../model/store';
+import { copyPages, hasPageClipboard, pastePages } from './pageClipboard';
+import { copyPageToSnapshot } from './textCommands';
+import { useApplyStamp } from './ApplyStamp';
+import { useColorProcess } from './ColorProcess';
+import { useSheetsDialog } from './Sheets';
+import { openPrint } from './Print';
+import { emailBytes } from './DocTools';
+import { exportSummaryCsv } from './actions';
+import { LEGEND_COLUMNS, legendKey, legendSizes, type FontFlags, type LegendDef } from '../model/legend';
 
 // ---------------- side tab strips ----------------
 
 export function SideTabs({ side }: { side: 'left' | 'right' }) {
   const s = useApp();
   const tabs = side === 'left'
-    ? [{ id: 'thumbnails', label: 'Thumbnails' }, { id: 'bookmarks', label: 'Bookmarks' }, { id: 'spaces', label: 'Spaces' }, { id: 'search', label: 'Search' }, { id: 'sets', label: 'Sets' }, { id: 'signatures', label: 'Signatures' }, { id: 'layers', label: 'Layers' }, { id: 'links', label: 'Links' }, { id: 'files', label: 'File Access' }] as const
+    ? [{ id: 'thumbnails', label: 'Thumbnails' }, { id: 'bookmarks', label: 'Bookmarks' }, { id: 'spaces', label: 'Spaces' }, { id: 'search', label: 'Search' }, { id: 'sets', label: 'Sets' }, { id: 'signatures', label: 'Signatures' }, { id: 'layers', label: 'Layers' }, { id: 'links', label: 'Links' }, { id: 'flags', label: 'Flags' }, { id: 'files', label: 'File Access' }] as const
     : [{ id: 'properties', label: 'Properties' }, { id: 'toolchest', label: 'Tool Chest' }, { id: 'measurements', label: 'Measurements' }] as const;
   const cur = side === 'left' ? s.left : s.right;
   return (
-    <div className={`side-tabs side-${side}`}>
+    <div className={`side-tabs side-${side} ${s.toggles.autoHidePanelAccess && !cur ? 'auto-hide' : ''}`}>
       {tabs.map((t) => (
         <button key={t.id} className={cur === t.id ? 'active' : ''} title={t.label}
           onClick={() => s.setPanels(side === 'left'
@@ -63,6 +96,7 @@ export function LeftPanel() {
   if (s.left === 'search') return <PanelFrame title="Search" onClose={close}>{doc ? <SearchPanel doc={doc} /> : null}</PanelFrame>;
   if (s.left === 'files') return <PanelFrame title="File Access" onClose={close}><FileAccessPanel /></PanelFrame>;
   if (s.left === 'links') return <PanelFrame title="Links" onClose={close}>{doc ? <LinksPanel doc={doc} /> : null}</PanelFrame>;
+  if (s.left === 'flags') return <PanelFrame title="Flags" onClose={close}>{doc ? <FlagsPanel doc={doc} /> : null}</PanelFrame>;
   if (s.left === 'layers') return <PanelFrame title="Layers" onClose={close}>{doc ? <LayersPanel doc={doc} /> : null}</PanelFrame>;
   if (s.left === 'spaces') return <PanelFrame title="Spaces" onClose={close}>{doc ? <SpacesPanel doc={doc} /> : null}</PanelFrame>;
   return s.left === 'thumbnails'
@@ -81,11 +115,17 @@ export function RightPanel() {
 
 // ---------------- Thumbnails ----------------
 
-function Thumb({ doc, index }: { doc: DocState; index: number }) {
+/** Pages selected in the Thumbnails panel (Ctrl/Shift+click), per document; Print's "Selected" range. */
+export const useThumbSel = create<{ sel: Record<string, number[]> }>(() => ({ sel: {} }));
+const NO_PAGES: number[] = [];
+export const selectedPages = (d: DocState): number[] =>
+  (useThumbSel.getState().sel[d.id] ?? []).filter((i) => i < d.loaded.pages.length).sort((a, b) => a - b);
+
+function Thumb({ doc, index, selected, onClick, w = 130, labels }: { doc: DocState; index: number; selected: boolean; onClick: (e: React.MouseEvent) => void; w?: number; labels: ThumbLabels }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
   const p = doc.loaded.pages[index];
-  const w = 130, h = (p.height / p.width) * w;
+  const h = (p.height / p.width) * w;
   useEffect(() => {
     const io = new IntersectionObserver(([e]) => e.isIntersecting && setVisible(true));
     io.observe(ref.current!);
@@ -103,48 +143,144 @@ function Thumb({ doc, index }: { doc: DocState; index: number }) {
     });
     return () => { cancelled = true; };
   }, [visible, doc.loaded.pdf, index, p.width]);
-  const s = useApp();
   const count = doc.markups.filter((m) => m.page === index).length;
+  const flagged = flaggedPages(doc.markups, doc.loaded.flags).has(index);
   return (
-    <div className={`thumb ${doc.page === index ? 'active' : ''}`} onClick={() => s.setPage(index)}>
+    <div className={`thumb ${doc.page === index ? 'active' : ''} ${selected ? 'selected' : ''}`} aria-selected={selected} onClick={onClick}>
       <canvas ref={ref} style={{ width: w, height: h }} />
-      <div className="thumb-label">{p.label}{count ? <span className="thumb-count">{count}</span> : null}</div>
+      {labels.label && <div className="thumb-label">{p.label}{count ? <span className="thumb-count">{count}</span> : null}{flagged ? <span className="thumb-flag" title="This page has a flag">⚑</span> : null}</div>}
+      {labels.scale && <div className="thumb-scale muted small" title="Page scale (double-click to set)" onDoubleClick={(e) => { e.stopPropagation(); useApp.getState().openScaleDialog({ page: index }); }}>{doc.calibrations[index]?.label ?? 'Scale Not Set'}</div>}
     </div>
   );
 }
 
+interface ThumbLabels { label: boolean; scale: boolean }
+/** Thumbnails panel settings (Labels menu, size slider), kept per browser. */
+export const useThumbPrefs = create<{ labels: ThumbLabels; size: number }>(() => {
+  try { const v = JSON.parse(localStorage.getItem('ct-thumbs') ?? 'null'); if (v?.labels && v.size) return v; } catch { /* fresh */ }
+  return { labels: { label: true, scale: false }, size: 130 };
+});
+const setThumbPrefs = (p: Partial<{ labels: ThumbLabels; size: number }>) => {
+  useThumbPrefs.setState(p);
+  try { localStorage.setItem('ct-thumbs', JSON.stringify(useThumbPrefs.getState())); } catch { /* storage unavailable */ }
+};
+
 function Thumbnails({ doc }: { doc: DocState }) {
   const s = useApp();
+  const { labels, size } = useThumbPrefs();
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [drag, setDrag] = useState<number | null>(null);
-  const onMenu = (e: React.MouseEvent, index: number) => {
-    e.preventDefault();
+  const sel = useThumbSel((x) => x.sel[doc.id] ?? NO_PAGES);
+  const setSel = (ids: number[]) => useThumbSel.setState((x) => ({ sel: { ...x.sel, [doc.id]: ids } }));
+  const click = (e: React.MouseEvent, index: number) => {
+    if (e.ctrlKey || e.metaKey) { setSel(sel.includes(index) ? sel.filter((i) => i !== index) : [...sel, index]); return; }
+    if (e.shiftKey) {
+      const a = Math.min(doc.page, index), z = Math.max(doc.page, index);
+      setSel(Array.from({ length: z - a + 1 }, (_, i) => a + i));
+      return;
+    }
+    setSel([index]);
     s.setPage(index);
-    const rot = (d: 90 | -90) => s.transformDoc((lib) => rotatePages(lib, [index], d), d > 0 ? 'Rotated clockwise' : 'Rotated counterclockwise');
-    setMenu({ x: e.clientX, y: e.clientY, items: [
-      { label: 'Insert Pages…', action: () => openPagesDialog('insert') },
+  };
+  /** The pages a command works on: the selection, else the current page. */
+  const target = () => (sel.length ? [...sel].sort((a, b) => a - b) : [doc.page]);
+  const relabel = () => {
+    const i = doc.page;
+    const v = prompt('Page label', doc.loaded.pages[i].label);
+    if (v === null) return;
+    const labels = doc.loaded.pages.map((p, k) => (k === i ? v.trim() : p.label));
+    s.transformDoc((lib) => writePageLabels(lib, labels), `Page ${i + 1} labelled "${v.trim()}"`);
+  };
+  const exportPages = async () => {
+    const pages = target();
+    const lib = await PDFDocument.load(await serialize(doc), { updateMetadata: false });
+    const bytes = await (await extractPages(lib, pages)).save();
+    const href = URL.createObjectURL(new Blob([bytes as unknown as BlobPart], { type: 'application/pdf' }));
+    Object.assign(document.createElement('a'), { href, download: `${doc.name.replace(/\.pdf$/i, '')} - pages ${pages.map((p) => p + 1).join(',')}.pdf`.slice(0, 120) }).click();
+    setTimeout(() => URL.revokeObjectURL(href), 10_000);
+    s.setStatus(`Exported ${pages.length} page${pages.length === 1 ? '' : 's'}`);
+  };
+  const emailPages = async () => {
+    const pages = target();
+    const lib = await PDFDocument.load(await serialize(doc), { updateMetadata: false });
+    const bytes = await (await extractPages(lib, pages)).save();
+    await emailBytes(bytes, `${doc.name.replace(/\.pdf$/i, '')} - pages ${pages.map((p) => p + 1).join(',')}.pdf`);
+  };
+  const printPages = () => { if (!sel.length) setSel([doc.page]); openPrint('selected'); };
+  const commands = (index: number): MenuItem[] => {
+    const rot = (d: 90 | -90) => s.transformDoc((lib) => rotatePages(lib, target(), d), d > 0 ? 'Rotated clockwise' : 'Rotated counterclockwise');
+    const n = target().length;
+    const some = n === 1 ? '' : ` (${n})`;
+    return [
+      { label: 'Page Setup…', action: () => usePageSetup.setState({ open: 'setup' }) },
+      { sep: true },
+      { label: `Cut Pages${some}`, disabled: doc.loaded.pages.length < 2, action: () => copyPages(doc, target(), true) },
+      { label: `Copy Pages${some}`, action: () => copyPages(doc, target()) },
+      { label: 'Copy Page to Snapshot', shortcut: 'Ctrl+Alt+C', action: () => copyPageToSnapshot() },
+      { label: 'Paste Pages', disabled: !hasPageClipboard(), action: () => pastePages(index) },
+      { label: 'Apply Stamp…', action: () => useApplyStamp.setState({ open: true }) },
+      { sep: true },
       { label: 'Insert Blank Page…', action: () => openPagesDialog('insert-blank') },
+      { label: 'Insert Pages…', action: () => openPagesDialog('insert') },
       { label: 'Extract Pages…', action: () => openPagesDialog('extract') },
       { label: 'Replace Pages…', action: () => openPagesDialog('replace') },
-      { label: 'Delete Page', disabled: doc.loaded.pages.length < 2, action: () => s.transformDoc((lib) => deletePages(lib, [index]), 'Page deleted') },
-      { sep: true },
+      { label: `Delete Page${some}`, disabled: doc.loaded.pages.length <= n, action: () => s.transformDoc((lib) => deletePages(lib, target()), `Deleted ${n} page${n === 1 ? '' : 's'}`) },
       { label: 'Rotate Clockwise', shortcut: 'Shift+Alt+Plus', action: () => rot(90) },
       { label: 'Rotate Counterclockwise', shortcut: 'Shift+Alt+Minus', action: () => rot(-90) },
+      { sep: true },
+      { label: 'Number Pages…', action: () => usePageSetup.setState({ open: 'number' }) },
+      { label: 'Create Page Labels from Bookmarks…', action: () => usePageSetup.setState({ open: 'bookmarks' }) },
+      { label: 'Re-Label…', action: relabel },
+      // Several selected thumbnails: the dialog opens with them as its Selected pages (Revu).
+      { label: 'Set Scale…', action: () => s.openScaleDialog({ page: index, pages: sel.length > 1 && sel.includes(index) ? [...sel].sort((a, b) => a - b) : undefined }) },
+      { sep: true },
+      { label: `Export Pages${some}`, action: exportPages },
+      { label: `Email Pages${some}`, action: emailPages },
+      { label: `Print Pages${some}…`, action: printPages },
+      { label: 'Repair PDF…', action: () => useColorProcess.setState({ open: 'repair' }) },
+      { label: 'Flatten…', action: () => openPagesDialog('flatten') },
+      { label: 'Markup Summary (CSV)', action: () => exportSummaryCsv() },
+    ];
+  };
+  const onMenu = (e: React.MouseEvent, index: number) => {
+    e.preventDefault();
+    if (!sel.includes(index)) { s.setPage(index); setSel([index]); } else s.setPage(index);
+    setMenu({ x: e.clientX, y: e.clientY, items: commands(index) });
+  };
+  const openToolbarMenu = (e: React.MouseEvent) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setMenu({ x: r.left, y: r.bottom, items: commands(doc.page) });
+  };
+  const openLabelsMenu = (e: React.MouseEvent) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setMenu({ x: r.left, y: r.bottom, items: [
+      { label: 'Page Label', checked: labels.label, action: () => setThumbPrefs({ labels: { ...labels, label: !labels.label } }) },
+      { label: 'Page Scale', checked: labels.scale, action: () => setThumbPrefs({ labels: { ...labels, scale: !labels.scale } }) },
     ] });
   };
   return (
     <div className="thumbs">
+      <div className="panel-toolbar thumbs-toolbar">
+        <button title="Page commands" aria-label="Thumbnails menu" onClick={openToolbarMenu}>Thumbnails ▾</button>
+        <button title="Show page labels and scales under the thumbnails" aria-label="Labels menu" onClick={openLabelsMenu}>Labels ▾</button>
+        <button title="Create Page Labels from the title block or bookmarks" onClick={() => useSheetsDialog.setState({ open: 'labels' })}>Create Page Label</button>
+        <input type="range" aria-label="Thumbnail size" min={70} max={260} step={10} value={size} onChange={(e) => setThumbPrefs({ size: Number(e.target.value) })} title="Thumbnail size" />
+      </div>
       {doc.loaded.pages.map((p) => (
         <div key={`${doc.id}-${p.index}`} draggable onDragStart={(e) => { setDrag(p.index); e.dataTransfer.effectAllowed = 'move'; }}
           onDragOver={(e) => { if (drag !== null) e.preventDefault(); }}
           onDrop={(e) => {
             e.preventDefault(); e.stopPropagation();
             const from = drag; setDrag(null);
-            if (from !== null && from !== p.index) s.transformDoc((lib) => movePage(lib, from, p.index), `Moved page ${from + 1} to ${p.index + 1}`, p.index);
+            if (from !== null && from !== p.index) s.transformDoc((lib) => {
+              movePage(lib, from, p.index);
+              // Preferences > Document > Automatically Reorder Bookmarks: top-level bookmarks follow their pages.
+              if (s.prefs.reorderBookmarks) { const list = readBookmarks(lib); if (!isPageOrdered(list)) writeBookmarks(lib, reorderByPage(list)); }
+            }, `Moved page ${from + 1} to ${p.index + 1}`, p.index);
           }}
           onDragEnd={() => setDrag(null)}
           onContextMenu={(e) => onMenu(e, p.index)}>
-          <Thumb doc={doc} index={p.index} />
+          <Thumb doc={doc} index={p.index} selected={sel.includes(p.index)} onClick={(e) => click(e, p.index)} w={size} labels={labels} />
         </div>
       ))}
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
@@ -155,12 +291,84 @@ function Thumbnails({ doc }: { doc: DocState }) {
 
 // ---------------- Properties ----------------
 
+/** The Legend section of the Properties panel (Revu: Title, Columns, Table, Text). */
+function LegendEditor({ def, columns, onChange }: { def: LegendDef; columns: CustomColumn[]; onChange: (p: Partial<LegendDef>) => void }) {
+  const z = legendSizes(def, 10);
+  const flags = (key: 'titleStyle' | 'headerStyle', f: FontFlags) => (
+    <span className="font-flags">
+      {(['bold', 'italic', 'underline', 'strike'] as const).map((k) => (
+        <button key={k} type="button" className={`icon-btn${f[k] ? ' on' : ''}`} aria-label={`${key === 'titleStyle' ? 'Title' : 'Header'} ${k}`} aria-pressed={!!f[k]}
+          onClick={() => onChange({ [key]: { ...f, [k]: !f[k] } })} style={{ fontWeight: k === 'bold' ? 'bold' : undefined, fontStyle: k === 'italic' ? 'italic' : undefined, textDecoration: k === 'underline' ? 'underline' : k === 'strike' ? 'line-through' : undefined }}>
+          {k === 'bold' ? 'B' : k === 'italic' ? 'I' : k === 'underline' ? 'U' : 'S'}
+        </button>
+      ))}
+    </span>
+  );
+  const extra = def.columns ?? [];
+  const choices = [...LEGEND_COLUMNS, ...columns.map((c) => ({ id: `custom:${c.id}`, label: c.name }))];
+  return (
+    <>
+      <div className="prop-section">Legend</div>
+      <Row label="Title"><input aria-label="Legend title" value={def.title} onChange={(e) => onChange({ title: e.target.value })} /></Row>
+      <Row label="Show Title"><input type="checkbox" aria-label="Show title" checked={z.showTitle} onChange={(e) => onChange({ showTitle: e.target.checked })} /></Row>
+      <Row label="Title Size">
+        <input type="number" aria-label="Title size" min={1} max={144} step={0.5} value={def.titleSize ?? ''} placeholder="auto" onChange={(e) => onChange({ titleSize: e.target.value === '' ? undefined : Math.max(1, Math.min(144, Number(e.target.value))) })} />
+        {flags('titleStyle', def.titleStyle ?? { bold: true })}
+      </Row>
+      <Row label="Source Pages">
+        <select aria-label="Source pages" value={def.source} onChange={(e) => onChange({ source: e.target.value as LegendDef['source'] })}>
+          <option value="page">Current page</option><option value="all">All pages</option><option value="custom">Custom</option>
+        </select>
+      </Row>
+      {def.source === 'custom' && <Row label="Pages"><input aria-label="Source page range" placeholder="1-3, 5, 9" value={def.pages ?? ''} onChange={(e) => onChange({ pages: e.target.value })} /></Row>}
+      <Row label="Columns">
+        <label><input type="checkbox" checked={def.showQuantity} onChange={(e) => onChange({ showQuantity: e.target.checked })} /> Quantity</label>
+        <label><input type="checkbox" checked={def.showMeasurement} onChange={(e) => onChange({ showMeasurement: e.target.checked })} /> Measurement</label>
+      </Row>
+      <Row label="More Columns">
+        <select aria-label="Add legend column" value="" onChange={(e) => { if (e.target.value && !extra.includes(e.target.value)) onChange({ columns: [...extra, e.target.value] }); }}>
+          <option value="">Add column…</option>
+          {choices.filter((c) => !extra.includes(c.id)).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </select>
+      </Row>
+      {extra.length > 0 && (
+        <div className="legend-columns">
+          {extra.map((id, i) => (
+            <div key={id} className="legend-column">
+              <span>{choices.find((c) => c.id === id)?.label ?? id}</span>
+              <button type="button" className="icon-btn" aria-label={`Move ${choices.find((c) => c.id === id)?.label ?? id} up`} disabled={i === 0} onClick={() => { const n = [...extra]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; onChange({ columns: n }); }}>▲</button>
+              <button type="button" className="icon-btn" aria-label={`Remove ${choices.find((c) => c.id === id)?.label ?? id} column`} onClick={() => onChange({ columns: extra.filter((x) => x !== id) })}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <Row label="Show Headers"><input type="checkbox" aria-label="Show column headers" checked={z.showHeaders} onChange={(e) => onChange({ showHeaders: e.target.checked })} /></Row>
+      <Row label="Header Size">
+        <input type="number" aria-label="Header size" min={1} max={144} step={0.5} value={def.headerSize ?? ''} placeholder="auto" onChange={(e) => onChange({ headerSize: e.target.value === '' ? undefined : Math.max(1, Math.min(144, Number(e.target.value))) })} />
+        {flags('headerStyle', def.headerStyle ?? { bold: true })}
+      </Row>
+      <Row label="Symbol Size (%)"><input type="number" aria-label="Symbol size" min={1} max={5000} value={def.symbolSize ?? 100} onChange={(e) => onChange({ symbolSize: Math.max(1, Math.min(5000, Number(e.target.value) || 100)) })} /></Row>
+      <Row label="Margin"><input type="number" aria-label="Legend margin" min={0} max={50} value={def.margin ?? 5} onChange={(e) => onChange({ margin: Math.max(0, Math.min(50, Number(e.target.value) || 0)) })} /></Row>
+      <Row label="Alignment">
+        <select aria-label="Legend text alignment" value={z.align} onChange={(e) => onChange({ align: e.target.value as LegendDef['align'] })}>
+          <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
+        </select>
+      </Row>
+      <Row label="Text Color">
+        <input type="color" aria-label="Legend text color" value={def.textColor ?? '#000000'} onChange={(e) => onChange({ textColor: e.target.value })} />
+        {def.textColor && <button type="button" className="link-btn" onClick={() => onChange({ textColor: undefined })}>Same as lines</button>}
+      </Row>
+    </>
+  );
+}
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="prop-row"><span>{label}</span>{children}</label>;
 }
 
 function StyleEditor({ style, type, onChange }: { style: MarkupStyle; type: MarkupType; onChange: (p: Partial<MarkupStyle>) => void }) {
   const textual = type === 'textbox' || type === 'callout';
+  const textTypes = textual || type === 'typewriter' || type === 'cloudplus';
   return (
     <>
       <div className="prop-section">Appearance</div>
@@ -172,12 +380,110 @@ function StyleEditor({ style, type, onChange }: { style: MarkupStyle; type: Mark
         </span>
       </Row>
       <Row label="Opacity"><span className="inline"><input type="range" min={0} max={100} value={Math.round(style.opacity * 100)} onChange={(e) => onChange({ opacity: +e.target.value / 100 })} />{Math.round(style.opacity * 100)}</span></Row>
+      <Row label="Blend Mode">
+        <select aria-label="Blend mode" value={style.blend ?? defaultBlend(type)} onChange={(e) => onChange({ blend: e.target.value === defaultBlend(type) ? undefined : e.target.value as BlendMode })}>
+          {BLEND_MODES.map((b) => <option key={b} value={b}>{b.replace(/([a-z])([A-Z])/g, '$1 $2')}</option>)}
+        </select>
+      </Row>
       {style.fill && <Row label="Fill Opacity"><span className="inline"><input type="range" min={0} max={100} value={Math.round(style.fillOpacity * 100)} onChange={(e) => onChange({ fillOpacity: +e.target.value / 100 })} />{Math.round(style.fillOpacity * 100)}</span></Row>}
       <Row label="Line Width"><input type="number" min={0} max={50} step={0.25} value={style.width} onChange={(e) => onChange({ width: Math.max(0, +e.target.value) })} /></Row>
       <Row label="Line Style"><LineStyleSelect style={style} onChange={onChange} /></Row>
+      {(type === 'cloud' || type === 'cloudplus') && (
+        <Row label="Cloud">
+          <span className="inline">
+            <input aria-label="Cloud size" type="number" min={0.25} max={4} step={0.25} value={style.cloudSize ?? 1} title="Size" onChange={(e) => onChange({ cloudSize: +e.target.value === 1 ? undefined : Math.max(0.25, Math.min(4, +e.target.value || 1)) })} style={{ width: 52 }} />
+            <label><input type="checkbox" aria-label="Invert cloud" checked={!!style.cloudInvert} onChange={(e) => onChange({ cloudInvert: e.target.checked || undefined })} /> Invert</label>
+          </span>
+        </Row>
+      )}
+      {!textTypes && !['highlight', 'count', 'stamp', 'image', 'link', 'note', 'flag', 'attachment', 'strikeout', 'underline', 'squiggly', 'redaction', 'legend', 'caret'].includes(type) && (
+        <Row label="Highlight"><label className="inline"><input type="checkbox" aria-label="Highlight (transparent)" checked={style.blend === 'Multiply'} onChange={(e) => onChange({ blend: e.target.checked ? 'Multiply' : undefined })} /> Content shows through the fill</label></Row>
+      )}
+      {LINE_END_TYPES.has(type) && (
+        <>
+          {type !== 'callout' && <Row label="Start">
+            <select aria-label="Line start" value={endsOf(type, style).start} onChange={(e) => onChange({ lineStart: e.target.value === defaultEnds(type).start ? undefined : e.target.value as MarkupStyle['lineStart'] })}>
+              {LINE_ENDS.map((le) => <option key={le.id} value={le.id}>{le.name}</option>)}
+            </select>
+          </Row>}
+          <Row label="End">
+            <span className="inline">
+              <select aria-label="Line end" value={endsOf(type, style).end} onChange={(e) => onChange({ lineEnd: e.target.value === defaultEnds(type).end ? undefined : e.target.value as MarkupStyle['lineEnd'] })}>
+                {LINE_ENDS.map((le) => <option key={le.id} value={le.id}>{le.name}</option>)}
+              </select>
+              <input aria-label="Line end size" type="number" min={0.25} max={10} step={0.25} value={style.lineEndSize ?? 1} title="Size" onChange={(e) => onChange({ lineEndSize: +e.target.value === 1 ? undefined : Math.max(0.25, +e.target.value) })} style={{ width: 52 }} />
+            </span>
+          </Row>
+        </>
+      )}
       <HatchSelect style={style} type={type} onChange={onChange} />
-      {(textual || ['length', 'polylength', 'area', 'perimeter', 'volume', 'angle', 'radius', 'diameter'].includes(type)) && (
+      {(textual || ['length', 'polylength', 'area', 'perimeter', 'volume', 'angle', 'radius', 'diameter'].includes(type)) && !textTypes && (
         <Row label="Font Size"><input type="number" min={4} max={144} value={style.fontSize} onChange={(e) => onChange({ fontSize: Math.max(4, +e.target.value) })} /></Row>
+      )}
+      {textTypes && <TextStyleEditor style={style} type={type} onChange={onChange} />}
+      {type === 'count' && (
+        <>
+          <Row label="Symbol">
+            <select aria-label="Count symbol" value={style.countSymbol ?? 'circle'} onChange={(e) => onChange({ countSymbol: e.target.value === 'circle' ? undefined : e.target.value as MarkupStyle['countSymbol'] })}>
+              {COUNT_SYMBOLS.map((sym) => <option key={sym} value={sym}>{sym === 'x' ? 'X' : sym[0].toUpperCase() + sym.slice(1)}</option>)}
+            </select>
+          </Row>
+          <Row label="Scale"><input aria-label="Count scale" type="number" min={0.25} max={10} step={0.25} value={style.countScale ?? 1} onChange={(e) => onChange({ countScale: +e.target.value === 1 ? undefined : Math.max(0.25, +e.target.value) })} style={{ width: 60 }} /></Row>
+        </>
+      )}
+    </>
+  );
+}
+
+/** Revu's text properties: font, size (or Auto), style, alignment, line space, margin, text colour, box shape. */
+function TextStyleEditor({ style, type, onChange }: { style: MarkupStyle; type: MarkupType; onChange: (p: Partial<MarkupStyle>) => void }) {
+  const t = textStyleOf(style);
+  const toggle = (k: 'bold' | 'italic' | 'underline' | 'strike', label: string, title: string) => (
+    <button className={`tb-btn text-toggle ${t[k] ? 'active' : ''}`} title={title} aria-label={title} aria-pressed={t[k]} onClick={() => onChange({ [k]: !t[k] || undefined } as Partial<MarkupStyle>)}>{label}</button>
+  );
+  return (
+    <>
+      <div className="prop-section">Text</div>
+      <Row label="Font">
+        <select aria-label="Font" value={t.font} onChange={(e) => onChange({ font: e.target.value === 'Helvetica' ? undefined : e.target.value as MarkupStyle['font'] })}>
+          {TEXT_FONTS.map((fnt) => <option key={fnt} value={fnt}>{fnt}</option>)}
+        </select>
+      </Row>
+      <Row label="Font Size">
+        <span className="inline">
+          <input type="number" min={1} max={144} step={0.5} value={style.fontSize} disabled={t.autoSize} onChange={(e) => onChange({ fontSize: Math.max(1, +e.target.value) })} style={{ width: 60 }} />
+          <label title="The largest size that fits the box"><input type="checkbox" checked={t.autoSize} onChange={(e) => onChange({ autoSize: e.target.checked || undefined })} /> Auto</label>
+        </span>
+      </Row>
+      <Row label="Font Style">
+        <span className="inline text-styles">
+          {toggle('bold', 'B', 'Bold')}{toggle('italic', 'I', 'Italic')}{toggle('underline', 'U', 'Underline')}{toggle('strike', 'S', 'Strikethrough')}
+        </span>
+      </Row>
+      <Row label="Alignment">
+        <span className="inline">
+          <select aria-label="Text alignment" value={t.align} onChange={(e) => onChange({ align: e.target.value === 'left' ? undefined : e.target.value as MarkupStyle['align'] })}>
+            <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
+          </select>
+          <select aria-label="Vertical alignment" value={t.valign} onChange={(e) => onChange({ valign: e.target.value === 'top' ? undefined : e.target.value as MarkupStyle['valign'] })}>
+            <option value="top">Top</option><option value="middle">Middle</option><option value="bottom">Bottom</option>
+          </select>
+        </span>
+      </Row>
+      <Row label="Line Space"><input aria-label="Line space" type="number" min={0.5} max={5} step={0.05} value={t.lineHeight} onChange={(e) => onChange({ lineHeight: +e.target.value === DEFAULT_LINE_HEIGHT ? undefined : Math.max(0.5, +e.target.value) })} style={{ width: 60 }} /></Row>
+      <Row label="Margin"><input aria-label="Text margin" type="number" min={0} max={72} step={0.5} value={t.margin} onChange={(e) => onChange({ margin: +e.target.value === DEFAULT_MARGIN ? undefined : Math.max(0, +e.target.value) })} style={{ width: 60 }} /></Row>
+      <Row label="Text Color">
+        <span className="inline">
+          <input type="checkbox" aria-label="Separate text colour" checked={!!style.textColor} onChange={(e) => onChange({ textColor: e.target.checked ? style.color : undefined })} />
+          {style.textColor && <input type="color" aria-label="Text colour" value={style.textColor} onChange={(e) => onChange({ textColor: e.target.value })} />}
+        </span>
+      </Row>
+      {(type === 'textbox' || type === 'callout') && (
+        <Row label="Shape">
+          <select aria-label="Box shape" value={t.shape} onChange={(e) => onChange({ shape: e.target.value === 'rectangle' ? undefined : e.target.value as MarkupStyle['shape'] })}>
+            <option value="rectangle">Rectangle</option><option value="circle">Circle</option><option value="triangle">Triangle</option><option value="hexagon">Hexagon</option>
+          </select>
+        </Row>
       )}
     </>
   );
@@ -190,7 +496,8 @@ function Properties() {
   if (!sel.length) {
     const t = toolById(s.tool);
     if (s.tool === 'select' || s.tool === 'pan' || s.tool === 'zoom' || s.tool === 'calibrate') {
-      return <p className="muted pad">Select a markup to view and edit its properties, or choose a markup tool to set its defaults.</p>;
+      // Revu: with nothing selected the panel shows the document's properties.
+      return doc ? <DocumentProps doc={doc} /> : <p className="muted pad">Select a markup to view and edit its properties, or choose a markup tool to set its defaults.</p>;
     }
     const type = s.tool as MarkupType;
     // Tools that draw no markup of their own (form fields, viewports, lasso...) have no style defaults.
@@ -212,9 +519,9 @@ function Properties() {
       <div className="prop-section">General</div>
       <Row label="Subject"><input value={m.subject} onChange={(e) => upd(() => ({ subject: e.target.value }))} /></Row>
       <Row label="Label"><input value={m.label} onChange={(e) => upd(() => ({ label: e.target.value }))} /></Row>
-      <Row label="Comments"><textarea rows={3} spellCheck lang="en" value={m.comment} onChange={(e) => upd(() => ({ comment: e.target.value }))} /></Row>
+      <Row label="Comments"><textarea rows={3} spellCheck={s.prefs.spellCheck} lang="en" value={m.comment} onChange={(e) => upd(() => ({ comment: e.target.value }))} /></Row>
       {(m.type === 'textbox' || m.type === 'callout') && sel.length === 1 && (
-        <Row label="Text"><textarea rows={3} spellCheck lang="en" value={m.text ?? ''} onChange={(e) => upd(() => ({ text: e.target.value }))} /></Row>
+        <Row label="Text"><textarea rows={3} spellCheck={s.prefs.spellCheck} lang="en" value={m.text ?? ''} onChange={(e) => upd(() => ({ text: e.target.value }))} /></Row>
       )}
       <Row label="Status">
         <StatusSelect m={m} ids={sel.map((x) => x.id)} />
@@ -227,22 +534,31 @@ function Properties() {
       </Row>
       <Row label="Author"><input value={m.author} readOnly /></Row>
       <Row label="Date"><input value={new Date(m.modified).toLocaleString()} readOnly /></Row>
-      <StyleEditor style={m.style} type={m.type} onChange={(p) => upd((x) => ({ style: { ...x.style, ...p } }))} />
-      {m.type === 'legend' && m.legend && (
+      <StyleEditor style={m.style} type={m.type} onChange={(p) => { upd((x) => ({ style: { ...x.style, ...p } })); if (s.prefs.dynamicDefaults && s.toolDefaults[m.type]) s.setToolDefault(m.type, p); }} />
+      {m.type === 'image' && m.image && (
         <>
-          <div className="prop-section">Legend</div>
-          <Row label="Title"><input aria-label="Legend title" value={m.legend.title} onChange={(e) => upd((x) => ({ legend: { ...x.legend!, title: e.target.value } }))} /></Row>
-          <Row label="Source Pages">
-            <select aria-label="Source pages" value={m.legend.source} onChange={(e) => upd((x) => ({ legend: { ...x.legend!, source: e.target.value as 'page' } }))}>
-              <option value="page">This page</option><option value="all">All pages</option>
-            </select>
+          <Row label="Mask Color">
+            <span className="inline">
+              <input type="checkbox" aria-label="Mask color" checked={!!m.mask} onChange={(e) => void setImageSettings(m.id, { mask: e.target.checked ? { color: m.mask?.color ?? '#ffffff', tolerance: m.mask?.tolerance ?? 10 } : null })} />
+              {m.mask && <input type="color" aria-label="Mask colour value" value={m.mask.color} onChange={(e) => void setImageSettings(m.id, { mask: { ...m.mask!, color: e.target.value } })} />}
+            </span>
           </Row>
-          <Row label="Columns">
-            <label><input type="checkbox" checked={m.legend.showQuantity} onChange={(e) => upd((x) => ({ legend: { ...x.legend!, showQuantity: e.target.checked } }))} /> Quantity</label>
-            <label><input type="checkbox" checked={m.legend.showMeasurement} onChange={(e) => upd((x) => ({ legend: { ...x.legend!, showMeasurement: e.target.checked } }))} /> Measurement</label>
+          {m.mask && <Row label="Mask Tolerance"><span className="inline"><input aria-label="Mask tolerance" type="range" min={0} max={100} value={m.mask.tolerance} onChange={(e) => void setImageSettings(m.id, { mask: { ...m.mask!, tolerance: Number(e.target.value) } })} /> {m.mask.tolerance}</span></Row>}
+          <Row label="Encoding">
+            <select aria-label="Image encoding" value={m.imageEncoding ?? ((m.imageSource ?? m.image).startsWith('data:image/jpeg') ? 'jpeg' : 'zip')} onChange={(e) => void setImageSettings(m.id, { imageEncoding: e.target.value as 'zip' | 'jpeg' })}>
+              <option value="zip">ZIP (graphics, keeps transparency)</option><option value="jpeg">JPEG (photos)</option>
+            </select>
           </Row>
         </>
       )}
+      {m.type === 'note' && (
+        <Row label="Icon">
+          <select aria-label="Note icon" value={m.noteIcon ?? 'Comment'} onChange={(e) => upd(() => ({ noteIcon: e.target.value === 'Comment' ? undefined : e.target.value as NoteIcon }))}>
+            {NOTE_ICONS.map((i) => <option key={i} value={i}>{NOTE_ICON_LABELS[i]}</option>)}
+          </select>
+        </Row>
+      )}
+      {m.type === 'legend' && m.legend && <LegendEditor def={m.legend} columns={doc?.columns ?? []} onChange={(p) => upd((x) => ({ legend: { ...x.legend!, ...p } }))} />}
       {meas && (
         <>
           <div className="prop-section">Measurement</div>
@@ -269,11 +585,76 @@ function Properties() {
             </Row>
           )}
           {meas.area !== undefined && m.type !== 'area' && m.type !== 'volume' && <Row label="Wall Area"><input readOnly value={formatNumber(meas.area, 2, true)} /></Row>}
-          <Row label="Value"><input readOnly value={meas.text} /></Row>
+          <Row label="Value"><input readOnly value={displayText(m, meas)} /></Row>
+          {m.scale && ['area', 'volume', 'count', 'diameter', 'rectangle', 'ellipse'].includes(m.type) && (() => {
+            const pc = placeColumns(m.points, doc?.loaded.pages[m.page]?.height ?? 0, m.scale);
+            return <Row label="Width / Height"><input readOnly value={`${pc.width} × ${pc.height} ${unitLabel(m.scale.unit)}`} /></Row>;
+          })()}
+          <Row label="Show Caption">
+            <select aria-label="Show caption" value={m.display?.caption ?? 'value'} onChange={(e) => upd((x) => ({ display: { ...x.display, caption: e.target.value as 'value' } }))}>
+              <option value="value">Value</option><option value="label">Label</option><option value="both">Label and value</option><option value="none">None</option>
+            </select>
+          </Row>
+          {m.type === 'length' && m.display?.captionOffset && (
+            <Row label="Caption Leader"><label className="inline"><input type="checkbox" aria-label="Show caption leader line" checked={m.display.captionLeader !== false} onChange={(e) => upd((x) => ({ display: { ...x.display, captionLeader: e.target.checked ? undefined : false } }))} /> Show Caption Leader Line</label></Row>
+          )}
+          {SEGMENT_TYPES.has(m.type) && (
+            <Row label="Segment Values">
+              <label className="inline"><input type="checkbox" aria-label="Show segment values" checked={!!m.display?.segments} onChange={(e) => upd((x) => ({ display: { ...x.display, segments: e.target.checked || undefined } }))} /> Show</label>
+              {m.display?.segments && (
+                <select aria-label="Segment value alignment" value={m.display?.segmentAlign ?? 'center'} onChange={(e) => upd((x) => ({ display: { ...x.display, segmentAlign: e.target.value as 'center' } }))}>
+                  <option value="center">On the line</option><option value="inside">Inside</option><option value="outside">Outside</option>
+                </select>
+              )}
+            </Row>
+          )}
+          {m.points.length > 2 && <Row label="Centroid"><label className="inline"><input type="checkbox" aria-label="Show centroid" checked={!!m.display?.centroid} onChange={(e) => upd((x) => ({ display: { ...x.display, centroid: e.target.checked || undefined } }))} /> Show</label></Row>}
+          {m.scale && meas.length !== undefined && meas.area === undefined && (
+            <Row label="Length Unit"><select aria-label="Length unit" value={m.display?.lengthUnit ?? ''} onChange={(e) => upd((x) => ({ display: { ...x.display, lengthUnit: (e.target.value || undefined) as LengthUnit | undefined } }))}><option value="">Page scale ({unitLabel(m.scale.unit)})</option>{LENGTH_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}</select></Row>
+          )}
+          {m.scale && meas.area !== undefined && meas.volume === undefined && (
+            <Row label="Area Unit"><select aria-label="Area unit" value={m.display?.areaUnit ?? ''} onChange={(e) => upd((x) => ({ display: { ...x.display, areaUnit: (e.target.value || undefined) as LengthUnit | undefined } }))}><option value="">Page scale</option>{LENGTH_UNITS.map((u) => <option key={u} value={u}>{areaLabel(u)}</option>)}</select></Row>
+          )}
+          {m.scale && meas.volume !== undefined && (
+            <Row label="Volume Unit"><select aria-label="Volume unit" value={m.display?.volumeUnit ?? ''} onChange={(e) => upd((x) => ({ display: { ...x.display, volumeUnit: (e.target.value || undefined) as LengthUnit | undefined } }))}><option value="">Page scale</option>{LENGTH_UNITS.map((u) => <option key={u} value={u}>{volumeLabel(u)}</option>)}</select></Row>
+          )}
+        </>
+      )}
+      {sel.length === 1 && m.points.length > 0 && m.type !== 'count' && (() => {
+        const pageH = doc?.loaded.pages[m.page]?.height ?? 0;
+        const lay = layoutOf(m.points, pageH);
+        const field = (k: keyof typeof lay, label: string) => (
+          <Row label={label}><input type="number" step={0.01} aria-label={`Layout ${label}`} value={lay[k]} disabled={!!m.locked}
+            onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v)) upd((x) => withLayout(x, pageH, { [k]: v })); }} /></Row>
+        );
+        return (
+          <>
+            <div className="prop-section">Layout (in)</div>
+            {field('x', 'X')}{field('y', 'Y')}{field('width', 'Width')}{field('height', 'Height')}
+            {ROTATION_FIELD.has(m.type) && (
+              <Row label="Rotation (°)"><input type="number" step={1} aria-label="Layout Rotation" value={m.rotation ?? 0} disabled={!!m.locked}
+                onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v)) upd((x) => withRotation(x, v)); }} /></Row>
+            )}
+          </>
+        );
+      })()}
+      {sel.length === 1 && (
+        <>
+          <div className="prop-section">Capture</div>
+          <div className="capture-list">
+            {(m.capture ?? []).map((c, i) => (
+              <span key={i} className="capture-thumb">
+                <img src={c.data} alt={c.name} title={`${c.name} (double-click to preview)`} onDoubleClick={() => openCapturePreview(m.capture!, i)} />
+                <button className="tool-remove" title="Remove photo" aria-label={`Remove ${c.name}`} onClick={() => upd((x) => ({ capture: x.capture?.filter((_, k) => k !== i) }))}>×</button>
+              </span>
+            ))}
+            <label className="button">Add Photo…<input type="file" accept="image/*" aria-label="Add photo" style={{ display: 'none' }} onChange={async (e) => { const f = e.target.files?.[0]; if (f && doc) { try { await addCapture(doc, m, f); } catch { s.setStatus('That image could not be read.'); } } e.target.value = ''; }} /></label>
+          </div>
         </>
       )}
       <div className="prop-actions">
         <button onClick={() => s.addToToolChest(m)}>Add to My Tools</button>
+        <button title="Make this markup's appearance the tool's default" onClick={() => { s.setToolDefault(m.type, m.style); s.setStatus(`${toolById(m.type).name}: this appearance is now the default`); }}>Set as Default</button>
         <button onClick={() => s.deleteMarkups(ids)}>Delete</button>
       </div>
     </div>
@@ -282,16 +663,27 @@ function Properties() {
 
 // ---------------- Tool Chest ----------------
 
-function ToolItem({ p, onRemove, onMenu }: { p: ToolPreset; onRemove?: () => void; onMenu?: (e: React.MouseEvent) => void }) {
+function ToolItem({ p, onRemove, onMenu, symbol, hotkey }: { p: ToolPreset; onRemove?: () => void; onMenu?: (e: React.MouseEvent) => void; symbol?: boolean; /** My Tools: the digit that picks this tool (Revu). */ hotkey?: number }) {
   const s = useApp();
   const active = s.preset?.id === p.id;
+  const use = (e: React.MouseEvent) => {
+    // Shift+click with markups selected: apply the tool's appearance to them (Revu applies on a plain click).
+    const d = s.docs.find((x) => x.id === s.activeId);
+    if (e.shiftKey && d?.selection.length && p.mode !== 'drawing') {
+      s.updateMarkups(d.selection, (m) => applyToolProperties(m, p, s.toolChest.commentPersistence));
+      s.setStatus(`Applied "${p.name}" to ${d.selection.length} markup${d.selection.length === 1 ? '' : 's'}`);
+      return;
+    }
+    s.setTool(p.type, { preset: p });
+  };
   return (
-    <div className={`tool-item ${active ? 'active' : ''}`} title={`${p.name} (${toolById(p.type).name}, ${p.mode === 'drawing' ? 'Drawing' : 'Properties'} mode)\nClick to use, double-click to lock`}
-      onClick={() => s.setTool(p.type, { preset: p })}
+    <div className={`tool-item ${active ? 'active' : ''} ${symbol ? 'symbol' : ''}`} title={`${p.name} (${toolById(p.type).name}, ${p.mode === 'drawing' ? 'Drawing' : 'Properties'} mode)\nClick to use, Shift+click to apply its properties to the selected markups, double-click to lock`}
+      onClick={use}
       onDoubleClick={() => s.setTool(p.type, { preset: p, locked: true })}
       onContextMenu={(e) => { e.preventDefault(); onMenu?.(e); }}>
       <span className="tool-swatch" style={{ borderColor: p.style.color, background: p.style.fill ?? 'transparent' }}><Icon name={p.type} size={16} /></span>
-      <span className="tool-name">{p.name}</span>
+      {!symbol && <span className="tool-name">{p.name}</span>}
+      {hotkey !== undefined && <span className="tool-key" title={`Hot key ${hotkey}`}>{hotkey}</span>}
       {p.mode === 'drawing' && <span className="tool-mode" title="Drawing mode">D</span>}
       {p.sequence && <span className="tool-mode" title="Sequence">#</span>}
       {onRemove && <button className="tool-remove" title="Remove" onClick={(e) => { e.stopPropagation(); onRemove(); }}><Icon name="close" size={10} /></button>}
@@ -327,9 +719,18 @@ function ToolChest() {
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const sets = s.toolSets;
   const update = (id: string, fn: (t: ToolSet) => ToolSet | null) => s.setToolSets(sets.flatMap((t) => (t.id === id ? (fn(t) ? [fn(t)!] : []) : [t])));
+  const doc = s.docs.find((x) => x.id === s.activeId);
+  const pageScale = doc ? scaleAt(doc.calibrations[doc.page], doc.viewports[doc.page], undefined) : null;
   const setMenuFor = (e: React.MouseEvent, set: ToolSet) => setMenu({ x: e.clientX, y: e.clientY, items: [
+    { label: 'Symbol', checked: set.view === 'symbol', action: () => update(set.id, (t) => ({ ...t, view: 'symbol' })) },
+    { label: 'Detail', checked: set.view !== 'symbol', action: () => update(set.id, (t) => ({ ...t, view: 'detail' })) },
+    { sep: true },
+    { label: set.scale ? `Set Scale (now ${set.scale.label || 'set'})…` : 'Set Scale…', disabled: !pageScale, action: () => { if (pageScale) { update(set.id, (t) => ({ ...t, scale: pageScale })); s.setStatus(`${set.name}: tools keep their real size (scale ${pageScale.label || 'of this page'})`); } } },
+    { label: 'Remove Scale', disabled: !set.scale, action: () => update(set.id, (t) => ({ ...t, scale: undefined })) },
+    { sep: true },
     { label: 'Rename…', action: () => { const n = prompt('Tool set name', set.name); if (n) update(set.id, (t) => ({ ...t, name: n })); } },
     { label: 'Export…', action: () => exportToolSet(set) },
+    { label: 'Hide', action: () => update(set.id, (t) => ({ ...t, hidden: true })) },
     { label: 'Create Legend', disabled: !set.tools.length, action: () => {
       useApp.setState({ legendKeys: [...new Set(set.tools.map(legendKey))] });
       s.setTool('legend');
@@ -346,30 +747,90 @@ function ToolChest() {
     { label: 'Sequence: Reset', disabled: !p.sequence, action: () => { updateTool(p.id, (x) => ({ ...x, sequence: { ...x.sequence!, run: x.sequence!.run + 1 } })); s.setStatus(`${p.name}: the sequence starts again`); } },
     { label: 'Sequence: Remove', disabled: !p.sequence, action: () => updateTool(p.id, (x) => ({ ...x, sequence: undefined })) },
     { sep: true },
+    ...(p.type !== 'count' ? [{ label: 'Create Count', action: () => {
+      // Revu: a count tool with this tool's colours; the symbol follows the shape (ours: the standard symbols).
+      const tool: ToolPreset = { id: crypto.randomUUID(), name: `${p.name} Count`, type: 'count', subject: p.subject || p.name, style: { ...s.toolDefaults.count, color: p.style.color, fill: p.style.fill ?? p.style.color, opacity: p.style.opacity, countSymbol: symbolForType(p.type) } };
+      update(set.id, (t) => ({ ...t, tools: [...t.tools, tool] }));
+      s.setStatus(`${tool.name} added to ${set.name}`);
+    } }] : []),
     { label: 'Rename…', action: () => { const n = prompt('Tool name', p.name); if (n) update(set.id, (t) => ({ ...t, tools: t.tools.map((x) => (x.id === p.id ? { ...x, name: n } : x)) })); } },
+    { label: 'Duplicate', action: () => update(set.id, (t) => { const i = t.tools.findIndex((x) => x.id === p.id); const copy = { ...p, id: crypto.randomUUID() }; return { ...t, tools: [...t.tools.slice(0, i + 1), copy, ...t.tools.slice(i + 1)] }; }) },
+    { label: 'Change Colors…', action: () => setRecolor({ setId: set.id, tool: p }) },
+    // Offset as (Revu): the selected markup's offset is drawn as this tool's type.
+    { label: 'Offset as', disabled: (s.docs.find((x) => x.id === s.activeId)?.selection.length ?? 0) !== 1, action: () => { useOffset.setState({ as: p.type }); startOffset(); } },
     { label: 'Remove', action: () => s.removeFromToolChest(p.id) },
   ] });
+  // Recent Tools items: keep one for good in My Tools (Revu: Add Item to My Tools).
+  const recentItemMenu = (e: React.MouseEvent, p: ToolPreset) => setMenu({ x: e.clientX, y: e.clientY, items: [
+    { label: 'Add Item to My Tools', disabled: !sets[0], action: () => { update(sets[0].id, (t) => ({ ...t, tools: [...t.tools, { ...p, id: crypto.randomUUID() }] })); s.setStatus(`Added "${p.name}" to ${sets[0].name}`); } },
+  ] });
+  const [recolor, setRecolor] = useState<{ setId: string; tool: ToolPreset } | null>(null);
+  const tc = s.toolChest;
+  const chestMenu = (e: React.MouseEvent) => setMenu({ x: e.clientX, y: e.clientY, items: [
+    ...sets.map((t) => ({ label: t.name, checked: !t.hidden, action: () => update(t.id, (x) => ({ ...x, hidden: !x.hidden })) })),
+    { label: 'Recent Tools', checked: !tc.size || !s.recentHidden, action: () => useApp.setState({ recentHidden: !s.recentHidden }) },
+    { sep: true },
+    { label: 'Manage Tool Sets: New Tool Set…', action: () => { const n = prompt('New tool set name', 'New Tool Set'); if (n) s.setToolSets([...sets, { id: crypto.randomUUID(), name: n, tools: [] }]); } },
+    { label: 'Manage Tool Sets: Import…', action: async () => { const t = await importToolSet(); if (t) s.setToolSets([...sets, t]); } },
+    { sep: true },
+    { label: 'Comment Persistence › No', checked: tc.commentPersistence === 'none', action: () => s.setToolChest({ commentPersistence: 'none' }) },
+    { label: 'Comment Persistence › Exclude Text Boxes', checked: tc.commentPersistence === 'excludeText', action: () => s.setToolChest({ commentPersistence: 'excludeText' }) },
+    { label: 'Comment Persistence › All Markups', checked: tc.commentPersistence === 'all', action: () => s.setToolChest({ commentPersistence: 'all' }) },
+    { label: 'Update Tool Set Item on Reuse', checked: tc.updateOnReuse, action: () => s.setToolChest({ updateOnReuse: !tc.updateOnReuse }) },
+  ] });
+  const recentMenu = (e: React.MouseEvent) => setMenu({ x: e.clientX, y: e.clientY, items: [
+    { label: 'Maximum Recents…', action: () => { const n = prompt('Maximum recent tools', String(tc.maxRecents)); if (n && Number(n) > 0) s.setToolChest({ maxRecents: Math.floor(Number(n)) }); } },
+    { label: 'Clear Recents', disabled: !s.recentTools.length, action: () => useApp.setState({ recentTools: [] }) },
+    { label: 'Hide', action: () => useApp.setState({ recentHidden: true }) },
+  ] });
   return (
-    <div className="toolchest">
+    <div className="toolchest" style={{ ['--tool-size' as string]: tc.size }}>
       <div className="prop-actions pad">
-        <button onClick={() => { const n = prompt('New tool set name', 'New Tool Set'); if (n) s.setToolSets([...sets, { id: crypto.randomUUID(), name: n, tools: [] }]); }}>New Tool Set</button>
-        <button onClick={async () => { const t = await importToolSet(); if (t) s.setToolSets([...sets, t]); }}>Import…</button>
+        <button aria-label="Tool Chest menu" onClick={chestMenu}>Tool Chest ▾</button>
+        <input aria-label="Tool size" type="range" min={0.7} max={1.8} step={0.1} value={tc.size} title="Size" onChange={(e) => s.setToolChest({ size: Number(e.target.value) })} style={{ width: 70 }} />
       </div>
-      <details open>
-        <summary>Recent Tools</summary>
-        {s.recentTools.length ? s.recentTools.map((p) => <ToolItem key={p.id} p={p} />) : <p className="muted pad">Markups you create appear here.</p>}
-      </details>
-      {sets.map((set, i) => (
+      {!s.recentHidden && (
+        <details open>
+          <summary onContextMenu={(e) => { e.preventDefault(); recentMenu(e); }}>Recent Tools<button className="toolset-gear" title="Recent Tools options" onClick={(e) => { e.preventDefault(); recentMenu(e); }}>⚙</button></summary>
+          {s.recentTools.length ? s.recentTools.map((p) => <ToolItem key={p.id} p={p} onMenu={(e) => recentItemMenu(e, p)} />) : <p className="muted pad">Markups you create appear here.</p>}
+        </details>
+      )}
+      {sets.filter((t) => !t.hidden).map((set, i) => (
         <details key={set.id} open>
           <summary onContextMenu={(e) => { e.preventDefault(); setMenuFor(e, set); }}>
-            {set.name}
+            {set.name}{set.scale ? <span className="muted small"> · scale {set.scale.label || 'set'}</span> : null}
             <button className="toolset-gear" title="Tool set options" onClick={(e) => { e.preventDefault(); setMenuFor(e, set); }}>⚙</button>
           </summary>
-          {set.tools.map((p) => <ToolItem key={p.id} p={p} onRemove={() => s.removeFromToolChest(p.id)} onMenu={(e) => toolMenuFor(e, set, p)} />)}
+          {set.view === 'symbol'
+            ? <div className="tool-symbols">{set.tools.map((p, i) => <ToolItem key={p.id} p={p} symbol hotkey={set.id === sets[0]?.id && i < 9 ? i + 1 : undefined} onRemove={() => s.removeFromToolChest(p.id)} onMenu={(e) => toolMenuFor(e, set, p)} />)}</div>
+            : set.tools.map((p, i) => <ToolItem key={p.id} p={p} hotkey={set.id === sets[0]?.id && i < 9 ? i + 1 : undefined} onRemove={() => s.removeFromToolChest(p.id)} onMenu={(e) => toolMenuFor(e, set, p)} />)}
           {i === 0 && <p className="muted pad small">Right-click a markup and choose “Add to My Tools” to save it here. Right-click a tool for Drawing mode.</p>}
         </details>
       ))}
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
+      {recolor && <ChangeColors tool={recolor.tool} onClose={() => setRecolor(null)}
+        onApply={(st) => { update(recolor.setId, (t) => ({ ...t, tools: t.tools.map((x) => (x.id === recolor.tool.id ? { ...x, style: { ...x.style, ...st }, markup: x.markup ? { ...x.markup, style: { ...x.markup.style, ...st } } : x.markup } : x)) })); setRecolor(null); }} />}
+    </div>
+  );
+}
+
+/** Change Colors (Revu's Change Multiple Colors): each colour the tool uses, with the colour it becomes. */
+function ChangeColors({ tool, onClose, onApply }: { tool: ToolPreset; onClose: () => void; onApply: (st: Partial<MarkupStyle>) => void }) {
+  const st = tool.style;
+  const [color, setColor] = useState(st.color);
+  const [fill, setFill] = useState(st.fill ?? '');
+  const [text, setText] = useState(st.textColor ?? '');
+  const hasFill = st.fill != null, hasText = st.textColor != null;
+  const ok = () => onApply({ color, ...(hasFill ? { fill: fill || st.fill } : {}), ...(hasText ? { textColor: text || st.textColor } : {}) });
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" role="dialog" aria-label="Change Colors" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') onClose(); if (e.key === 'Enter') ok(); }}>
+        <div className="modal-title">Change Colors: {tool.name}</div>
+        <div className="form-row"><span>Line</span><span className="swatch" style={{ background: st.color }} /> → <input type="color" aria-label="Line color" value={color} onChange={(e) => setColor(e.target.value)} /></div>
+        {hasFill && <div className="form-row"><span>Fill</span><span className="swatch" style={{ background: st.fill ?? undefined }} /> → <input type="color" aria-label="Fill color" value={fill || '#ffffff'} onChange={(e) => setFill(e.target.value)} /></div>}
+        {hasText && <div className="form-row"><span>Text</span><span className="swatch" style={{ background: st.textColor ?? undefined }} /> → <input type="color" aria-label="Text color" value={text || '#000000'} onChange={(e) => setText(e.target.value)} /></div>}
+        <div className="modal-actions"><span className="spacer" /><button className="primary" onClick={ok}>OK</button><button onClick={onClose}>Cancel</button></div>
+      </div>
     </div>
   );
 }
@@ -439,6 +900,7 @@ function Viewports() {
 function Measurements() {
   const s = useApp();
   const doc = useActiveDoc();
+  const [measureMenu, setMeasureMenu] = useState<{ x: number; y: number } | null>(null);
   if (!doc) return <p className="muted pad">Open a document to calibrate and measure.</p>;
   const scale = doc.calibrations[doc.page];
   const sel = doc.markups.filter((m) => doc.selection.includes(m.id));
@@ -448,8 +910,25 @@ function Measurements() {
     if (!v) continue;
     totals.length += v.length ?? 0; totals.area += v.area ?? 0; totals.volume += v.volume ?? 0; totals.count += v.count ?? 0;
   }
+  const measureTools = TOOLS.filter((t) => t.group === 'measure' && t.id !== 'viewport' && t.id !== 'space');
   return (
     <div className="props">
+      <div className="prop-actions pad measure-head">
+        <button aria-label="Measurements menu" onClick={(e) => setMeasureMenu({ x: e.clientX, y: e.clientY })}>Measurements ▾</button>
+      </div>
+      {measureMenu && <ContextMenu x={measureMenu.x} y={measureMenu.y} onClose={() => setMeasureMenu(null)} items={[
+        { label: 'Show Measurement Tools', checked: !s.toggles.noMeasureTools, action: () => s.toggle('noMeasureTools') },
+        { label: 'Snap Orthogonal', checked: !!s.toggles.snapOrtho, action: () => s.toggle('snapOrtho') },
+        { label: 'Snap to Content', checked: s.toggles.content, action: () => s.toggle('content') },
+        { label: 'Highlight Viewports', checked: !s.toggles.noViewportHighlight, action: () => s.toggle('noViewportHighlight') },
+      ]} />}
+      {!s.toggles.noMeasureTools && (
+        <div className="measure-tools" role="toolbar" aria-label="Measurement tools">
+          {measureTools.map((t) => (
+            <button key={t.id} className={s.tool === t.id ? 'on' : ''} title={`${t.name}${t.shortcut ? ` (${t.shortcut})` : ''}`} aria-label={t.name} onClick={() => s.setTool(t.id)}><Icon name={t.id} size={16} /></button>
+          ))}
+        </div>
+      )}
       <div className="prop-section">Page Scale</div>
       <Row label="Page"><input readOnly value={doc.loaded.pages[doc.page].label} /></Row>
       <div className="scale-current">{scale ? scale.label : 'Scale Not Set'}</div>

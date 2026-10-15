@@ -33,12 +33,12 @@ export const APP_COMMANDS: Command[] = [
   c('Window', 'Search', 'Alt+1'), c('Window', 'Sets', 'Alt+2'), c('Window', 'Signatures', 'Alt+4'), c('Window', 'Properties', 'Alt+P'), c('Window', 'Tool Chest', 'Alt+X'),
   c('Window', 'Measurements', 'Alt+U'), c('Window', 'Hide Panel', 'Shift+F4'),
   c('Window', 'Full Screen', 'F11'), c('Window', 'Presentation', 'Ctrl+Enter'), c('Window', 'Navigation Bar', 'F4'), c('Window', 'Balance', 'Shift+F12'),
-  c('Window', 'Show Context Menu', 'Shift+F10'), c('View', 'Zoom Tool (toggle)', 'Shift+Z'), c('Forms', 'Forms Editor', 'Ctrl+Shift+F'), c('Help', 'Help', 'F1'),
+  c('Window', 'Show Context Menu', 'Shift+F10'), c('View', 'Zoom Tool (toggle)', 'Shift+Z'), c('Forms', 'Forms Editor', 'Ctrl+Shift+F'), c('Help', 'Help', 'F1'), c('CyanTakeoff', 'Preferences', 'Ctrl+K'),
 ];
 
 export function allCommands(): Command[] {
   return [
-    ...TOOLS.filter((t) => !['viewport', 'space', 'legend', 'visual-pick', 'region-pick', 'edit-text', 'erase-content'].includes(t.id))
+    ...TOOLS.filter((t) => !['viewport', 'space', 'legend', 'visual-pick', 'region-pick', 'edit-text', 'erase-content', 'cut-content', 'sketch-polygon', 'sketch-polyline', 'sketch-rectangle', 'sketch-ellipse', 'review-text', 'caret'].includes(t.id))
       .map((t) => ({ id: `tool:${t.id}`, label: t.name, group: t.group === 'measure' ? 'Measure' : t.group === 'markup' ? 'Markup tools' : t.group === 'form' ? 'Forms' : 'Selection', combo: t.shortcut })),
     ...APP_COMMANDS,
   ];

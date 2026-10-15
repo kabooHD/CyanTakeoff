@@ -1,3 +1,4 @@
+import { useApp } from '../model/store';
 // Layer visibility in rendering: pdf.js draws the drawing's own layers
 // through an optional content configuration; our markups are hidden when
 // their layer is hidden. A layer with a zoom range (Layer Properties >
@@ -34,4 +35,4 @@ export function ocConfig(doc: DocState, zoom = 1): Promise<OCConfig> | undefined
 export const visibilityKey = (doc: DocState, zoom = 1) =>
   Object.keys(doc.layers?.layers ?? {}).filter((id) => !layerShown(doc, id, zoom)).sort().join(',');
 
-export const markupShown = (doc: DocState, m: Markup, zoom = 1) => !m.layer || layerShown(doc, m.layer, zoom);
+export const markupShown = (doc: DocState, m: Markup, zoom = 1) => !m.hidden && !useApp.getState().toggles.hideMarkups && (!m.layer || layerShown(doc, m.layer, zoom));

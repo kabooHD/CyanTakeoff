@@ -14,10 +14,11 @@ import { loadForUpdate } from '../pdf/incremental';
 import { layerShown } from './layersView';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { openCompare } from './Compare';
+import { openPagesDialog, unflattenMarkups } from './PagesDialog';
 
 const EMPTY: LayerSet = { layers: {}, order: [], configs: [] };
 
-export const useLayersUi = create<{ dialog: { kind: 'delete' | 'props' | 'adjust'; keys: string[] } | null; onPage: boolean; alpha: boolean }>(() => ({ dialog: null, onPage: false, alpha: false }));
+export const useLayersUi = create<{ dialog: { kind: 'delete' | 'props' | 'adjust'; keys: string[] } | null; onPage: boolean; alpha: boolean }>(() => ({ dialog: null, onPage: !!useApp.getState().prefs.layersOnPageOnly, alpha: false }));
 
 const setOf = (d: DocState) => d.layers ?? EMPTY;
 const newId = () => `new:${crypto.randomUUID()}`;
@@ -132,7 +133,8 @@ export function LayersPanel({ doc }: { doc: DocState }) {
   const target = sel[0] ?? null;
 
   const toggleNode = (n: LayerNode, on?: boolean) => {
-    const ids = idsUnder(n).filter((id) => !set.layers[id]?.locked);
+    // Preferences > Layers: Hide Child Layers when Hiding Parent Layers (on by default).
+    const ids = (useApp.getState().prefs.hideChildLayers || !n.id ? idsUnder(n) : [n.id]).filter((id) => !set.layers[id]?.locked);
     const next = on ?? !(n.id ? vis[n.id] !== false : ids.some((id) => vis[id] === false));
     view({ ...vis, ...Object.fromEntries(ids.map((id) => [id, next])) });
   };
@@ -188,6 +190,9 @@ export function LayersPanel({ doc }: { doc: DocState }) {
         { label: 'Delete', action: () => useLayersUi.setState({ dialog: { kind: 'delete', keys } }) },
         { sep: true },
         { label: 'Export Layer to Page…', action: () => void exportLayers(keys) },
+        // Flatten to this layer (the dialog opens with Assign Layer preset), and the reverse.
+        ...(l ? [{ label: 'Flatten Markups…', action: () => openPagesDialog('flatten', l.name) }] : []),
+        { label: 'Unflatten Markups', action: () => void unflattenMarkups() },
         ...(n.id ? [{ label: 'Move / Rotate / Scale…', disabled: n.id.startsWith('new:') || !!l?.locked, action: () => useLayersUi.setState({ dialog: { kind: 'adjust', keys: [n.id!] } }) }] : []),
         ...(n.id ? [{ label: 'Layer Properties…', action: () => useLayersUi.setState({ dialog: { kind: 'props', keys: keys.filter((k) => !k.startsWith('g:')) } }) }] : []),
       ],

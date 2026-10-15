@@ -25,7 +25,7 @@ export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; it
   const [pos, setPos] = useState({ x, y });
   useLayoutEffect(() => {
     const r = ref.current!.getBoundingClientRect();
-    setPos({ x: Math.min(x, innerWidth - r.width - 4), y: Math.min(y, innerHeight - r.height - 4) });
+    setPos({ x: Math.max(4, Math.min(x, innerWidth - r.width - 4)), y: Math.max(4, Math.min(y, innerHeight - r.height - 4)) });
   }, [x, y]);
   useEffect(() => {
     const close = (e: Event) => { if (!ref.current?.contains(e.target as Node)) onClose(); };

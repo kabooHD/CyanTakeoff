@@ -69,3 +69,18 @@ describe('Dynamic Fill', () => {
     expect(simplifyClosed(pts, 1).length).toBeLessThanOrEqual(4);
   });
 });
+
+describe('Fill Size', () => {
+  it('seeds a disc of cells around the cursor', async () => {
+    const { Flood, seedDisc } = await import('../src/model/fill');
+    const grid = { w: 9, h: 9, data: new Uint8Array(81) };
+    const f = new Flood(grid);
+    seedDisc(f, 4, 4, 0);
+    expect(f.filled.reduce((a, b) => a + b, 0)).toBe(1);
+    const g = new Flood({ w: 9, h: 9, data: new Uint8Array(81) });
+    seedDisc(g, 4, 4, 2);
+    expect(g.filled.reduce((a, b) => a + b, 0)).toBe(13); // a radius-2 disc on a grid
+    expect(g.filled[4 * 9 + 6]).toBe(1);
+    expect(g.filled[2 * 9 + 2]).toBe(0);
+  });
+});

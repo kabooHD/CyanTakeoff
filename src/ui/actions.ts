@@ -1,3 +1,5 @@
+import { IMAGE_ACCEPT, createFromFiles, isImageFile } from './DocTools';
+import { legendsOf } from '../model/captureExport';
 import { statusLabel } from '../model/statusModels';
 import { anchorOf, spaceAt } from '../model/spaces';
 import { activeDoc, serialize, useApp, type DocState } from '../model/store';
@@ -7,6 +9,12 @@ import { displayValue, isNumericColumn, numericValue } from '../model/columns';
 import { buildXlsx } from '../model/xlsx';
 import { buildSummaryPdf } from '../pdf/summary';
 import { pickFile } from './toolActions';
+import { placeColumns } from '../model/listColumns';
+import { displayText } from '../model/measureDisplay';
+import { scaleAt } from '../model/measure';
+
+/** Position and size columns (inches from the page's lower left; real-world size at the markup's scale). */
+const place = (m: Markup, d: DocState) => placeColumns(m.points, d.loaded.pages[m.page]?.height ?? 0, m.scale ?? scaleAt(d.calibrations[m.page], d.viewports[m.page], m.points[0]));
 
 type Picker = (o: unknown) => Promise<FileSystemFileHandle[]>;
 
@@ -18,16 +26,17 @@ export async function openFile() {
     try {
       handles = await w.showOpenFilePicker({
         multiple: true,
-        types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }],
+        types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }, { description: 'Images', accept: { 'image/png': ['.png'], 'image/jpeg': ['.jpg', '.jpeg'], 'image/webp': ['.webp'], 'image/gif': ['.gif'], 'image/bmp': ['.bmp'] } }],
       });
     } catch { return; }
     for (const h of handles) {
       const f = await h.getFile();
+      if (isImageFile(f)) { await createFromFiles([f]); continue; } // an image opens as a one-page PDF (Revu converts it)
       await useApp.getState().openBytes(new Uint8Array(await f.arrayBuffer()), f.name, h);
     }
     return;
   }
-  const input = Object.assign(document.createElement('input'), { type: 'file', accept: '.pdf,application/pdf', multiple: true });
+  const input = Object.assign(document.createElement('input'), { type: 'file', accept: `.pdf,application/pdf,${IMAGE_ACCEPT}`, multiple: true });
   input.onchange = async () => {
     for (const f of Array.from(input.files ?? [])) await openFileObject(f);
   };
@@ -35,6 +44,7 @@ export async function openFile() {
 }
 
 export async function openFileObject(f: File, handle?: FileSystemFileHandle) {
+  if (isImageFile(f)) { await createFromFiles([f]); return; }
   await useApp.getState().openBytes(new Uint8Array(await f.arrayBuffer()), f.name, handle);
 }
 
@@ -79,19 +89,33 @@ export const SUMMARY_COLUMNS: SummaryColumn[] = [
   { key: 'created', label: 'Creation Date', value: (m) => new Date(m.created).toLocaleString() },
   { key: 'checkmark', label: 'Checkmark', value: (m) => (m.checked ? '✓' : '') },
   { key: 'lock', label: 'Lock', value: (m) => (m.locked ? 'Locked' : '') },
+  { key: 'legend', label: 'Legend', value: (m, d) => legendsOf(m, d.markups) },
   { key: 'pageIndex', label: 'Page Index', value: (m) => m.page + 1, numeric: true, noTotal: true },
   { key: 'status', label: 'Status', value: (m) => statusLabel(m) },
   { key: 'layer', label: 'Layer', value: (m, d) => (m.layer ? d.layers?.layers[m.layer]?.name ?? '' : '') },
   { key: 'color', label: 'Color', value: (m) => m.style.color },
-  { key: 'measurement', label: 'Measurement', value: (m) => meas(m)?.text ?? '' },
+  { key: 'measurement', label: 'Measurement', value: (m) => displayText(m, meas(m)) },
   { key: 'length', label: 'Length', value: (m) => round(meas(m)?.length), numeric: true },
   { key: 'area', label: 'Area', value: (m) => round(meas(m)?.area), numeric: true },
   { key: 'volume', label: 'Volume', value: (m) => round(meas(m)?.volume), numeric: true },
   { key: 'angle', label: 'Angle', value: (m) => round(meas(m)?.angle), numeric: true },
   { key: 'count', label: 'Count', value: (m) => meas(m)?.count ?? '', numeric: true },
   { key: 'depth', label: 'Depth', value: (m) => m.depth ?? '', numeric: true },
+  // Wall Area (Revu): a perimeter/length with depth gives its area; an area/volume with depth gives perimeter × depth.
+  { key: 'wallArea', label: 'Wall Area', value: (m) => { if (!m.depth) return ''; const r = meas(m); return m.type === 'area' || m.type === 'volume' ? round((r?.length ?? 0) * m.depth) : m.type === 'length' || m.type === 'polylength' || m.type === 'perimeter' ? round(r?.area) : ''; }, numeric: true },
+  { key: 'rise', label: 'Rise/Drop', value: (m) => m.rise ?? '', numeric: true },
+  { key: 'sequence', label: 'Sequence', value: (m) => m.seq?.n ?? '', numeric: true, noTotal: true },
   { key: 'slope', label: 'Slope', value: (m) => (m.slope ? `${m.slope.value}${m.slope.unit === 'pitch' ? '/12' : m.slope.unit === 'degree' ? '°' : '%'}` : '') },
   { key: 'units', label: 'Units', value: (m) => unitsOf(m) },
+  { key: 'capture', label: 'Capture', value: (m) => (m.capture?.length ? `📷 ${m.capture.length}` : '') },
+  { key: 'x', label: 'X', value: (m, d) => place(m, d).x, numeric: true, noTotal: true },
+  { key: 'y', label: 'Y', value: (m, d) => place(m, d).y, numeric: true, noTotal: true },
+  { key: 'xCenter', label: 'X Center', value: (m, d) => place(m, d).xCenter, numeric: true, noTotal: true },
+  { key: 'yCenter', label: 'Y Center', value: (m, d) => place(m, d).yCenter, numeric: true, noTotal: true },
+  { key: 'docWidth', label: 'Document Width', value: (m, d) => place(m, d).docWidth, numeric: true, noTotal: true },
+  { key: 'docHeight', label: 'Document Height', value: (m, d) => place(m, d).docHeight, numeric: true, noTotal: true },
+  { key: 'width', label: 'Width', value: (m, d) => place(m, d).width ?? '', numeric: true, noTotal: true },
+  { key: 'height', label: 'Height', value: (m, d) => place(m, d).height ?? '', numeric: true, noTotal: true },
 ];
 
 function round(v: number | undefined) {

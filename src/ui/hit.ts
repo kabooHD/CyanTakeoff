@@ -1,9 +1,17 @@
+import { calloutAttach } from '../pdf/save';
 import { arcPoints, arcThrough, bounds, distToSegment, pointInPolygon, rectCorners, rectPairs } from '../model/measure';
 import type { Markup, Pt } from '../model/types';
 import { CURVABLE, flatPoints, flattenPath, hasCurves } from '../model/curves';
+import { drawnPoints } from '../model/rotate';
+import { drawnLine } from '../model/measureDisplay';
 
-/** Outline used for hit-testing and rubber-band selection. */
+/** Outline used for hit-testing and rubber-band selection (a turned box shape: its corners as drawn). */
 export function outline(m: Markup): { pts: Pt[]; closed: boolean } {
+  const o = outlineRaw(m);
+  return m.rotation ? { pts: drawnPoints(m, o.pts), closed: o.closed } : o;
+}
+
+function outlineRaw(m: Markup): { pts: Pt[]; closed: boolean } {
   const P = m.points;
   switch (m.type) {
     case 'highlight': case 'strikeout': case 'underline': case 'squiggly': case 'redaction':
@@ -12,7 +20,7 @@ export function outline(m: Markup): { pts: Pt[]; closed: boolean } {
         return { pts: rectCorners({ x: b.minX, y: b.minY }, { x: b.maxX, y: b.maxY }), closed: true };
       }
       return { pts: P.length > 1 ? rectCorners(P[0], P[1]) : P, closed: true };
-    case 'stamp': case 'image': case 'link': case 'typewriter': case 'legend':
+    case 'stamp': case 'image': case 'link': case 'typewriter': case 'legend': case 'caret':
       return { pts: P.length > 1 ? rectCorners(P[0], P[1]) : P, closed: true };
     case 'cloudplus': {
       const all = P.length >= 4 ? [...rectCorners(P[0], P[1]), ...rectCorners(P[2], P[3])] : P;
@@ -27,6 +35,8 @@ export function outline(m: Markup): { pts: Pt[]; closed: boolean } {
       return { pts: P.length > 1 ? rectCorners(P[0], P[1]) : P, closed: true };
     case 'callout':
       return { pts: P.length > 2 ? rectCorners(P[1], P[2]) : P, closed: true };
+    case 'length': case 'dimension':
+      return { pts: drawnLine(m, P), closed: false };
     case 'radius': case 'diameter': {
       if (P.length < 2) return { pts: P, closed: false };
       if (m.type === 'radius' && P.length > 2) return { pts: [P[0], ...arcPoints(P[0], P[1], P[2], -1)], closed: false };
@@ -65,7 +75,7 @@ export function hitTest(m: Markup, p: Pt, tol: number): boolean {
     return rectPairs(m.points).some(([a, b]) => { const r = bounds([a, b]); return p.x >= r.minX - tol && p.x <= r.maxX + tol && p.y >= r.minY - tol && p.y <= r.maxY + tol; });
   }
   if (m.type === 'count') return pts.some((q) => Math.hypot(q.x - p.x, q.y - p.y) <= 5 + t);
-  if (m.type === 'callout' && distToSegment(p, m.points[0], m.points[1]) <= t) return true;
+  if (m.type === 'callout' && m.points.length > 2 && [m.points[0], ...m.points.slice(3)].some((tip) => distToSegment(p, tip, calloutAttach(tip, m.points[1], m.points[2])) <= t)) return true;
   if (closed && pointInPolygon(p, pts) && !inCutout(m, p)) return true;
   for (let i = 1; i < pts.length; i++) if (distToSegment(p, pts[i - 1], pts[i]) <= t) return true;
   if (closed && pts.length > 2 && distToSegment(p, pts[pts.length - 1], pts[0]) <= t) return true;

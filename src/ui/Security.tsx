@@ -4,6 +4,7 @@
 // saved. When a file was opened with its open password only, changing its
 // security needs the permissions (owner) password, as in Revu.
 import { useState } from 'react';
+import { FilesRow, batchHint, targets } from './filesRow';
 import { create } from 'zustand';
 import { useApp, type DocState } from '../model/store';
 import { setAskPassword } from '../model/prompts';
@@ -59,6 +60,7 @@ function SecurityForm({ d }: { d: DocState }) {
   const [perms, setPerms] = useState<Record<string, boolean>>(Object.fromEntries(PERMS.map(([k]) => [k, (startP & PERM[k]) !== 0])));
   const [auth, setAuth] = useState('');
   const [error, setError] = useState('');
+  const [all, setAll] = useState(() => batchHint.take());
   const close = () => useSecurityDialog.setState({ open: false });
   const needOwner = !!d.security && !d.security.owner;
   const ok = async () => {
@@ -71,8 +73,11 @@ function SecurityForm({ d }: { d: DocState }) {
     const change: NewSecurity | 'remove' = on
       ? { userPassword: requireOpen ? user : '', ownerPassword: owner, permissions: PERMS.reduce((p, [k]) => p | (perms[k] ? PERM[k] : 0), 0) | (perms.print ? PERM.printHigh : 0) }
       : 'remove';
-    useApp.setState((s) => ({ docs: s.docs.map((x) => (x.id === d.id ? { ...x, securityChange: change, dirty: true } : x)) }));
-    useApp.getState().setStatus(on ? 'Password security will be applied when you save' : 'Security will be removed when you save');
+    // Batch: every open document whose security we may change (others need their permissions password).
+    const ids = new Set(targets(d, all).filter((x) => x.id === d.id || !x.security || x.security.owner).map((x) => x.id));
+    const skipped = targets(d, all).length - ids.size;
+    useApp.setState((s) => ({ docs: s.docs.map((x) => (ids.has(x.id) ? { ...x, securityChange: change, dirty: true } : x)) }));
+    useApp.getState().setStatus(`${on ? 'Password security will be applied' : 'Security will be removed'} when you save${ids.size > 1 ? ` (${ids.size} documents)` : ''}${skipped ? `; ${skipped} skipped: permissions password needed` : ''}`);
     close();
   };
   return (
@@ -102,6 +107,7 @@ function SecurityForm({ d }: { d: DocState }) {
             <p className="muted small">Permissions are honoured by PDF viewers that respect them; the open password encrypts the file.</p>
           </>}
           {error && <p className="error" role="alert">{error}</p>}
+          <FilesRow all={all} setAll={setAll} />
           <div className="modal-actions"><span className="spacer" /><button className="primary" onClick={ok}>OK</button><button onClick={close}>Cancel</button></div>
         </div>
       </div>

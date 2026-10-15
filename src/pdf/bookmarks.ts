@@ -14,8 +14,10 @@ export interface Bookmark {
   /** Destination fit type and its numbers (PDF space), e.g. XYZ [left, top, zoom]. */
   fit?: string;
   args?: (number | null)[];
-  /** The destination was set here (new bookmark or Set to Current View). */
+  /** The destination was set here (new bookmark, Set to Current View or the Action dialog). */
   destEdited?: boolean;
+  /** An action other than a jump within this file: a web address, a page of another file, or a Place. */
+  action?: { uri?: string; file?: string; page?: number; dest?: string };
   /** The bookmark jumps to a page that is not in the file (Audit Bookmarks). */
   broken?: boolean;
   color?: string;
@@ -90,7 +92,20 @@ export function readBookmarks(doc: PDFDocument): Bookmark[] {
       let goTo = dest !== undefined;
       const a = it.lookup(N('A'));
       if (!dest && a instanceof PDFDict && String(a.get(N('S'))) === '/GoTo') { dest = a.get(N('D')); goTo = true; }
+      if (a instanceof PDFDict && !dest) {
+        const kind = String(a.get(N('S')));
+        if (kind === '/URI') b.action = { uri: text(a.lookup(N('URI'))) };
+        else if (kind === '/GoToR' || kind === '/Launch') {
+          const f = a.lookup(N('F'));
+          const file = f instanceof PDFDict ? text(f.lookup(N('UF'))) || text(f.lookup(N('F'))) : text(f);
+          const d = a.lookup(N('D'));
+          const pg = d instanceof PDFArray ? d.lookup(0) : undefined;
+          if (file) b.action = { file, page: pg instanceof PDFNumber ? pg.asNumber() : 0 };
+        }
+      }
+      const named = dest instanceof PDFString || dest instanceof PDFHexString ? dest.decodeText() : undefined;
       const arr = resolveDest(doc, dest);
+      if (named && arr) b.action = { dest: named };
       if (arr) {
         const p0 = arr.get(0);
         const idx = p0 instanceof PDFRef ? pageIndex.get(refStr(p0)) : undefined;
@@ -169,9 +184,21 @@ export function writeBookmarks(doc: PDFDocument, list: Bookmark[]) {
       else it.delete(N('C'));
       const flags = (b.italic ? 1 : 0) | (b.bold ? 2 : 0);
       if (flags) it.set(N('F'), PDFNumber.of(flags)); else it.delete(N('F'));
-      if ((b.destEdited || !(existing instanceof PDFDict)) && b.page !== null && pages[b.page]) {
-        it.delete(N('A'));
-        it.set(N('Dest'), ctx.obj([pages[b.page].ref, N(b.fit ?? 'Fit'), ...(b.args ?? []).map((x) => (x === null ? PDFNull : PDFNumber.of(x)))]));
+      if (b.destEdited || !(existing instanceof PDFDict)) {
+        const act = b.action;
+        if (act?.uri) {
+          it.delete(N('Dest'));
+          it.set(N('A'), ctx.obj({ S: 'URI', URI: PDFString.of(act.uri) }));
+        } else if (act?.file) {
+          it.delete(N('Dest'));
+          it.set(N('A'), ctx.obj({ S: 'GoToR', F: { Type: 'Filespec', F: PDFString.of(act.file), UF: PDFHexString.fromText(act.file) }, D: [act.page ?? 0, N('Fit')], NewWindow: false }));
+        } else if (act?.dest) {
+          it.delete(N('A'));
+          it.set(N('Dest'), /^[\x20-\x7e]*$/.test(act.dest) && !/[()\\]/.test(act.dest) ? PDFString.of(act.dest) : PDFHexString.fromText(act.dest));
+        } else if (b.page !== null && pages[b.page]) {
+          it.delete(N('A'));
+          it.set(N('Dest'), ctx.obj([pages[b.page].ref, N(b.fit ?? 'Fit'), ...(b.args ?? []).map((x) => (x === null ? PDFNull : PDFNumber.of(x)))]));
+        }
       }
       ctx.assign(ref, it);
     });

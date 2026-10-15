@@ -74,32 +74,46 @@ preview server can die between turns: restart it if e2e cannot connect.
 Done: Revu-style workspace and official default shortcuts; markup tools
 (incl. Cloud+, Typewriter, Arc, Dimension, Stamp, Flag, Strikethrough/
 Underline/Squiggly and text Highlight, Image, Snapshot, Hyperlink, File
-Attachment, Eraser); Group/Ungroup, Arrange, Lock, Align, Flip, Format
+Attachment, Eraser); Group/Ungroup, Arrange, Lock, Align, Flip, rotation (src/model/rotate.ts: handle with 15° steps, box shapes keep an angle), purple scale handles (src/model/scale.ts), cloud Size/Invert (cloudArcLength in measure.ts), Highlight = Multiply, Flip Text, note icons (src/model/noteIcons.ts), image mask colour and encoding (src/model/imageMask.ts, src/ui/imageTools.ts), Blend Mode (src/model/blend.ts, /BM), band selection direction (src/model/select.ts), Length caption leader line, Format
 Painter, Lasso; Spaces (Revu /BSISpaces, panel, Space column); slope, rise/drop, wall area;
 custom columns incl. formulas; Summary to Excel (.xlsx), CSV or PDF report;
-Legends; Markups List replies, Checkmark/Lock/Creation Date columns, arrow
-keys and jump-to-markup; Search (Ctrl+F); split view (Ctrl+2/Ctrl+H); undo/redo of page operations; view modes (single, continuous, side by side,
+Legends (src/model/legend.ts: extra columns, title/header options, custom source pages, symbol size; src/ui/legendCommands.ts: Apply to All Pages, Copy Legend to Snapshot); Markups List replies, Checkmark/Lock/Creation Date/position/Wall Area/Rise/Sequence columns, right-click menu
+(src/ui/markupMenu.ts), Hide Markups, Saved Filters, custom column filters (src/model/listFilter.ts; filtered-out markups dimmed via store listVisible), section grouping, arrow
+keys and jump-to-markup; Search (Ctrl+F); split view (Ctrl+2/Ctrl+H); undo/redo of page operations; view modes (single, continuous, side by side, cover page, Dark Mode, line-weight and reply-indicator toggles,
 continuous side by side: Ctrl+4..7) and Rotate View (Ctrl+Shift+Plus/Minus); page operations (insert,
 blank, delete, extract, replace keeping markups, rotate, reorder by
-thumbnail drag, split, combine) and Flatten; Compare Documents (clouds
+thumbnail drag, split, combine) and Flatten (per-type; All / Exclude Filtered / selection scope; Overlay Text on the assigned layer; Capture summary attachment); Compare Documents (clouds
 differences, visual or vector, alignment points) and Overlay Pages (two-colour overlay PDF); Page Labels from
-title-block sheet numbers, Batch Link (incl. across open files), Sets panel
-(open files as one set), Slip Sheet (by sheet number, markups carried);
-Tool Chest tool sets (new/rename/export/import, Properties vs Drawing mode),
+title-block sheet numbers, Batch Link (incl. across open files; terms, appearance, overlap and report in src/model/batchLink.ts), Sets panel (set files src/model/setFile.ts, Publish Combine/Package, multi-page stacks)
+(open files as one set; revision stacks and Set Options in src/model/revisions.ts), Slip Sheet (by sheet number or index with a wildcard filter, replace or insert before, markups carried, Superseded stamp, CSV report; src/model/slipSheet.ts);
+Tool Chest tool sets (new/rename/export/import, Properties vs Drawing mode,
+Symbol/Detail view, set scale, hide, Comment Persistence, Update on Reuse:
+src/model/toolScale.ts),
 Keyboard Shortcuts editor (src/ui/commands.ts), Profiles; Print (Ctrl+P,
-src/ui/Print.tsx, layout math in src/model/print.ts); Rulers, crosshair,
+src/ui/Print.tsx, layout math in src/model/print.ts, page filters, Print Spaces, sheet order/border; Selected pages from
+the Thumbnails selection in src/ui/Panels.tsx, margins); Rulers, crosshair,
 Dimmer, Previous/Next View (src/ui/Rulers.tsx, src/model/rulers.ts);
-Bookmarks editing (src/ui/BookmarksPanel.tsx, src/pdf/bookmarks.ts) and
+Bookmarks editing incl. Action dialog, Save Collapse State, Export as PDF (src/ui/BookmarksPanel.tsx, src/pdf/bookmarks.ts, src/pdf/bookmarksReport.ts) and
 AutoMark (src/ui/AutoMark.tsx); line
-styles and hatch patterns (src/model/lineStyles.ts, src/ui/LineStyles.tsx);
-spell check (F7, src/ui/Spell.tsx, nspell + dictionary-en served from /dict/);
+styles and hatch patterns (src/model/lineStyles.ts, src/ui/LineStyles.tsx;
+AutoCAD .pat import in src/model/pat.ts);
+spell check (F7, src/ui/Spell.tsx, nspell + 11 Hunspell dictionaries served from /dict/);
 VisualSearch (src/model/visualSearch.ts matcher, src/ui/VisualSearch.tsx);
 Sequences (src/model/sequence.ts, src/ui/SequenceDialog.tsx); Quantity Link
 (src/ui/QuantityLink.tsx, cell writes in src/model/xlsxEdit.ts); Header &
 Footer, Bates, Watermark (src/pdf/stamps.ts, src/ui/HeaderFooter.tsx);
 password security (src/pdf/crypt.ts: R2-R6 decrypt, AES-256 encrypt;
 src/ui/Security.tsx), Reduce File Size (src/pdf/reduce.ts), XFDF
-(src/pdf/xfdf.ts); Edit Text / Erase Content (src/pdf/editText.ts, using
+(src/pdf/xfdf.ts); New PDF from Template (src/model/templates.ts, src/ui/Templates.tsx);
+Export as Image / Text, Publish as Flattened / Uncompressed (src/ui/FileExports.tsx),
+Undo History (src/ui/UndoHistory.tsx), Crop Image (src/model/cropImage.ts), Certify
+Document and Validate Signatures (DocMDP in src/pdf/sign.ts);
+Color Processing, Archive as PDF/A, Repair PDF (src/ui/ColorProcess.tsx,
+src/pdf/colorProcess.ts, src/pdf/pdfa.ts, src/pdf/repair.ts);
+Number Pages, Page Labels from Bookmarks, Page Setup (src/ui/PageSetup.tsx,
+src/model/pageLabels.ts, pageSetup in src/pdf/docTools.ts);
+Review Text and Create Hyperlinks from URLs (src/ui/ReviewText.tsx,
+src/model/urls.ts); Edit Text / Erase Content / Cut Content (src/pdf/editText.ts, using
 the redaction walker's text probe); touch and pen (pinch, pan, long press,
 Pen Mode; in Viewer.tsx); small Revu commands (src/ui/quickCommands.ts:
 Save All, Refresh, Autosize Text Box, Remove Selected from Group, Full
@@ -110,24 +124,30 @@ F4 navigation bar, Shift+F10 context menu); Select Text / Select All Text
 (src/ui/markupRaster.tsx), Snapshot Content, Copy Page to Snapshot;
 Links panel with Places (src/ui/LinksPanel.tsx, src/pdf/places.ts) and
 File Access recent files (src/model/recent.ts, src/ui/FileAccess.tsx);
-New PDF, Crop Pages, Deskew, Email, Publish as Compressed (src/ui/DocTools.tsx,
+New PDF, Create From File(s) (images to PDF), Crop Pages, Deskew, Email, Publish as Compressed (src/ui/DocTools.tsx,
 src/pdf/docTools.ts, src/model/deskew.ts); Unflatten (flattenPage recovery,
 unflattenPage in src/pdf/pages.ts); custom stamps (src/model/stamps.ts,
 src/ui/Stamps.tsx), status models (src/model/statusModels.ts,
 src/ui/StatusModels.tsx), Edit Action on any markup, Offset
-(src/model/offset.ts, src/ui/OffsetBar.tsx), Camera (src/ui/Camera.tsx),
+(src/model/offset.ts, src/ui/OffsetBar.tsx), Multiply (src/model/multiply.ts,
+src/ui/Multiply.tsx), Hide/Show markups, Sketch to Scale (src/model/sketch.ts,
+src/ui/SketchBar.tsx), Camera (src/ui/Camera.tsx), Capture photos (src/ui/Capture.tsx), Find Tools + Commands (src/ui/CommandFinder.tsx), Batch Compare/Overlay (src/model/batchPairs.ts, src/ui/BatchCompare.tsx), Flags panel (src/model/flags.ts, src/pdf/flags.ts, src/ui/FlagsPanel.tsx), Set Tags and Drawing Log (src/model/tags.ts, src/ui/Tags.tsx), Thumbnails toolbar and page clipboard (src/ui/pageClipboard.ts), Search scopes and Check Options (src/model/searchScope.ts), document properties panel (src/pdf/docInfo.ts, src/ui/DocumentProps.tsx), Preferences Ctrl+K (src/model/prefs.ts, src/ui/Prefs.tsx; Document prefs: display on open, rotate all pages, remember last page, reorder bookmarks, redirect links on slip sheet, find hyperlinks in content; Lock Panning in Fit Width; single key shortcuts in forms; spell check on/off and colour; multi-selection scale handles with Scale Appearance Properties for groups, Retain Layer on paste, Print Pop-Ups, split counts by Space; Save Mode (src/pdf/save.ts: incremental / rewrite / object streams) and File > Revert As (src/pdf/fileRevisions.ts, dialog in DocTools.tsx); Reopen Files from Last Session (src/model/session.ts, FileAccess.tsx): General, Document, Navigation, Grid & Snap, Markup, Measure, Sketch, Forms, Signature, Markups List, Layers, Spelling), text formatting (src/model/textStyle.ts: DS/RC), Count groups and symbols (src/model/count.ts), line ends and callout leaders (src/model/lineEnds.ts), Summary dialog (src/model/summary.ts, src/ui/SummaryDialog.tsx, src/pdf/summary.ts), capture export (src/model/captureExport.ts), Create Stamp templates/dynamic text/PDF import-export (src/model/stamps.ts, src/ui/Stamps.tsx), Dynamic Fill settings and Measure prefs, caption move/rotate (captionOffset/Angle in measureDisplay.ts), choice items/profile columns (src/model/columns.ts), Batch Sign & Seal, Insert Layered
+Pages (DocTools.tsx),
 Replace Checked (src/ui/Search.tsx); low-end machine pass (src/model/device.ts: undo
 memory budget, cold undo snapshots, canvas limits; docs/perf.md); CyanTakeoff (=Revu)
-and Batch menus; form filling (AcroForm inputs saved into the form) and
-field creation (Tools > field tools, X = signature field, Forms Editor
-Ctrl+Shift+F), image
+and Batch menus (batch over open documents: src/ui/filesRow.tsx Files option in the
+dialogs, Apply Stamp in src/ui/ApplyStamp.tsx); form filling (AcroForm inputs saved into the form) and
+field creation (Tools > field tools incl. Button, X = signature field, Automatically Create Form Fields in src/model/autoFields.ts, tab order and field alignment in src/model/fieldLayout.ts, Forms Editor
+Ctrl+Shift+F; form data import/export/merge/reset/migrate in src/model/formData.ts,
+src/ui/FormData.tsx), image
 signatures (draw/type, reusable), digital signatures (src/pdf/sign.ts:
 .pfx/.p12, PKCS#7 detached, incremental updates in src/pdf/incremental.ts;
 trust list src/model/trust.ts with chain checks, RFC 3161 timestamps;
 Signatures panel Alt+4), redaction (mark area/text; apply removes the
 content under the marks: src/pdf/redactContent.ts), OCR (tesseract.js,
-7 Latin-script languages, assets served from /ocr/, invisible text);
-length, polylength, area, perimeter, volume, count, angle, radius, diameter;
+18 languages incl. Cyrillic, Greek, Arabic, Hebrew, CJK; invisible text in a
+glyphless Unicode font, src/pdf/glyphless.ts; assets served from /ocr/);
+length (with leader offset /LL: middle handle), polylength, area, perimeter, volume, count, angle, radius, diameter;
 cutouts (polygon/ellipse, Revu fuse/trim rules); curved segments
 (src/model/curves.ts: Ctrl+drag, Ctrl/Shift+click, Convert to Arc; PDF 2.0
 /Path); Dynamic Fill;
@@ -137,7 +157,8 @@ groups, rename, delete with content/markups, properties, configurations,
 drag to reorder, Add Layer from Page with Align Points, zoom-range and
 Export usage, Export Layer to Page, Move/Rotate/Scale a layer, Flatten >
 Assign Layer; markups' /OC);
-separate X/Y scales; 3-point radius; viewports (regions with their own scale, Revu
+measurement display options (caption, segment values, centroid, own units:
+src/model/measureDisplay.ts); separate X/Y scales; 3-point radius; viewports (regions with their own scale, Revu
 `/VP` layout); Apply Scale to Pages dialog (preset/custom/
 calibrate, page range, precision, saved presets) and scale prompt; snap to
 content/markup/grid; live measurement preview; Markups List (columns,
@@ -157,5 +178,4 @@ first paint, not only when a file is opened (split chunks, docs/perf.md); need R
 tests/fixtures/revu/README.md): cutout storage (ours in CTData), custom
 column values (/BSIColumnData kept on edit but not read), .btx tool sets;
 timestamps need a TSA that allows browser
-requests (CORS); revocation (OCSP/CRL) is not checked; OCR languages limited to Latin scripts
-(the text layer is WinAnsi).
+requests (CORS); revocation (OCSP/CRL) is not checked.

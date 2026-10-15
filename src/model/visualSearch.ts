@@ -21,6 +21,50 @@ export function toMask(rgba: Uint8ClampedArray | Uint8Array, w: number, h: numbe
   return { w, h, data };
 }
 
+export type RGB = [number, number, number];
+
+/**
+ * The colours drawn in a picture (Revu's Filter by Color swatches): opaque,
+ * non-white pixels quantised to 32 levels per channel, the most frequent
+ * first, with colours closer than `merge` folded into a stronger one.
+ */
+export function paletteOf(rgba: Uint8ClampedArray | Uint8Array, w: number, h: number, max = 6, merge = 64): RGB[] {
+  const counts = new Map<number, number>();
+  for (let j = 0; j < w * h * 4; j += 4) {
+    if (rgba[j + 3] <= 64) continue;
+    const r = rgba[j] >> 3, g = rgba[j + 1] >> 3, b = rgba[j + 2] >> 3;
+    if (r >= 30 && g >= 30 && b >= 30) continue; // paper
+    const key = (r << 10) | (g << 5) | b;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const sorted = [...counts].sort((a, b) => b[1] - a[1]);
+  const out: RGB[] = [];
+  for (const [key] of sorted) {
+    const c: RGB = [((key >> 10) & 31) * 8 + 4, ((key >> 5) & 31) * 8 + 4, (key & 31) * 8 + 4];
+    if (out.some((o) => dist(o, c) < merge)) continue;
+    out.push(c);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+const dist = (a: RGB, b: RGB) => Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2);
+
+/** Ink mask of the pixels close to one of `colors` (the colours left on in Filter by Color). */
+export function toColorMask(rgba: Uint8ClampedArray | Uint8Array, w: number, h: number, colors: RGB[], tolerance = 64): Mask {
+  const data = new Uint8Array(w * h);
+  if (!colors.length) return { w, h, data };
+  const t2 = tolerance * tolerance;
+  for (let i = 0, j = 0; i < data.length; i++, j += 4) {
+    if (rgba[j + 3] <= 64) continue;
+    const r = rgba[j], g = rgba[j + 1], b = rgba[j + 2];
+    for (const c of colors) {
+      if ((r - c[0]) ** 2 + (g - c[1]) ** 2 + (b - c[2]) ** 2 <= t2) { data[i] = 1; break; }
+    }
+  }
+  return { w, h, data };
+}
+
 /** Grow ink by one pixel (3×3). */
 export function dilate(m: Mask): Mask {
   const { w, h, data } = m;

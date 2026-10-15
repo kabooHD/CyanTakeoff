@@ -1,12 +1,15 @@
 // The legacy build includes polyfills, so older (e.g. managed corporate) browsers work.
 import { readPlaces, type Place } from './places';
+import { readFlags } from './flags';
+import { listEmbeddedFiles, readCustomProps, type EmbeddedFile } from './docInfo';
+import type { UnlinkedFlag } from '../model/flags';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { PDFDocument } from 'pdf-lib';
 import type { PDFDocumentProxy, PageViewport } from 'pdfjs-dist';
 import type { CustomColumn, Markup, Pt, Scale, Space, Viewport } from '../model/types';
 import { importAnnotations, readColumns, removeAnnots } from './importAnnots';
-import { readFields, type FormField } from './forms';
+import { pageTabs, readFields, type FormField } from './forms';
 import { layersOnPages, readLayers, type LayerSet } from './layers';
 import { readBookmarks, type Bookmark } from './bookmarks';
 
@@ -36,6 +39,8 @@ export interface LoadedDoc {
   columns: CustomColumn[];
   /** Form fields (AcroForm), widget rectangles in page space. */
   fields: FormField[];
+  /** Each page's automatic tab order (/Tabs): by Row, Column, Structure, or none. */
+  tabs: ('R' | 'C' | 'S' | null)[];
   /** refKeys of every annotation represented by a markup. */
   importedRefs: Set<string>;
   /** True when pdf-lib could not parse the file; markups cannot be saved into it. */
@@ -48,6 +53,11 @@ export interface LoadedDoc {
   bookmarks: Bookmark[];
   /** Named destinations (Revu Places). */
   places: Place[];
+  /** Unlinked flags of the Flags panel (ours, /CTFlags). */
+  flags: UnlinkedFlag[];
+  /** Custom Info entries and the files attached to the document (Properties panel). */
+  customProps: Record<string, string>;
+  embeddedFiles: EmbeddedFile[];
 }
 
 export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
@@ -121,6 +131,7 @@ export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
     markups,
     spaces,
     columns: lib ? readColumns(lib) : [],
+    tabs: pages.map((_, i) => (lib ? pageTabs(lib, i) : null)),
     fields: lib ? readFields(lib).map((f) => ({
       ...f,
       widgets: f.widgets.filter((w) => pages[w.page]).map((w) => {
@@ -138,6 +149,9 @@ export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
     pageLayers: lib ? layersOnPages(lib) : [],
     bookmarks: lib ? readBookmarks(lib) : [],
     places: lib ? readPlaces(lib) : [],
+    flags: lib ? readFlags(lib) : [],
+    customProps: lib ? readCustomProps(lib) : {},
+    embeddedFiles: lib ? listEmbeddedFiles(lib) : [],
   };
 }
 

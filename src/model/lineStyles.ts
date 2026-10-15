@@ -158,8 +158,8 @@ export function dashArray(def: LineStyleDef, width: number): number[] | null {
 
 // ---------- hatch patterns ----------
 
-/** A tile of `size` points (at scale 1); lines and dots in tile units (0..1, y down). */
-export interface HatchDef { id: string; name: string; size: number; lines: [number, number, number, number][]; dots: [number, number, number][] }
+/** A tile of `size` points wide (at scale 1) and `size × aspect` high (default square); lines and dots in tile units (0..1, y down). */
+export interface HatchDef { id: string; name: string; size: number; aspect?: number; lines: [number, number, number, number][]; dots: [number, number, number][] }
 
 const H = (id: string, name: string, size: number, lines: HatchDef['lines'], dots: HatchDef['dots'] = []): HatchDef => ({ id, name, size, lines, dots });
 export const STANDARD_HATCHES: HatchDef[] = [
@@ -179,6 +179,8 @@ export const STANDARD_HATCHES: HatchDef[] = [
 export const hatchById = (id: string | undefined) => STANDARD_HATCHES.find((h) => h.id === id);
 /** The tile size in points for a hatch at a scale. */
 export const hatchTile = (h: HatchDef, scale = 1) => Math.max(1, h.size * (scale || 1));
+/** Tile width and height in points. */
+export const hatchTileWH = (h: HatchDef, scale = 1): [number, number] => { const t = hatchTile(h, scale); return [t, Math.max(1, t * (h.aspect || 1))]; };
 
 // ---------- markup geometry the styles apply to ----------
 

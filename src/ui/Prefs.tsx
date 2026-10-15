@@ -6,14 +6,18 @@ import { useApp } from '../model/store';
 import { comboFromEvent } from '../tools/tools';
 import { allCommands, effectiveCombo, usersOf } from './commands';
 import { pickFile } from './toolActions';
+import { DEFAULT_PREFS, type Prefs } from '../model/prefs';
+import { saveStatusConfig, useStatusModels } from '../model/statusModels';
+import { profileColumns, saveProfileColumns } from '../model/columns';
 
-export const usePrefsDialog = create<{ open: 'keys' | 'profiles' | null }>(() => ({ open: null }));
+export const usePrefsDialog = create<{ open: 'keys' | 'profiles' | 'prefs' | null }>(() => ({ open: null }));
 const close = () => usePrefsDialog.setState({ open: null });
 
 export function PrefsDialogs() {
   const open = usePrefsDialog((x) => x.open);
   if (open === 'keys') return <KeysDialog />;
   if (open === 'profiles') return <ProfilesDialog />;
+  if (open === 'prefs') return <PreferencesDialog />;
   return null;
 }
 
@@ -93,13 +97,14 @@ interface Profile {
   name: string;
   left: unknown; right: unknown; markupsList: boolean; toggles: unknown;
   toolDefaults: unknown; toolSets: unknown; customKeys: Record<string, string>;
+  statusConfig?: unknown; profileColumns?: unknown;
 }
 const load = (): Profile[] => { try { return JSON.parse(localStorage.getItem(LS) ?? '[]'); } catch { return []; } };
 const store = (p: Profile[]) => { try { localStorage.setItem(LS, JSON.stringify(p)); } catch { /* storage unavailable */ } };
 
 function capture(name: string): Profile {
   const s = useApp.getState();
-  return { name, left: s.left, right: s.right, markupsList: s.markupsList, toggles: s.toggles, toolDefaults: s.toolDefaults, toolSets: s.toolSets, customKeys: s.customKeys };
+  return { name, left: s.left, right: s.right, markupsList: s.markupsList, toggles: s.toggles, toolDefaults: s.toolDefaults, toolSets: s.toolSets, customKeys: s.customKeys, statusConfig: useStatusModels.getState(), profileColumns: profileColumns() };
 }
 
 export function applyProfile(p: Profile) {
@@ -107,6 +112,8 @@ export function applyProfile(p: Profile) {
   useApp.setState({ toggles: p.toggles as never, toolDefaults: p.toolDefaults as never, toolSets: p.toolSets as never });
   s.setCustomKeys(p.customKeys ?? {});
   s.setPanels({ left: p.left as never, right: p.right as never, markupsList: p.markupsList });
+  if (p.statusConfig) saveStatusConfig(p.statusConfig as never);
+  if (Array.isArray(p.profileColumns)) saveProfileColumns(p.profileColumns as never);
   s.setStatus(`Profile "${p.name}" applied`);
 }
 
@@ -147,6 +154,164 @@ function ProfilesDialog() {
           <span className="spacer" />
           <button className="primary" onClick={close}>Close</button>
         </div>
+      </div>
+    </Frame>
+  );
+}
+
+// ---------- Preferences (Ctrl+K) ----------
+
+const SECTIONS = ['General', 'Document', 'Navigation', 'Grid & Snap', 'Markup', 'Measure', 'Sketch', 'Forms', 'Signature', 'Markups List', 'Layers', 'Spelling'] as const;
+type Section = typeof SECTIONS[number];
+
+function PreferencesDialog() {
+  const s = useApp();
+  const p = s.prefs;
+  const [section, setSection] = useState<Section>('General');
+  const set = (patch: Partial<Prefs>) => s.setPrefs(patch);
+  const check = (key: keyof Prefs, label: string, hint?: string) => (
+    <label className="pref-row" title={hint}><input type="checkbox" checked={!!p[key]} onChange={(e) => set({ [key]: e.target.checked } as Partial<Prefs>)} /> {label}</label>
+  );
+  const select = <K extends keyof Prefs>(key: K, label: string, options: [Prefs[K] & string, string][]) => (
+    <label className="pref-row"><span>{label}</span>
+      <select aria-label={label} value={p[key] as string} onChange={(e) => set({ [key]: e.target.value } as Partial<Prefs>)}>
+        {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
+    </label>
+  );
+  const body: Record<Section, React.ReactNode> = {
+    General: (
+      <>
+        <label className="pref-row"><span>User</span><input aria-label="User" value={s.author} onChange={(e) => s.setAuthor(e.target.value)} /></label>
+        <label className="pref-row"><span>Theme</span>
+          <select aria-label="Theme" value={s.toggles.darkMode ? 'dark' : 'light'} onChange={(e) => { if ((e.target.value === 'dark') !== !!s.toggles.darkMode) s.toggle('darkMode'); }}>
+            <option value="light">Light</option><option value="dark">Dark</option>
+          </select>
+        </label>
+        {select('tabTruncation', 'Tab truncation', [['end', 'Cut long names at the end'], ['start', 'Cut long names at the start']])}
+        {check('showRecentOnStartup', 'Show recent files on startup', 'Opens the File Access panel when no document is open')}
+        {check('reopenLastSession', 'Reopen files from last session on startup', 'Files whose access is still granted open on their own; the others wait for a click in the File Access panel')}
+        <label className="pref-row"><input type="checkbox" checked={!!s.toggles.crosshair} onChange={() => s.toggle('crosshair')} /> Show full-screen crosshair</label>
+      </>
+    ),
+    Document: (
+      <>
+        {select('defaultLayout', 'Page layout when opening', [['single', 'Single Page'], ['continuous', 'Continuous'], ['auto', 'By page size (under 14 in: Continuous)']])}
+        {select('openDisplay', 'Display when opening', [['fitPage', 'Fit Page'], ['fitWidth', 'Fit Width'], ['actual', 'Actual Size']])}
+        {select('saveMode', 'Save mode', [['publish', 'Publish Without Revisions (rewrite the file)'], ['revisions', 'Maintain Revisions (earlier versions stay in the file)'], ['compressed', 'Publish Compressed (object streams)']])}
+        {check('rotateAllPages', 'Rotate all pages by default', 'Rotate Clockwise / Counterclockwise (Shift+Alt+Plus / Minus) turn every page')}
+        {check('rememberLastPage', 'Remember last page', 'A file reopens on the page it was closed at')}
+        {check('reorderBookmarks', 'Automatically reorder bookmarks', 'Top-level bookmarks follow their pages when thumbnails are reordered')}
+        {check('redirectOnSlipSheet', 'Redirect links and bookmarks when inserting pages with Slip Sheet')}
+        {check('findHyperlinks', 'Find hyperlinks in PDF content', 'Web addresses in the page text open on click')}
+        <label className="pref-row"><span>Maximum zoom</span><input aria-label="Maximum zoom" type="number" min={400} max={6400} step={100} value={p.maxZoom} onChange={(e) => set({ maxZoom: Math.max(400, Math.min(6400, Number(e.target.value) || 6400)) })} /> %</label>
+      </>
+    ),
+    'Grid & Snap': (
+      <>
+        <label className="pref-row"><span>Grid spacing</span><input aria-label="Grid spacing" type="number" min={2} max={288} value={p.gridSpacing} onChange={(e) => set({ gridSpacing: Math.max(2, Math.min(288, Number(e.target.value) || 12)) })} /> pt</label>
+        <label className="pref-row"><span>Snap sensitivity</span><input aria-label="Snap sensitivity" type="range" min={5} max={25} value={p.snapSensitivity} onChange={(e) => set({ snapSensitivity: Number(e.target.value) })} /> {p.snapSensitivity} px</label>
+        <label className="pref-row"><span>Snap colour</span><input aria-label="Snap colour" type="color" value={p.snapColor} onChange={(e) => set({ snapColor: e.target.value })} /></label>
+        <label className="pref-row"><input type="checkbox" checked={!!s.toggles.grid} onChange={() => s.toggle('grid')} /> Show grid</label>
+        <label className="pref-row"><input type="checkbox" checked={!!s.toggles.snap} onChange={() => s.toggle('snap')} /> Snap to grid</label>
+        <label className="pref-row"><input type="checkbox" checked={!!s.toggles.content} onChange={() => s.toggle('content')} /> Snap to content</label>
+        <label className="pref-row"><input type="checkbox" checked={!!s.toggles.markup} onChange={() => s.toggle('markup')} /> Snap to markup</label>
+      </>
+    ),
+    'Markups List': (
+      <>
+        {check('zoomFitOnSelect', 'Zoom fit markups when selected', 'Selecting a row zooms to the markup instead of only scrolling to it')}
+        {check('wrapComments', 'Wrap comment text')}
+        <label className="pref-row" title="Markups the filtered list does not show are dimmed on the page"><span>Dim filtered markups</span><input aria-label="Dim filtered markups" type="number" min={0} max={100} step={5} value={p.filteredDim} onChange={(e) => set({ filteredDim: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} /> %</label>
+      </>
+    ),
+    Layers: (
+      <>
+        {check('hideChildLayers', 'Hide child layers when hiding parent layers')}
+        {check('layersOnPageOnly', 'Show layers on page only (when the panel opens)')}
+      </>
+    ),
+    Spelling: (
+      <>
+        {check('spellCheck', 'Enable spell check', 'Text being typed is underlined by the browser\'s checker')}
+        {check('spellUpperCase', 'Include upper case words')}
+        <label className="pref-row"><span>Spell check colour</span><input aria-label="Spell check colour" type="color" value={p.spellColor} onChange={(e) => set({ spellColor: e.target.value })} /></label>
+        <label className="pref-row pref-col"><span>Custom words (one per line)</span><textarea aria-label="Custom words" rows={5} value={p.customWords} onChange={(e) => set({ customWords: e.target.value })} /></label>
+      </>
+    ),
+    Navigation: (
+      <>
+        {select('wheelSingle', 'Single page mode: mouse wheel', [['zoom', 'Zooms'], ['scroll', 'Scrolls']])}
+        {select('wheelContinuous', 'Continuous mode: mouse wheel', [['zoom', 'Zooms'], ['scroll', 'Scrolls']])}
+        {check('reverseWheel', 'Reverse mouse wheel when zooming')}
+        {check('lockPanFitWidth', 'Lock panning in Fit Width', 'At the fit-width zoom, dragging the page only moves it vertically')}
+        <label className="pref-row"><span>Sensitivity</span><input aria-label="Wheel sensitivity" type="range" min={1} max={10} value={p.wheelSensitivity} onChange={(e) => set({ wheelSensitivity: Number(e.target.value) })} /> {p.wheelSensitivity}</label>
+        <p className="muted small">Ctrl+wheel always zooms and Shift+wheel always scrolls. Synchronize Views is in the View menu.</p>
+      </>
+    ),
+    Markup: (
+      <>
+        {check('dynamicDefaults', 'Dynamically set as default properties', 'A property changed on a markup becomes the default of its tool')}
+        <label className="pref-row"><input type="checkbox" checked={!!s.toggles.reuse} onChange={() => s.toggle('reuse')} /> Reuse tools</label>
+        {check('autosizeText', 'Autosize text box and callout markups')}
+        {check('scaleGroupProps', 'Scale appearance properties for grouped markups', 'Scaling a Group with its purple handles scales line widths and text sizes too')}
+        {check('retainLayer', 'Retain layer information when copying markups', 'A markup pasted into another file keeps its layer; the layer is created there when missing')}
+        {check('printPopups', 'Print pop-ups', 'Note comments print in a box beside the note')}
+        <label className="pref-row"><span>Pop-up opacity</span><input aria-label="Pop-up opacity" type="number" min={0} max={100} step={5} disabled={!p.printPopups} value={p.popupOpacity} onChange={(e) => set({ popupOpacity: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} /> %</label>
+        {check('showAuthorDate', 'Show author and date when hovering a markup')}
+        {select('dragShapes', 'Drag behavior for shapes', [['rect', 'Drag Rectangle (Ctrl+drag: curve)'], ['curves', 'Drag Curves (Ctrl+drag: rectangle)']])}
+        {check('textHighlighting', 'Enable Text Highlighting', 'The Highlight tool marks the text it is dragged over; Ctrl+drag draws a free highlight. Off: always a free highlight')}
+        {check('copyHighlightedText', 'Copy highlighted text into markup comment')}
+        {select('snapshotDpi', 'Snapshot resolution', [[72 as never, '72 dpi'], [144 as never, '144 dpi'], [216 as never, '216 dpi'], [300 as never, '300 dpi']])}
+        {check('includeMarkupsInSnapshots', 'Include markups in snapshots')}
+      </>
+    ),
+    Measure: (
+      <>
+        {check('splitCountBySpace', 'Automatically split count measurements by Space', 'A count continued in another Space starts a new count (same style and subject)')}
+        <p className="muted small">Dynamic Fill defaults (the tool's Settings change them for the session).</p>
+        <label className="pref-row"><span>Fill size</span><input aria-label="Fill size" type="number" min={1} max={40} value={p.fillSize} onChange={(e) => set({ fillSize: Math.max(1, Number(e.target.value)) })} /> pt</label>
+        <label className="pref-row"><span>Fill colour</span><input aria-label="Fill colour" type="color" value={p.fillColor} onChange={(e) => set({ fillColor: e.target.value })} /></label>
+        <label className="pref-row"><span>Boundary size</span><input aria-label="Boundary size" type="number" min={1} max={40} value={p.fillBoundarySize} onChange={(e) => set({ fillBoundarySize: Math.max(1, Number(e.target.value)) })} /> pt</label>
+        <label className="pref-row"><span>Boundary colour</span><input aria-label="Boundary colour" type="color" value={p.fillBoundaryColor} onChange={(e) => set({ fillBoundaryColor: e.target.value })} /></label>
+        {select('fillSpeed', 'Fill speed', [['Slow', 'Slow'], ['Medium', 'Medium'], ['Fast', 'Fast']])}
+        {select('fillSensitivity', 'Edge sensitivity', [['Low', 'Low'], ['Medium', 'Medium'], ['High', 'High']])}
+        {check('fillHideMarkups', 'Momentarily hide markups while filling')}
+      </>
+    ),
+    Sketch: (
+      <>
+        {select('sketchRotation', 'Rotation input', [['page', 'Relative to the page'], ['relative', 'Relative to the connected line']])}
+        {select('ellipseMode', 'Ellipse mode', [['size', 'Width and height'], ['radius', 'Radius']])}
+      </>
+    ),
+    Forms: (
+      <>
+        <label className="pref-row"><span>Highlight colour</span><input aria-label="Field highlight colour" type="color" value={p.fieldHighlightColor} onChange={(e) => set({ fieldHighlightColor: e.target.value })} /></label>
+        <label className="pref-row"><span>Highlight opacity</span><input aria-label="Field highlight opacity" type="range" min={0} max={100} value={p.fieldHighlightOpacity} onChange={(e) => set({ fieldHighlightOpacity: Number(e.target.value) })} /> {p.fieldHighlightOpacity}%</label>
+        <label className="pref-row"><input type="checkbox" checked={!s.toggles.noFieldHighlight} onChange={() => s.toggle('noFieldHighlight')} /> Highlight fields</label>
+        {check('singleKeyInForms', 'Enable single key shortcuts', 'A tool\'s one-key shortcut (R, A, L…) works while a form field has the focus')}
+      </>
+    ),
+    Signature: (
+      <>
+        {select('hashAlgorithm', 'Algorithm', [['sha256', 'SHA-256'], ['sha384', 'SHA-384'], ['sha512', 'SHA-512']])}
+        <p className="muted small">Digital IDs are chosen when signing (.pfx / .p12); trusted identities are managed in the Signatures panel.</p>
+      </>
+    ),
+  };
+  return (
+    <Frame title="Preferences" wide>
+      <div className="prefs-dialog">
+        <div className="prefs-nav" role="tablist">
+          {SECTIONS.map((x) => <button key={x} role="tab" aria-selected={section === x} className={section === x ? 'active' : ''} onClick={() => setSection(x)}>{x}</button>)}
+        </div>
+        <div className="prefs-body">{body[section]}</div>
+      </div>
+      <div className="modal-actions">
+        <button onClick={() => { if (confirm('Reset every preference to its default?')) s.setPrefs(DEFAULT_PREFS); }}>Reset</button>
+        <span className="spacer" />
+        <button className="primary" onClick={close}>Close</button>
       </div>
     </Frame>
   );

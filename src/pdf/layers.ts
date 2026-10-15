@@ -3,7 +3,7 @@
 // locked layers, print usage, and named configurations (/D /Configs).
 // Layer ids are the OCG's reference as pdf.js names it ("12R"), or
 // "new:<uuid>" for layers created since the file was opened.
-import { PDFArray, PDFDict, PDFHexString, PDFName, PDFNumber, PDFRef, PDFStream, PDFString, type PDFDocument, type PDFObject } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFHexString, PDFName, PDFNumber, PDFRef, PDFStream, PDFString, PDFDocument, type PDFObject } from 'pdf-lib';
 import { bytesOfLatin1, latin1, mkOp, name as nameOp, parseContent, writeContent, type Op } from './content';
 import { streamBytes } from './redactContent';
 
@@ -257,10 +257,13 @@ export function stripLayerContent(doc: PDFDocument, ids: Set<string>, deleteCont
  * page's PDF space onto the target page's (alignment points), if given.
  */
 export async function addLayerFromPage(doc: PDFDocument, pageIdx: number, src: PDFDocument, srcPage: number, name: string,
-  m?: [number, number, number, number, number, number] | null): Promise<PDFRef> {
+  m?: [number, number, number, number, number, number] | null, reuse?: PDFRef): Promise<PDFRef> {
   const ctx = doc.context;
+  // `reuse`: an existing layer (Layered Pages puts every page of a file on one layer).
+  const ocg = reuse ?? ctx.register(ctx.obj({ Type: 'OCG', Name: encode(name) }));
+  // A page without a content stream (a blank page) has nothing to embed; the layer still exists.
+  if (!src.getPage(srcPage).node.Contents()) return ocg;
   const [emb] = await doc.embedPdf(src, [srcPage]);
-  const ocg = ctx.register(ctx.obj({ Type: 'OCG', Name: encode(name) }));
   const page = doc.getPage(pageIdx);
   (page.node as unknown as { autoNormalizeCTM: boolean }).autoNormalizeCTM = false;
   const res = page.node.Resources() ?? (ctx.obj({}) as PDFDict);
@@ -472,4 +475,29 @@ export function keepOnlyLayers(doc: PDFDocument, ids: Set<string>) {
       return a instanceof PDFDict && String(a.get(N('Subtype'))) !== '/Popup' && ocIn(doc, a.get(N('OC')), ids);
     })));
   }
+}
+
+/**
+ * File > Create > Layered PDF: a new document whose page N carries page N
+ * of every source as a layer named after the source. Page sizes come from
+ * the first source that has the page.
+ */
+export async function buildLayeredPdf(srcs: { name: string; doc: PDFDocument }[]): Promise<{ out: PDFDocument; n: number }> {
+  const out = await PDFDocument.create();
+  const n = Math.max(0, ...srcs.map((x) => x.doc.getPageCount()));
+  for (let i = 0; i < n; i++) {
+    const from = srcs.find((x) => i < x.doc.getPageCount())!.doc.getPage(i);
+    out.addPage([from.getWidth(), from.getHeight()]);
+  }
+  const set: LayerSet = { layers: {}, order: [], configs: [] };
+  for (const { name, doc } of srcs) {
+    let ref: PDFRef | undefined;
+    for (let i = 0; i < doc.getPageCount(); i++) ref = await addLayerFromPage(out, i, doc, i, name, null, ref);
+    if (!ref) continue;
+    const id = refId(ref);
+    set.layers[id] = { id, name, on: true, locked: false, print: true };
+    set.order.push({ id, kids: [] });
+  }
+  writeLayers(out, set);
+  return { out, n };
 }

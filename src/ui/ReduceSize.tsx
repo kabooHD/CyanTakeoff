@@ -1,6 +1,7 @@
 // File > Reduce File Size: options dialog; runs as an undoable document
 // change and reports the size before and after.
 import { useState } from 'react';
+import { FilesRow, batchHint, targets } from './filesRow';
 import type { PDFDocument } from 'pdf-lib';
 import { create } from 'zustand';
 import { useApp } from '../model/store';
@@ -39,26 +40,34 @@ export async function reduceLib(lib: PDFDocument, o: ReduceOptions): Promise<Uin
   return lib.save({ useObjectStreams: true });
 }
 
-export async function reduceFileSize(o: ReduceOptions) {
+export async function reduceFileSize(o: ReduceOptions, all = false) {
   const s = useApp.getState();
-  const d = s.docs.find((x) => x.id === s.activeId);
-  if (!d) return;
-  const before = d.bytes.length;
-  let after = before;
-  await s.transformDoc(async (lib) => {
-    if (hasSignatures(lib)) throw new Error('this file is digitally signed; reducing it would invalidate the signatures');
-    const bytes = await reduceLib(lib, o);
-    after = bytes.length;
-    // Never make it bigger.
-    return bytes.length < before ? bytes : d.bytes;
-  }, 'File size reduced');
-  s.setStatus(after < before ? `Reduced ${d.name}: ${fmt(before)} → ${fmt(after)} (save to keep it)` : `${d.name} is already compact (${fmt(before)})`);
+  const active = s.docs.find((x) => x.id === s.activeId);
+  if (!active) return;
+  const notes: string[] = [];
+  for (const d of targets(active, all)) {
+    const before = d.bytes.length;
+    let after = before;
+    await s.transformDoc(async (lib) => {
+      if (hasSignatures(lib)) throw new Error('this file is digitally signed; reducing it would invalidate the signatures');
+      const bytes = await reduceLib(lib, o);
+      after = bytes.length;
+      // Never make it bigger.
+      return bytes.length < before ? bytes : d.bytes;
+    }, 'File size reduced', undefined, undefined, d.id);
+    notes.push(after < before ? `Reduced ${d.name}: ${fmt(before)} → ${fmt(after)}` : `${d.name} is already compact (${fmt(before)})`);
+  }
+  s.setStatus(`${notes.join('; ')} (save to keep it)`);
 }
 
 export function ReduceDialog() {
   const open = useReduceDialog((x) => x.open);
+  return open ? <ReduceForm /> : null;
+}
+
+function ReduceForm() {
   const [o, setO] = useState<ReduceOptions>(() => { try { return { ...DEFAULT_REDUCE, ...JSON.parse(localStorage.getItem(LS) ?? '{}') }; } catch { return DEFAULT_REDUCE; } });
-  if (!open) return null;
+  const [all, setAll] = useState(() => batchHint.take());
   const close = () => useReduceDialog.setState({ open: false });
   const check = (k: keyof ReduceOptions, label: string) => (
     <div className="form-row"><label><input type="checkbox" checked={!!o[k]} onChange={(e) => setO({ ...o, [k]: e.target.checked })} /> {label}</label></div>
@@ -86,9 +95,10 @@ export function ReduceDialog() {
               </select>
             </div>
           )}
+          <FilesRow all={all} setAll={setAll} />
           <p className="muted small">Vector drawings are never rasterised. Undo with Ctrl+Z; save to keep the smaller file.</p>
           <div className="modal-actions"><span className="spacer" />
-            <button className="primary" onClick={() => { try { localStorage.setItem(LS, JSON.stringify(o)); } catch { /* storage unavailable */ } close(); reduceFileSize(o); }}>OK</button>
+            <button className="primary" onClick={() => { try { localStorage.setItem(LS, JSON.stringify(o)); } catch { /* storage unavailable */ } close(); reduceFileSize(o, all); }}>OK</button>
             <button onClick={close}>Cancel</button>
           </div>
         </div>

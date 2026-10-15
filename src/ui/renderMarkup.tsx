@@ -1,16 +1,25 @@
 import { hasCurves, svgPath } from '../model/curves';
-import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTile, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type LineStyleDef } from '../model/lineStyles';
+import { captionLeaderLine, captionPosition, captionText, segmentValues, drawnLine, leaderLine } from '../model/measureDisplay';
+import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTileWH, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type LineStyleDef } from '../model/lineStyles';
 import { calloutAttach } from '../pdf/save';
-import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
+import { arcPoints, arcThrough, bounds, centroid, cloudArcLength, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import type { Cutout, Markup, MarkupStyle, MarkupType, Pt } from '../model/types';
 import { useEffect } from 'react';
+import { openCapturePreview } from './Capture';
+import { cssFamily, fitFontSize, shapeOutline, textStyleOf } from '../model/textStyle';
+import { countRadius, countSymbolPolygon, countSymbolStrokes } from '../model/count';
+import { calloutTips, endsOf, lineEndShape, type LineEnd } from '../model/lineEnds';
+import { textWidth } from './quickCommands';
 import { useApp } from '../model/store';
-import { LEGEND_HEADERS, legendLayout, legendRows } from '../model/legend';
+import { ROTATION_FIELD, drawnPoints, rotationCenter } from '../model/rotate';
+import { blendOf, cssBlend } from '../model/blend';
+import { noteGlyph } from '../model/noteIcons';
+import { cellAnchor, cellX, legendHeader, legendLayout, legendRows, type FontFlags } from '../model/legend';
 
 const pts = (p: Pt[]) => p.map((q) => `${q.x},${q.y}`).join(' ');
 
-export function cloudPath(points: Pt[], width: number) {
-  const segs = cloudSegments(points, Math.max(14, width * 8));
+export function cloudPath(points: Pt[], width: number, size = 1, invert = false) {
+  const segs = cloudSegments(points, cloudArcLength(width, size), invert);
   if (!segs.length) return '';
   return segs.map(([p0, c1, c2, p1], i) =>
     `${i ? '' : `M${p0.x},${p0.y}`}C${c1.x},${c1.y} ${c2.x},${c2.y} ${p1.x},${p1.y}`).join('') + 'Z';
@@ -39,8 +48,9 @@ export function handlePoints(m: Markup): Pt[] {
   if ((m.type === 'highlight' || m.type === 'redaction') && m.points.length > 2) return [];
   if (m.type === 'redaction') return [m.points[0], m.points[1]];
   if (['rectangle', 'ellipse', 'highlight', 'textbox', 'typewriter', 'stamp', 'image', 'link'].includes(m.type)) {
-    return [m.points[0], m.points[1]];
+    return drawnPoints(m, [m.points[0], m.points[1]]);
   }
+  if (m.rotation && ROTATION_FIELD.has(m.type)) return drawnPoints(m);
   if (m.type === 'strikeout' || m.type === 'underline' || m.type === 'squiggly' || m.type === 'flag' || m.type === 'attachment' || m.type === 'legend') return [];
   return m.points;
 }
@@ -67,6 +77,10 @@ export const STAMP_COLORS: Record<string, string> = {
 const TEXTUAL = new Set(['textbox', 'callout', 'typewriter', 'cloudplus']);
 
 export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
+  const replyIndicators = useApp((st) => !!st.toggles.replyIndicators);
+  const showAuthorDate = useApp((st) => st.prefs.showAuthorDate);
+  // Filtered out of the Markups List: dimmed on the page (Revu).
+  const dim = useApp((st) => (st.listVisible && !st.listVisible.has(m.id) ? st.prefs.filteredDim : 0));
   const st = m.style;
   const P = m.points;
   // Line style: simple ones are a dash pattern; others (parallel lines, text) are drawn along the outline.
@@ -83,20 +97,19 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     strokeDasharray: dash?.join(' '),
     fill: hatchArea ? 'none' : st.fill ?? 'none',
     fillOpacity: st.fillOpacity,
-    opacity: ghost ? 0.7 : 1,
+    opacity: (ghost ? 0.7 : 1) * (1 - dim / 100),
   };
   const c = common;
   /** Props for the element that carries a styled outline (drawn separately when styled). */
   const cm = styled ? { ...c, stroke: 'none' } : c;
   const meas = measure(m);
   let label: { at: Pt; text: string } | null = null;
-  if (meas && m.type !== 'count' && P.length > 1) {
-    const at = m.type === 'length' || m.type === 'polylength' || m.type === 'radius' || m.type === 'diameter' || m.type === 'dimension'
-      ? { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 - 3 }
-      : m.type === 'angle' && P[1] ? { x: P[1].x + 8, y: P[1].y - 8 }
-        : centroid(P);
-    label = { at, text: meas.text };
+  const caption = captionText(m, meas);
+  if (meas && caption && m.type !== 'count' && P.length > 1) {
+    label = { at: captionPosition(m, P), text: caption };
   }
+  const segments = meas && m.display?.segments ? segmentValues(m) : [];
+  const centroidAt = meas && m.display?.centroid && P.length > 2 ? centroid(P) : null;
 
   let shape: React.ReactNode = null;
   switch (m.type) {
@@ -105,9 +118,12 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
       const size = Math.max(7, st.width * 5);
       const ang = Math.atan2(P[1].y - P[0].y, P[1].x - P[0].x) + Math.PI / 2;
       const ext = (p: Pt) => <line key={`e${p.x},${p.y}`} {...c} x1={p.x + Math.cos(ang) * 8} y1={p.y + Math.sin(ang) * 8} x2={p.x - Math.cos(ang) * 8} y2={p.y - Math.sin(ang) * 8} />;
-      shape = <><line {...c} x1={P[0].x} y1={P[0].y} x2={P[1].x} y2={P[1].y} />
-        <polyline {...c} fill="none" points={arrowHead(P[1], P[0], size)} />
-        <polyline {...c} fill="none" points={arrowHead(P[0], P[1], size)} />{ext(P[0])}{ext(P[1])}</>;
+      const L = drawnLine(m, P);
+      const l = m.leader ? leaderLine(P, m.leader) : null;
+      shape = <><line {...c} x1={L[0].x} y1={L[0].y} x2={L[1].x} y2={L[1].y} />
+        <polyline {...c} fill="none" points={arrowHead(L[1], L[0], size)} />
+        <polyline {...c} fill="none" points={arrowHead(L[0], L[1], size)} />
+        {l ? <><line {...c} x1={P[0].x} y1={P[0].y} x2={l.ea.x} y2={l.ea.y} /><line {...c} x1={P[1].x} y1={P[1].y} x2={l.eb.x} y2={l.eb.y} /></> : <>{ext(P[0])}{ext(P[1])}</>}</>;
       break;
     }
     case 'arc':
@@ -117,7 +133,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     case 'typewriter': {
       const b = bounds(P.length > 1 ? [P[0], P[1]] : [P[0], { x: P[0].x + 120, y: P[0].y + 20 }]);
       shape = <foreignObject x={b.minX} y={b.minY} width={Math.max(b.w, 20)} height={Math.max(b.h, st.fontSize * 1.4)}>
-        <div className="markup-text typewriter" style={{ fontSize: st.fontSize, color: st.color }}>{m.text}</div>
+        <div className="markup-text typewriter" style={textCss(m, b.w, b.h)}>{m.text}</div>
       </foreignObject>;
       break;
     }
@@ -135,11 +151,11 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
           <line {...c} x1={from.x} y1={from.y} x2={to.x} y2={to.y} />
           <rect {...c} x={b.minX} y={b.minY} width={b.w} height={b.h} />
           <foreignObject x={b.minX} y={b.minY} width={b.w} height={b.h}>
-            <div className="markup-text" style={{ fontSize: st.fontSize, color: st.color }}>{m.text}</div>
+            <div className="markup-text" style={textCss(m, b.w, b.h)}>{m.text}</div>
           </foreignObject>
         </>;
       }
-      shape = <><path {...c} fill="none" d={cloudPath(cloud, st.width)} />{extra}</>;
+      shape = <><path {...c} fill="none" d={cloudPath(cloud, st.width, st.cloudSize, st.cloudInvert)} />{extra}</>;
       break;
     }
     case 'flag': {
@@ -163,7 +179,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
       const b = bounds(P);
       const fs = Math.min(b.h * 0.42, (b.w * 1.6) / Math.max(4, (m.text ?? '').length));
       shape = <g>
-        <rect x={b.minX} y={b.minY} width={b.w} height={b.h} rx={6} fill="none" stroke={st.color} strokeWidth={st.width} strokeOpacity={st.opacity} />
+        <rect x={b.minX} y={b.minY} width={b.w} height={b.h} rx={m.stampBorder === 'rect' ? 0 : 6} fill="none" stroke={m.stampBorder === 'none' ? 'none' : st.color} strokeWidth={st.width} strokeOpacity={st.opacity} />
         <text x={b.minX + b.w / 2} y={b.minY + b.h * 0.48} textAnchor="middle" dominantBaseline="middle" fontSize={fs}
           fontWeight="bold" fill={st.color} fillOpacity={st.opacity} fontFamily="Helvetica, Arial, sans-serif">{m.text}</text>
         <text x={b.minX + b.w / 2} y={b.minY + b.h * 0.82} textAnchor="middle" dominantBaseline="middle" fontSize={Math.max(5, fs * 0.38)}
@@ -180,7 +196,8 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     case 'link': {
       if (P.length < 2) break;
       const b = bounds(P);
-      shape = <rect x={b.minX} y={b.minY} width={b.w} height={b.h} fill="#0066ff" fillOpacity={0.06} stroke={st.color} strokeWidth={0.75} strokeDasharray="4 3" />;
+      // Batch Link appearance: a coloured highlight (fill), an outline, or nothing visible when the width is 0.
+      shape = <rect x={b.minX} y={b.minY} width={b.w} height={b.h} fill={st.fill ?? '#0066ff'} fillOpacity={st.fill ? st.fillOpacity : st.width === 0 ? 0 : 0.06} stroke={st.width === 0 ? 'none' : st.color} strokeWidth={0.75} strokeDasharray="4 3" />;
       break;
     }
     case 'redaction':
@@ -189,27 +206,41 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     case 'strikeout': case 'underline': case 'squiggly':
       shape = <>{rectPairs(P).map(([a, b], i) => <path key={i} {...c} fill="none" strokeWidth={Math.max(st.width, 0.8)} d={textLine(m.type, a, b)} />)}</>;
       break;
+    case 'caret': {
+      // Insertion mark: a small open caret ^ at the bottom of its box.
+      const b = bounds(P);
+      shape = <path {...c} fill="none" strokeWidth={Math.max(st.width, 1)} strokeLinejoin="miter" d={`M ${b.minX} ${b.maxY} L ${b.minX + b.w / 2} ${b.minY} L ${b.maxX} ${b.maxY}`} />;
+      break;
+    }
     case 'legend':
       shape = <LegendShape m={m} />;
       break;
-    case 'line': case 'length':
+    case 'line': case 'length': {
       if (P.length < 2) break;
-      shape = <line {...cm} x1={P[0].x} y1={P[0].y} x2={P[1].x} y2={P[1].y} />;
+      // A length with a leader offset is drawn beside its points, joined by leader lines (Revu's middle handle).
+      const L = drawnLine(m, P);
+      shape = <line {...cm} x1={L[0].x} y1={L[0].y} x2={L[1].x} y2={L[1].y} />;
+      if (m.type === 'line') shape = <>{shape}<EndCaps m={m} P={P} c={c} /></>;
       if (m.type === 'length') {
         const ang = Math.atan2(P[1].y - P[0].y, P[1].x - P[0].x) + Math.PI / 2;
         const t = (p: Pt) => <line key={`${p.x},${p.y}`} {...c} x1={p.x + Math.cos(ang) * 5} y1={p.y + Math.sin(ang) * 5} x2={p.x - Math.cos(ang) * 5} y2={p.y - Math.sin(ang) * 5} />;
-        shape = <>{shape}{t(P[0])}{t(P[1])}</>;
+        if (m.leader) {
+          const l = leaderLine(P, m.leader);
+          shape = <>{shape}<line {...c} x1={P[0].x} y1={P[0].y} x2={l.ea.x} y2={l.ea.y} /><line {...c} x1={P[1].x} y1={P[1].y} x2={l.eb.x} y2={l.eb.y} /></>;
+        } else shape = <>{shape}{t(P[0])}{t(P[1])}</>;
       }
       break;
+    }
     case 'arrow':
       if (P.length < 2) break;
       shape = <><line {...cm} x1={P[0].x} y1={P[0].y} x2={P[1].x} y2={P[1].y} />
-        <polyline {...c} fill="none" points={arrowHead(P[0], P[1], Math.max(8, st.width * 5))} /></>;
+        <EndCaps m={m} P={P} c={c} /></>;
       break;
     case 'polyline': case 'polylength': case 'perimeter': case 'pen':
-      shape = hasCurves(m.handles) && m.type !== 'pen'
+      shape = <>{hasCurves(m.handles) && m.type !== 'pen'
         ? <path {...cm} fill="none" d={svgPath(P, m.handles, false)} />
-        : <polyline {...cm} fill="none" points={pts(P)} />;
+        : <polyline {...cm} fill="none" points={pts(P)} />}
+        {(m.type === 'polyline' || m.type === 'polylength') && <EndCaps m={m} P={P} c={c} />}</>;
       break;
     case 'polygon': case 'area': case 'volume':
       shape = m.cutouts?.length || hasCurves(m.handles)
@@ -217,7 +248,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
         : <polygon {...cm} points={pts(P)} />;
       break;
     case 'cloud':
-      shape = <path {...c} d={cloudPath(P, st.width)} />;
+      shape = <path {...c} d={cloudPath(P, st.width, st.cloudSize, st.cloudInvert)} />;
       break;
     case 'rectangle': case 'highlight': {
       if (P.length < 2) break;
@@ -252,14 +283,24 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     case 'angle':
       shape = <polyline {...c} fill="none" points={pts(P)} />;
       break;
-    case 'count':
-      shape = <>{P.map((p, i) => <circle key={i} {...c} cx={p.x} cy={p.y} r={5} />)}</>;
+    case 'count': {
+      const sym = st.countSymbol ?? 'circle', r = countRadius(st.countScale);
+      shape = <>{P.map((p, i) => {
+        const poly = countSymbolPolygon(sym, p, r);
+        if (poly) return <polygon key={i} {...c} points={pts(poly)} />;
+        const strokes = countSymbolStrokes(sym, p, r);
+        if (strokes.length) return <g key={i}>{strokes.map(([a, b], k) => <line key={k} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={st.color} strokeWidth={Math.max(1.5, r * 0.35)} strokeLinecap="round" />)}<circle cx={p.x} cy={p.y} r={r * 1.3} fill="transparent" stroke="none" /></g>;
+        return <circle key={i} {...c} cx={p.x} cy={p.y} r={r} />;
+      })}</>;
       break;
+    }
     case 'note': {
       const p = P[0];
-      shape = <g>
-        <rect x={p.x} y={p.y} width={18} height={18} fill={st.fill ?? '#ffd400'} stroke="#000" strokeWidth={0.75} />
-        {[5, 9, 13].map((d) => <line key={d} x1={p.x + 4} x2={p.x + 14} y1={p.y + d} y2={p.y + d} stroke="#000" strokeWidth={0.75} />)}
+      const g = noteGlyph(m.noteIcon ?? 'Comment');
+      shape = <g className="note-icon" data-icon={m.noteIcon ?? 'Comment'} transform={`translate(${p.x} ${p.y})`}>
+        <rect width={18} height={18} fill={st.fill ?? '#ffd400'} stroke="#000" strokeWidth={0.75} />
+        {g.stroke.map((d, i) => <path key={`s${i}`} d={d} fill="none" stroke="#000" strokeWidth={1.1} strokeLinecap="round" strokeLinejoin="round" />)}
+        {g.fill.map((d, i) => <path key={`f${i}`} d={d} fill="#000" />)}
       </g>;
       break;
     }
@@ -267,34 +308,39 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
       const box = m.type === 'callout' ? [P[1], P[2]] : [P[0], P[1]];
       if (!box[1]) break;
       const b = bounds(box);
+      // Every leader (the first point and any extra ones) runs from its tip to the box, with the End style.
       const leader = m.type === 'callout'
-        ? (() => {
-          const at = calloutAttach(P[0], box[0], box[1]);
-          return <><line {...c} x1={P[0].x} y1={P[0].y} x2={at.x} y2={at.y} />
-            <polyline {...c} fill="none" points={arrowHead(at, P[0], Math.max(8, st.width * 5))} /></>;
-        })()
+        ? calloutTips(P).map((tip, i) => {
+          const at = calloutAttach(tip, box[0], box[1]);
+          return <g key={`ld${i}`}><line {...c} x1={tip.x} y1={tip.y} x2={at.x} y2={at.y} /><EndCap m={m} from={at} to={tip} kind={endsOf(m.type, st).end} c={c} /></g>;
+        })
         : null;
       shape = <>
         {leader}
-        <rect {...c} x={b.minX} y={b.minY} width={b.w} height={b.h} />
+        {st.shape === 'circle' ? <ellipse {...c} cx={b.minX + b.w / 2} cy={b.minY + b.h / 2} rx={b.w / 2} ry={b.h / 2} />
+          : shapeOutline(st.shape ?? 'rectangle', b) ? <polygon {...c} points={pts(shapeOutline(st.shape ?? 'rectangle', b)!)} />
+          : <rect {...c} x={b.minX} y={b.minY} width={b.w} height={b.h} />}
         <foreignObject x={b.minX} y={b.minY} width={b.w} height={b.h}>
-          <div className="markup-text" style={{ fontSize: st.fontSize, color: st.color }}>{m.text}</div>
+          <div className="markup-text" style={textCss(m, b.w, b.h)}>{m.text}</div>
         </foreignObject>
       </>;
       break;
     }
   }
   const hatchId = `hatch-${m.id}`;
-  const tile = st.hatch ? hatchTile(st.hatch, st.hatchScale) : 0;
+  const [tile, tileH] = st.hatch ? hatchTileWH(st.hatch, st.hatchScale) : [0, 0];
   const hatchColor = st.fill ?? st.color;
+  // A turned box shape is drawn in its own frame, rotated about its centre.
+  const rc = m.rotation && ROTATION_FIELD.has(m.type) ? rotationCenter(m) : null;
   return (
-    <g data-id={m.id}>
+    <g data-id={m.id} transform={rc ? `rotate(${-m.rotation!} ${rc.x} ${rc.y})` : undefined} style={blendOf(m) !== 'Normal' ? { mixBlendMode: cssBlend(blendOf(m)) as React.CSSProperties['mixBlendMode'] } : undefined}>
+      {showAuthorDate && <title>{`${m.subject}${m.author ? ` · ${m.author}` : ''}${m.modified ? ` · ${new Date(m.modified).toLocaleString()}` : ''}${m.comment ? `\n${m.comment}` : ''}`}</title>}
       {hatchArea && st.hatch && (
         <>
           <defs>
-            <pattern id={hatchId} patternUnits="userSpaceOnUse" width={tile} height={tile}>
-              {st.hatch.lines.map(([x1, y1, x2, y2], i) => <line key={i} x1={x1 * tile} y1={y1 * tile} x2={x2 * tile} y2={y2 * tile} stroke={hatchColor} strokeWidth={hatchLineWidth(tile)} strokeLinecap="square" />)}
-              {st.hatch.dots.map(([x, y, r], i) => <circle key={`d${i}`} cx={x * tile} cy={y * tile} r={Math.max(0.3, r * tile)} fill={hatchColor} />)}
+            <pattern id={hatchId} patternUnits="userSpaceOnUse" width={tile} height={tileH}>
+              {st.hatch.lines.map(([x1, y1, x2, y2], i) => <line key={i} x1={x1 * tile} y1={y1 * tileH} x2={x2 * tile} y2={y2 * tileH} stroke={hatchColor} strokeWidth={hatchLineWidth(tile)} strokeLinecap="square" />)}
+              {st.hatch.dots.map(([x, y, r], i) => <circle key={`d${i}`} cx={x * tile} cy={y * tileH} r={Math.max(0.3, r * tile)} fill={hatchColor} />)}
             </pattern>
           </defs>
           <path d={polyPath(hatchArea) + (m.cutouts ?? []).map(cutoutPath).join('')} fill={`url(#${hatchId})`} fillOpacity={st.fillOpacity} fillRule="evenodd" stroke="none" opacity={ghost ? 0.7 : 1} />
@@ -307,10 +353,42 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
         return <text x={b.minX + b.w / 2} y={b.minY + b.h / 2} fontSize={st.fontSize} fill={st.color} textAnchor="middle" dominantBaseline="central"
           fontFamily="Helvetica, Arial, sans-serif" className="seq-label">{m.label}</text>;
       })()}
+      {label && (() => { const ld = captionLeaderLine(m, P); return ld ? <line className="caption-leader" x1={ld.from.x} y1={ld.from.y} x2={ld.to.x} y2={ld.to.y} stroke={st.color} strokeWidth={Math.min(st.width || 1, 1)} strokeOpacity={st.opacity} /> : null; })()}
       {label && (
-        <text x={label.at.x} y={label.at.y} fontSize={m.style.fontSize} fill={st.color}
+        <text x={label.at.x} y={label.at.y} fontSize={m.style.fontSize} fill={st.color} transform={m.display?.captionAngle ? `rotate(${-m.display.captionAngle} ${label.at.x} ${label.at.y})` : undefined}
           textAnchor="middle" dominantBaseline="middle" className="measure-label">{label.text}</text>
       )}
+      {segments.map((sg, i) => (
+        <text key={`sg${i}`} x={sg.at.x} y={sg.at.y} fontSize={Math.max(6, m.style.fontSize * 0.8)} fill={st.color}
+          textAnchor="middle" dominantBaseline="middle" className="segment-label" pointerEvents="none">{sg.text}</text>
+      ))}
+      {centroidAt && <circle className="centroid-mark" cx={centroidAt.x} cy={centroidAt.y} r={Math.max(2, st.width * 1.5)} fill={st.color} pointerEvents="none" />}
+      {replyIndicators && m.replies?.length && P.length > 0 ? <ReplyIndicator m={m} /> : null}
+      {m.capture?.length && P.length > 0 ? <CaptureIcon m={m} /> : null}
+    </g>
+  );
+}
+
+/** Embedded media (Capture): a camera icon near the markup's lower-right corner; click opens the viewer. */
+function CaptureIcon({ m }: { m: Markup }) {
+  const b = bounds(m.points), x = b.maxX + 2, y = b.maxY + 2;
+  return (
+    <g className="capture-icon" style={{ cursor: 'pointer' }} pointerEvents="all" role="button" aria-label={`View ${m.capture!.length} photo${m.capture!.length === 1 ? '' : 's'}`}
+      onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }} onClick={(e) => { e.stopPropagation(); openCapturePreview(m.capture!, 0, m.id); }}>
+      <rect x={x} y={y} width={14} height={11} rx={2} fill="#fff" stroke={m.style.color} strokeWidth={0.8} />
+      <circle cx={x + 7} cy={y + 6} r={3} fill="none" stroke={m.style.color} strokeWidth={0.8} />
+      <rect x={x + 4} y={y + 1} width={3} height={1.5} fill={m.style.color} />
+    </g>
+  );
+}
+
+/** View > Always Show Reply Indicators: a speech bubble at the markup's top-right corner. */
+function ReplyIndicator({ m }: { m: Markup }) {
+  const b = bounds(m.points), x = b.maxX + 2, y = b.minY - 12;
+  return (
+    <g className="reply-indicator" pointerEvents="none">
+      <path d={`M${x},${y} h12 a2,2 0 0 1 2,2 v6 a2,2 0 0 1 -2,2 h-7 l-3,3 v-3 h-2 a2,2 0 0 1 -2,-2 v-6 a2,2 0 0 1 2,-2 z`} fill="#fff" stroke={m.style.color} strokeWidth={0.8} />
+      <text x={x + 7} y={y + 7.5} fontSize={7} fill={m.style.color} textAnchor="middle" fontFamily="Helvetica, Arial, sans-serif">{m.replies!.length}</text>
     </g>
   );
 }
@@ -346,8 +424,9 @@ export function LegendSymbol({ type, style, x, y, w, h }: { type: MarkupType; st
 function LegendShape({ m }: { m: Markup }) {
   const doc = useApp((s) => s.docs.find((d) => d.id === s.activeId));
   const def = m.legend;
-  const rows = def && doc ? legendRows(def, doc.markups, m.page) : [];
-  const L = def ? legendLayout(def, rows, m.style.fontSize) : null;
+  const ctx = doc ? { pageCount: doc.loaded.pages.length, columns: doc.columns, pageLabels: doc.loaded.pages.map((p) => p.label) } : {};
+  const rows = def && doc ? legendRows(def, doc.markups, m.page, ctx) : [];
+  const L = def ? legendLayout(def, rows, m.style.fontSize, doc?.columns) : null;
   const P = m.points;
   // Anchored at the centre of its box: stable when the page is rotated and back
   // (the stored box keeps its orientation while the table is drawn upright).
@@ -361,32 +440,69 @@ function LegendShape({ m }: { m: Markup }) {
     }
   });
   if (!def || !L) return null;
-  const st = m.style, x0 = tl.x, y0 = tl.y, fs = st.fontSize;
+  const st = m.style, x0 = tl.x, y0 = tl.y, fs = st.fontSize, z = L.sizes, color = def.textColor ?? st.color, lw = st.width > 0 ? Math.min(st.width, 4) : 0;
   let x = x0;
   const colX = L.cols.map((c) => { const at = x; x += c.w; return at; });
-  const text = (t: string | number, cx: number, cy: number, bold = false, anchor: 'start' | 'end' | 'middle' = 'start') => (
-    <text x={cx} y={cy} fontSize={fs} fontWeight={bold ? 'bold' : undefined} fill={st.color} textAnchor={anchor} dominantBaseline="middle" fontFamily="Helvetica, Arial, sans-serif">{t}</text>
+  const deco = (f?: FontFlags) => [f?.underline ? 'underline' : '', f?.strike ? 'line-through' : ''].filter(Boolean).join(' ') || undefined;
+  const text = (t: string | number, cx: number, cy: number, size: number, flags: FontFlags | undefined, anchor: 'start' | 'end' | 'middle') => (
+    <text x={cx} y={cy} fontSize={size} fontWeight={flags?.bold ? 'bold' : undefined} fontStyle={flags?.italic ? 'italic' : undefined} textDecoration={deco(flags)} fill={color} textAnchor={anchor} dominantBaseline="middle" fontFamily="Helvetica, Arial, sans-serif">{t}</text>
   );
   const cell = (id: string, r: (typeof rows)[number], i: number, cy: number) => {
     const cx = colX[i], w = L.cols[i].w;
     if (id === 'symbol') return <LegendSymbol key={id} type={r.type} style={r.style} x={cx} y={cy - L.row / 2} w={w} h={L.row} />;
-    if (id === 'description') return <g key={id}>{text(r.description, cx + 5, cy)}</g>;
-    if (id === 'quantity') return <g key={id}>{text(r.quantity, cx + w - 5, cy, false, 'end')}</g>;
-    return <g key={id}>{text(r.measurement, cx + w - 5, cy, false, 'end')}</g>;
+    const v = id === 'description' ? r.description : id === 'quantity' ? r.quantity : id === 'measurement' ? r.measurement : r.cells[id] ?? '';
+    const a = cellAnchor(id, z.align, doc?.columns);
+    return <g key={id}>{text(v, cellX(a, cx, w, z.margin), cy, fs, undefined, a)}</g>;
   };
+  const hline = (y: number, width: number) => <line x1={x0} x2={x0 + L.w} y1={y} y2={y} stroke={st.color} strokeWidth={width} strokeOpacity={st.opacity} />;
   return (
     <g className="legend">
-      <rect x={x0} y={y0} width={L.w} height={L.h} fill={st.fill ?? '#fff'} fillOpacity={st.fillOpacity} stroke={st.color} strokeWidth={0.8} />
-      <line x1={x0} x2={x0 + L.w} y1={y0 + L.title} y2={y0 + L.title} stroke={st.color} strokeWidth={0.8} />
-      {text(def.title, x0 + L.w / 2, y0 + L.title / 2, true, 'middle')}
-      {L.cols.map((c, i) => <g key={c.id}>{text(LEGEND_HEADERS[c.id], colX[i] + (c.id === 'description' ? 5 : c.w - 5), y0 + L.title + L.row / 2, true, c.id === 'description' ? 'start' : 'end')}</g>)}
+      <rect x={x0} y={y0} width={L.w} height={L.h} fill={st.fill ?? '#fff'} fillOpacity={st.fillOpacity} stroke={st.color} strokeWidth={lw} strokeOpacity={st.opacity} />
+      {z.showTitle && hline(y0 + L.title, lw)}
+      {z.showTitle && text(def.title, x0 + L.w / 2, y0 + L.title / 2, z.title, def.titleStyle ?? { bold: true }, 'middle')}
+      {z.showHeaders && L.cols.map((c, i) => {
+        const a = cellAnchor(c.id, z.align, doc?.columns);
+        return <g key={c.id}>{text(legendHeader(c.id, doc?.columns), cellX(a, colX[i], c.w, z.margin), y0 + L.title + L.header / 2, z.header, def.headerStyle ?? { bold: true }, a)}</g>;
+      })}
       {rows.map((r, k) => {
-        const cy = y0 + L.title + L.row * (k + 1.5);
+        const cy = y0 + L.title + L.header + L.row * (k + 0.5);
         return <g key={r.key}>
-          <line x1={x0} x2={x0 + L.w} y1={cy - L.row / 2} y2={cy - L.row / 2} stroke={st.color} strokeWidth={0.4} />
+          {(k > 0 || z.showHeaders) && hline(cy - L.row / 2, lw * 0.5)}
           {L.cols.map((c, i) => cell(c.id, r, i, cy))}
         </g>;
       })}
     </g>
   );
+}
+
+/** CSS of a text box's text from its formatting (font, style, alignment, spacing, margin, colour, auto size). */
+export function textCss(m: Markup, boxW: number, boxH: number): React.CSSProperties {
+  const st = m.style, t = textStyleOf(st);
+  const size = t.autoSize ? fitFontSize((m.text ?? '').split('\n'), boxW, boxH, t.lineHeight, t.margin, (s, k) => textWidth(s, k) * (t.font === 'Courier' ? 1.1 : 1)) : st.fontSize;
+  return {
+    fontSize: size, color: t.textColor, fontFamily: cssFamily(t.font), fontWeight: t.bold ? 'bold' : undefined, fontStyle: t.italic ? 'italic' : undefined,
+    textDecoration: [t.underline ? 'underline' : '', t.strike ? 'line-through' : ''].filter(Boolean).join(' ') || undefined,
+    textAlign: t.align, lineHeight: t.lineHeight, padding: `${Math.max(0, t.margin - 1)}px ${t.margin}px`,
+    display: 'flex', flexDirection: 'column', justifyContent: t.valign === 'middle' ? 'center' : t.valign === 'bottom' ? 'flex-end' : 'flex-start',
+  };
+}
+
+/** One line end drawn at `to`, pointing away from `from`. */
+function EndCap({ m, from, to, kind, c }: { m: Markup; from: Pt; to: Pt; kind: LineEnd; c: { stroke: string; strokeWidth: number } }) {
+  if (kind === 'none') return null;
+  const e = lineEndShape(kind, from, to, endsOf(m.type, m.style).size);
+  return (
+    <g>
+      {e.fill && <polygon {...c} fill={m.style.color} points={pts(e.fill)} />}
+      {e.strokes.map((s, i) => <polyline key={i} {...c} fill="none" points={pts(s)} />)}
+      {e.circle && <circle {...c} fill={m.style.color} cx={e.circle.c.x} cy={e.circle.c.y} r={e.circle.r} />}
+    </g>
+  );
+}
+
+/** The Start and End of a line or polyline. */
+function EndCaps({ m, P, c }: { m: Markup; P: Pt[]; c: { stroke: string; strokeWidth: number } }) {
+  if (P.length < 2) return null;
+  const { start, end } = endsOf(m.type, m.style);
+  return <><EndCap m={m} from={P[1]} to={P[0]} kind={start} c={c} /><EndCap m={m} from={P[P.length - 2]} to={P[P.length - 1]} kind={end} c={c} /></>;
 }

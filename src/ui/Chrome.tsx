@@ -3,12 +3,24 @@ import { activeDoc, useApp, useActiveDoc } from '../model/store';
 import { formatLength } from '../model/measure';
 import type { Toggles, ToolId } from '../model/types';
 import { TOOLS, toolById } from '../tools/tools';
+import { useLinkUrls } from './ReviewText';
+import { usePageSetup } from './PageSetup';
+import { batchHint } from './filesRow';
+import { useApplyStamp } from './ApplyStamp';
+import { archiveAsPdfA, useColorProcess } from './ColorProcess';
+import { exportText, publishFlattened, publishUncompressed, useExportImage } from './FileExports';
+import { useUndoHistory } from './UndoHistory';
+import { useTemplateDialog } from './Templates';
+import { validateSignatures } from './DigitalSignature';
+import { exportFormData, importFormData, mergeFormData, migrateTypewrittenText, resetForm } from './FormData';
+import { autoCreateFormFields } from './autoFields';
 import { Icon } from './icons';
 import { MenuList, type MenuItem } from './ContextMenu';
 import { allColumns, exportSummaryCsv, exportSummaryPdf, exportSummaryXlsx, openFile, openSample, exportMarkupsXfdf, importMarkupsXfdf } from './actions';
 import { viewerApi } from './Viewer';
 import { combineFiles, openPagesDialog, unflattenMarkups } from './PagesDialog';
 import { openCompare } from './Compare';
+import { openBatchCompare } from './BatchCompare';
 import { openPrint } from './Print';
 import { addBookmark } from './BookmarksPanel';
 import { checkSpelling, useSpellContent } from './Spell';
@@ -26,13 +38,17 @@ import { runApplyRedactions } from './redactUi';
 import { effectiveCombo } from './commands';
 import { arrangeItems } from './arrangeMenu';
 import { useCursor } from './cursor';
-import { balanceSplit, refreshDocument, saveAll, toggleFullScreen } from './quickCommands';
+import { balanceSplit, closeAll, hideShowPanels, refreshDocument, saveAll, toggleFullScreen } from './quickCommands';
 import { useDocProps } from './DocProperties';
 import { useCamera } from './Camera';
 import { useStampManager } from './Stamps';
 import { useManageStatus } from './StatusModels';
-import { emailDocument, publishCompressed, useDocTools } from './DocTools';
+import { createFromFiles, createLayeredPdf, emailDocument, insertLayeredPages, publishCompressed, useDocTools } from './DocTools';
+import { useRecent } from '../model/recent';
+import { reopen } from './FileAccess';
 import { copyPageToSnapshot, copyText, selectAllText } from './textCommands';
+import { openCommandFinder, registerMenus } from './CommandFinder';
+import { openSummaryDialog } from './SummaryDialog';
 
 // ---------------- Menu bar ----------------
 
@@ -40,6 +56,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
   const s = useApp();
   const doc = useActiveDoc();
   const [open, setOpen] = useState<string | null>(null);
+  const recent = useRecent((x) => x.list);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -49,12 +66,13 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
   }, [open]);
 
   const noDoc = !doc;
-  const toolItems = (group: 'markup' | 'measure' | 'form'): MenuItem[] => TOOLS.filter((t) => t.group === group && !['viewport', 'space', 'legend', 'visual-pick', 'region-pick', 'edit-text', 'erase-content'].includes(t.id)).map((t) => ({
+  const toolItems = (group: 'markup' | 'measure' | 'form'): MenuItem[] => TOOLS.filter((t) => t.group === group && !['viewport', 'space', 'legend', 'visual-pick', 'region-pick', 'edit-text', 'erase-content', 'cut-content', 'sketch-polygon', 'sketch-polyline', 'sketch-rectangle', 'sketch-ellipse', 'review-text', 'caret'].includes(t.id)).map((t) => ({
     label: t.name, shortcut: effectiveCombo(`tool:${t.id}`, s.customKeys) || undefined, disabled: noDoc, checked: s.tool === t.id, action: () => s.setTool(t.id),
   }));
 
   const menus: Record<string, MenuItem[]> = {
     CyanTakeoff: [
+      { label: 'Preferences…', shortcut: 'Ctrl+K', action: () => usePrefsDialog.setState({ open: 'prefs' }) },
       { label: 'Keyboard Shortcuts…', action: () => usePrefsDialog.setState({ open: 'keys' }) },
       { label: 'Profiles…', action: () => usePrefsDialog.setState({ open: 'profiles' }) },
       { label: 'Author Name…', action: () => { const a = prompt('Author name for new markups', s.author); if (a) s.setAuthor(a); } },
@@ -63,13 +81,20 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
     ],
     File: [
       { label: 'New PDF…', shortcut: 'Ctrl+N', action: () => useDocTools.setState({ open: 'new' }) },
+      { label: 'New PDF from Template…', action: () => useTemplateDialog.setState({ open: true }) },
       { label: 'Open…', shortcut: 'Ctrl+O', action: openFile },
       { label: 'Open Sample Drawing', action: openSample },
+      ...recent.slice(0, 8).map((r) => ({ label: `Open Recent › ${r.name}`, action: () => reopen(r) })),
+      { label: 'Create › From File…', action: () => void createFromFiles() },
+      { label: 'Create › From Multiple Files…', action: () => void createFromFiles() },
+      { label: 'Create › Layered PDF…', action: () => createLayeredPdf() },
       { label: 'Combine Files…', action: combineFiles },
       { label: 'Close', shortcut: 'Ctrl+F4', disabled: noDoc, action: () => doc && s.closeDoc(doc.id) },
+      { label: 'Close All', shortcut: 'Ctrl+Shift+W', disabled: noDoc, action: closeAll },
       { sep: true },
       { label: 'Save', shortcut: 'Ctrl+S', disabled: noDoc, action: () => s.save() },
       { label: 'Save As…', shortcut: 'Ctrl+Shift+S', disabled: noDoc, action: () => s.save(true) },
+      { label: 'Revert As…', disabled: noDoc, action: () => useDocTools.setState({ open: 'revert' }) },
       { label: 'Save All', shortcut: 'Ctrl+F2', disabled: !s.docs.some((x) => x.dirty), action: saveAll },
       { label: 'Refresh', shortcut: 'F5', disabled: !doc?.fileHandle, action: refreshDocument },
       { sep: true },
@@ -77,7 +102,11 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Import Markups (XFDF)…', disabled: noDoc, action: () => importMarkupsXfdf() },
       { label: 'Export Markups (XFDF)', disabled: noDoc, action: () => exportMarkupsXfdf() },
       { sep: true },
+      { label: 'Export as Image…', disabled: noDoc, action: () => useExportImage.setState({ open: true }) },
+      { label: 'Export Text', disabled: noDoc, action: exportText },
+      { label: 'Publish as Flattened', disabled: noDoc, action: publishFlattened },
       { label: 'Publish as Compressed', shortcut: 'Ctrl+Shift+P', disabled: noDoc, action: publishCompressed },
+      { label: 'Publish as Uncompressed', disabled: noDoc, action: publishUncompressed },
       { label: 'Email…', shortcut: 'Ctrl+E', disabled: noDoc, action: emailDocument },
       { label: 'Reduce File Size…', disabled: noDoc, action: () => useReduceDialog.setState({ open: true }) },
       { sep: true },
@@ -86,7 +115,9 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
     Edit: [
       { label: 'Undo', shortcut: 'Ctrl+Z', disabled: !doc?.undo.length, action: s.undo },
       { label: 'Redo', shortcut: 'Ctrl+Y', disabled: !doc?.redo.length, action: s.redo },
+      { label: 'Undo History…', disabled: !doc?.undo.length, action: () => useUndoHistory.setState({ open: true }) },
       { sep: true },
+      { label: 'Cut', shortcut: 'Ctrl+X', disabled: !doc?.selection.length, action: () => { if (doc) { s.copy(); s.deleteMarkups(doc.selection); } } },
       { label: 'Copy', shortcut: 'Ctrl+C', disabled: !doc?.selection.length, action: s.copy },
       { label: 'Paste', shortcut: 'Ctrl+V', disabled: !s.clipboard.length || noDoc, action: () => s.paste() },
       { label: 'Paste in Place', shortcut: 'Ctrl+Shift+V', disabled: !s.clipboard.length || noDoc, action: () => s.paste(true) },
@@ -116,6 +147,14 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Rotate View Clockwise', shortcut: 'Ctrl+Shift+Plus', disabled: noDoc, action: () => s.rotateView(90) },
       { label: 'Rotate View Counterclockwise', shortcut: 'Ctrl+Shift+Minus', disabled: noDoc, action: () => s.rotateView(-90) },
       { sep: true },
+      { label: 'Split Vertical', shortcut: 'Ctrl+2', disabled: noDoc, checked: s.split?.dir === 'v', action: () => s.splitView('v') },
+      { label: 'Split Horizontal', shortcut: 'Ctrl+H', disabled: noDoc, checked: s.split?.dir === 'h', action: () => s.splitView('h') },
+      { label: 'Toggle Split', shortcut: 'Ctrl+I', disabled: noDoc, action: s.toggleSplit },
+      { label: 'Switch', shortcut: 'Ctrl+1', disabled: !s.split, action: () => s.focusPane(s.activePane ? 0 : 1) },
+      { label: 'Unsplit', shortcut: 'Ctrl+Shift+2', disabled: !s.split, action: s.unsplit },
+      { label: 'Synchronize Document', checked: !!s.toggles.syncDoc, action: () => s.toggle('syncDoc') },
+      { label: 'Synchronize Page', checked: s.toggles.sync, action: () => s.toggle('sync') },
+      { sep: true },
       { label: 'Previous View', shortcut: 'Alt+Left', disabled: !viewHistory.canBack, action: () => stepView(-1, viewerApi.centerOn) },
       { label: 'Next View', shortcut: 'Alt+Right', disabled: !viewHistory.canForward, action: () => stepView(1, viewerApi.centerOn) },
       { sep: true },
@@ -124,6 +163,10 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Pen Mode (finger pans, pen draws)', checked: s.toggles.penMode, action: () => s.toggle('penMode') },
       { label: 'Dimmer', shortcut: 'Ctrl+F5', checked: s.toggles.dimmer, action: () => s.toggle('dimmer') },
       ...[25, 50, 75].map((n) => ({ label: `    Dimmer ${n}%`, checked: s.dimLevel === n, action: () => { s.setView({ dimLevel: n }); if (!s.toggles.dimmer) s.toggle('dimmer'); } })),
+      { label: 'Show Cover Page in Side-by-Side', checked: !!s.toggles.coverPage, action: () => s.toggle('coverPage') },
+      { label: 'Dark Mode', checked: !!s.toggles.darkMode, action: () => s.toggle('darkMode') },
+      { label: 'Disable Line Weights', checked: !!s.toggles.noLineWeights, action: () => s.toggle('noLineWeights') },
+      { label: 'Always Show Reply Indicators', checked: !!s.toggles.replyIndicators, action: () => s.toggle('replyIndicators') },
       { label: 'Show Grid', shortcut: 'Shift+F9', checked: s.toggles.grid, action: () => s.toggle('grid') },
       { label: 'Snap to Grid', shortcut: 'Ctrl+Shift+F9', checked: s.toggles.snap, action: () => s.toggle('snap') },
     ],
@@ -137,6 +180,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { sep: true },
       { label: 'Insert Pages…', shortcut: 'Ctrl+Shift+I', disabled: noDoc, action: () => openPagesDialog('insert') },
       { label: 'Insert Blank Page…', shortcut: 'Ctrl+Shift+N', disabled: noDoc, action: () => openPagesDialog('insert-blank') },
+      { label: 'Insert Layered Pages…', disabled: noDoc, action: insertLayeredPages },
       { label: 'Delete Pages…', shortcut: 'Ctrl+Shift+D', disabled: noDoc, action: () => openPagesDialog('delete') },
       { label: 'Extract Pages…', shortcut: 'Ctrl+Shift+X', disabled: noDoc, action: () => openPagesDialog('extract') },
       { label: 'Replace Pages…', shortcut: 'Ctrl+Shift+Y', disabled: noDoc, action: () => openPagesDialog('replace') },
@@ -154,12 +198,20 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { sep: true },
       { label: 'Slip Sheet…', disabled: noDoc, action: () => openPagesDialog('slip-sheet') },
       { label: 'Page Labels…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'labels' }) },
+      { label: 'Number Pages…', disabled: noDoc, action: () => usePageSetup.setState({ open: 'number' }) },
+      { label: 'Create Page Labels from Bookmarks…', disabled: noDoc, action: () => usePageSetup.setState({ open: 'bookmarks' }) },
+      { label: 'Page Setup…', disabled: noDoc, action: () => usePageSetup.setState({ open: 'setup' }) },
+      { label: 'Color Processing…', disabled: noDoc, action: () => useColorProcess.setState({ open: 'color' }) },
+      { label: 'Repair PDF…', disabled: noDoc, action: () => useColorProcess.setState({ open: 'repair' }) },
+      { label: 'Archive as PDF/A', disabled: noDoc, action: archiveAsPdfA },
       { label: 'Batch Link…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'batch-link' }) },
       { sep: true },
       { label: 'Flatten Markups…', shortcut: 'Ctrl+Shift+M', disabled: noDoc, action: () => openPagesDialog('flatten') },
       { label: 'Unflatten', shortcut: 'Ctrl+Shift+U', disabled: noDoc, action: unflattenMarkups },
       { sep: true },
       { label: 'Signature…', disabled: noDoc, action: () => useSignature.setState({ open: true }) },
+      { label: 'Certify Document (Digital ID)…', disabled: noDoc, action: () => openSignDialog(undefined, true) },
+      { label: 'Validate Signatures', disabled: noDoc, action: validateSignatures },
       { label: 'Sign Document (Digital ID)…', disabled: noDoc, action: () => openSignDialog() },
       { label: 'Mark for Redaction', shortcut: 'Shift+R', disabled: noDoc, action: () => s.setTool('redaction') },
       { label: 'Mark Text for Redaction', shortcut: 'Shift+K', disabled: noDoc, action: () => s.setTool('redact-text') },
@@ -180,9 +232,25 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { sep: true },
       { label: 'Edit Text', checked: s.tool === 'edit-text', disabled: noDoc, action: () => { s.setTool('edit-text'); s.setStatus('Edit Text: click a line of text on the drawing.'); } },
       { label: 'Erase Content', checked: s.tool === 'erase-content', disabled: noDoc, action: () => { s.setTool('erase-content'); s.setStatus('Erase Content: drag a rectangle; everything under it is removed from the page.'); } },
+      { label: 'Review Text', checked: s.tool === 'review-text', disabled: noDoc, action: () => { s.setTool('review-text'); s.setStatus('Review Text: drag across text to replace it, or click where text is to be inserted.'); } },
+      { label: 'Create Hyperlinks from URLs…', disabled: noDoc, action: () => useLinkUrls.setState({ open: true }) },
+      { label: 'Cut Content', checked: s.tool === 'cut-content', disabled: noDoc, action: () => { s.setTool('cut-content'); s.setStatus('Cut Content: drag a rectangle; the content under it goes to the clipboard (paste with Ctrl+V) and is removed from the page.'); } },
       { sep: true },
+      ...(['sketch-polygon', 'sketch-polyline', 'sketch-rectangle', 'sketch-ellipse'] as const).map((id) => ({
+        label: toolById(id).name, checked: s.tool === id, disabled: noDoc, action: () => { s.setTool(id); s.setStatus(`${toolById(id).name}: click the first point, then type the sizes.`); },
+      })),
+      { sep: true },
+      { label: 'Automatically Create Form Fields', disabled: noDoc, action: () => void autoCreateFormFields() },
       ...toolItems('form'),
       { label: 'Forms Editor…', shortcut: 'Ctrl+Shift+F', disabled: noDoc, action: () => useFormsDialog.setState({ editor: true }) },
+      { label: 'Import Form Data…', disabled: noDoc, action: () => importFormData() },
+      { label: 'Export Form Data (FDF)', disabled: noDoc, action: () => exportFormData('fdf') },
+      { label: 'Export Form Data (XML)', disabled: noDoc, action: () => exportFormData('xml') },
+      { label: 'Export Form Data (CSV)', disabled: noDoc, action: () => exportFormData('csv') },
+      { label: 'Merge Form Data (CSV)', disabled: noDoc, action: () => mergeFormData('csv') },
+      { label: 'Reset Form', disabled: noDoc, action: resetForm },
+      { label: 'Highlight Fields', checked: !s.toggles.noFieldHighlight, action: () => s.toggle('noFieldHighlight') },
+      { label: 'Migrate Typewritten Text', disabled: noDoc, action: migrateTypewrittenText },
     ],
     Measure: [
       { label: 'Set Scale…', disabled: noDoc, action: () => doc && s.openScaleDialog({ page: doc.page }) },
@@ -191,12 +259,29 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
     ],
     Batch: [
       { label: 'Batch Link…', disabled: noDoc, action: () => useSheetsDialog.setState({ open: 'batch-link' }) },
+      { label: 'Compare Documents…', disabled: s.docs.length < 2, action: () => openBatchCompare('compare') },
+      { label: 'Overlay Pages…', disabled: s.docs.length < 2, action: () => openBatchCompare('overlay') },
+      { label: 'Apply Stamp…', disabled: noDoc, action: () => { batchHint.set(); useApplyStamp.setState({ open: true }); } },
+      { label: 'Sign & Seal…', disabled: noDoc, action: () => { batchHint.set(); openSignDialog(); } },
+      { label: 'Rotate Pages…', disabled: noDoc, action: () => { batchHint.set(); openPagesDialog('rotate'); } },
+      { label: 'Split Documents…', disabled: noDoc, action: () => { batchHint.set(); openPagesDialog('split'); } },
+      { label: 'Crop Pages…', disabled: noDoc, action: () => { batchHint.set(); useDocTools.setState({ open: 'crop' }); } },
+      { label: 'Page Setup…', disabled: noDoc, action: () => { batchHint.set(); usePageSetup.setState({ open: 'setup' }); } },
+      { label: 'Security…', disabled: noDoc, action: () => { batchHint.set(); useSecurityDialog.setState({ open: true }); } },
+      { label: 'Reduce File Size…', disabled: noDoc, action: () => { batchHint.set(); useReduceDialog.setState({ open: true }); } },
+      { label: 'OCR…', disabled: noDoc, action: () => { batchHint.set(); openPagesDialog('ocr'); } },
+      { label: 'Print…', disabled: noDoc, action: () => { batchHint.set(); openPrint(); } },
+      { label: 'Color Processing…', disabled: noDoc, action: () => { batchHint.set(); useColorProcess.setState({ open: 'color' }); } },
+      { label: 'Repair PDF…', disabled: noDoc, action: () => { batchHint.set(); useColorProcess.setState({ open: 'repair' }); } },
       { label: 'Slip Sheet…', disabled: noDoc, action: () => openPagesDialog('slip-sheet') },
       { label: 'Flatten…', disabled: noDoc, action: () => openPagesDialog('flatten') },
       { label: 'Bates Numbering…', disabled: noDoc, action: () => useStampDialog.setState({ open: 'bates' }) },
+      { label: 'Header & Footer…', disabled: noDoc, action: () => useStampDialog.setState({ open: 'header' }) },
+      { label: 'Watermark…', disabled: noDoc, action: () => useStampDialog.setState({ open: 'watermark' }) },
       { label: 'Quantity Link (Excel)…', disabled: noDoc, action: () => useQuantityLink.setState({ open: true }) },
       { label: 'Summary (Excel)', disabled: noDoc, action: () => { const d = activeDoc(); if (d) exportSummaryXlsx(d.markups, allColumns(d)); } },
       { label: 'Summary (PDF)', disabled: noDoc, action: () => { const d = activeDoc(); if (d) exportSummaryPdf(d.markups, allColumns(d)); } },
+      { label: 'Summary…', disabled: noDoc, action: openSummaryDialog },
       { label: 'Combine Files…', action: combineFiles },
     ],
     Window: [
@@ -207,7 +292,12 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Measurements', shortcut: 'Alt+U', checked: s.right === 'measurements', action: () => s.setPanels({ right: s.right === 'measurements' ? null : 'measurements' }) },
       { label: 'File Access', shortcut: 'Alt+A', checked: s.left === 'files', action: () => s.setPanels({ left: s.left === 'files' ? null : 'files' }) },
       { label: 'Links', shortcut: 'Alt+N', checked: s.left === 'links', action: () => s.setPanels({ left: s.left === 'links' ? null : 'links' }) },
+      { label: 'Flags', checked: s.left === 'flags', action: () => s.setPanels({ left: s.left === 'flags' ? null : 'flags' }) },
       { label: 'Layers', shortcut: 'Alt+Y', checked: s.left === 'layers', action: () => s.setPanels({ left: s.left === 'layers' ? null : 'layers' }) },
+      { label: 'Search', shortcut: 'Alt+1', checked: s.left === 'search', action: () => s.setPanels({ left: s.left === 'search' ? null : 'search' }) },
+      { label: 'Sets', shortcut: 'Alt+2', checked: s.left === 'sets', action: () => s.setPanels({ left: s.left === 'sets' ? null : 'sets' }) },
+      { label: 'Spaces', shortcut: 'Alt+S', checked: s.left === 'spaces', action: () => s.setPanels({ left: s.left === 'spaces' ? null : 'spaces' }) },
+      { label: 'Signatures', shortcut: 'Alt+4', checked: s.left === 'signatures', action: () => s.setPanels({ left: s.left === 'signatures' ? null : 'signatures' }) },
       { label: 'Markups List', shortcut: 'Alt+L', checked: s.markupsList, action: () => s.setPanels({ markupsList: !s.markupsList }) },
       { sep: true },
       { label: 'Navigation Bar', shortcut: 'F4', checked: s.toggles.navBar, action: () => s.toggle('navBar') },
@@ -215,13 +305,20 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Presentation', shortcut: 'Ctrl+Enter', disabled: noDoc, action: () => useApp.setState({ presentation: true }) },
       { label: 'Balance', shortcut: 'Shift+F12', disabled: !s.split, action: balanceSplit },
       { sep: true },
+      { label: 'Hide/Show Panels', shortcut: 'Shift+F4', action: hideShowPanels },
+      { label: 'Auto-Hide Panel Access', checked: !!s.toggles.autoHidePanelAccess, action: () => s.toggle('autoHidePanelAccess') },
+      { label: 'Auto-Hide Tabs', checked: !!s.toggles.autoHideTabs, action: () => s.toggle('autoHideTabs') },
       { label: 'Reset Layout', action: () => s.setPanels({ left: 'thumbnails', right: 'properties', markupsList: true }) },
     ],
     Help: [
+      { label: 'Find Tools + Commands…', action: openCommandFinder },
       { label: 'Keyboard Shortcuts', shortcut: 'F1', action: onShortcuts },
       { label: 'About CyanTakeoff', action: onAbout },
     ],
   };
+
+  // Help > Find Tools + Commands searches these menus.
+  useEffect(() => { registerMenus(menus); });
 
   return (
     <div className="menubar" ref={ref}>
@@ -292,11 +389,11 @@ export function DocTabs() {
   const s = useApp();
   if (!s.docs.length) return null;
   return (
-    <div className="doc-tabs">
+    <div className={`doc-tabs ${s.toggles.autoHideTabs ? 'auto-hide' : ''}`}>
       {s.docs.map((d) => (
         <div key={d.id} className={`doc-tab ${d.id === s.activeId ? 'active' : ''}`} onClick={() => s.setActive(d.id)}
           onAuxClick={(e) => e.button === 1 && s.closeDoc(d.id)} title={d.name}>
-          <span>{d.name}{d.dirty ? ' *' : ''}</span>
+          <span className={s.prefs.tabTruncation === 'start' ? 'cut-start' : ''}>{d.name}{d.dirty ? ' *' : ''}</span>
           <button className="tab-close" onClick={(e) => { e.stopPropagation(); s.closeDoc(d.id); }} title="Close"><Icon name="close" size={12} /></button>
         </div>
       ))}
@@ -322,7 +419,7 @@ const TOGGLES: { key: keyof Toggles; label: string; title: string }[] = [
   { key: 'content', label: 'Content', title: 'Snap to Content: line endpoints and lines in the drawing (Ctrl+Shift+F8)' },
   { key: 'markup', label: 'Markup', title: 'Snap to Markup (Ctrl+Shift+F7)' },
   { key: 'reuse', label: 'Reuse', title: 'Reuse Markup Tools: keep the tool after placing a markup, until Esc or right-click' },
-  { key: 'sync', label: 'Sync', title: 'Sync views in split view (coming with split view)' },
+  { key: 'sync', label: 'Sync', title: 'Synchronize Page: both panes of a split view share zoom and scrolling' },
 ];
 
 export function StatusBar() {

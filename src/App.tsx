@@ -21,6 +21,8 @@ import { nextHit, useSearch } from './ui/Search';
 import { PagesDialog, openPagesDialog, unflattenMarkups } from './ui/PagesDialog';
 import { rotatePages } from './pdf/pages';
 import { CompareDialog } from './ui/Compare';
+import { BatchCompareDialog } from './ui/BatchCompare';
+import { SummaryDialog } from './ui/SummaryDialog';
 import { PrintDialog, openPrint } from './ui/Print';
 import { stepView } from './ui/Rulers';
 import { addBookmark } from './ui/BookmarksPanel';
@@ -33,7 +35,8 @@ import { StampDialog } from './ui/HeaderFooter';
 import { PasswordPrompt, SecurityDialog, useSecurityDialog } from './ui/Security';
 import { ReduceDialog } from './ui/ReduceSize';
 import { SheetsDialog } from './ui/Sheets';
-import { PrefsDialogs } from './ui/Prefs';
+import { TagDialogs } from './ui/Tags';
+import { PrefsDialogs, usePrefsDialog } from './ui/Prefs';
 import { SignatureDialog } from './ui/Signature';
 import { runApplyRedactions } from './ui/redactUi';
 import { DocPropertiesDialog, useDocProps } from './ui/DocProperties';
@@ -42,11 +45,23 @@ import { PlaceDialog } from './ui/LinksPanel';
 import { RecentList } from './ui/FileAccess';
 import { StampManagerDialog } from './ui/Stamps';
 import { startOffset } from './ui/OffsetBar';
+import { MultiplyDialog } from './ui/Multiply';
+import { LinkUrlsDialog, ReviewTextDialog } from './ui/ReviewText';
+import { PageSetupDialogs } from './ui/PageSetup';
+import { ApplyStampDialog } from './ui/ApplyStamp';
+import { ColorProcessDialogs } from './ui/ColorProcess';
+import { ExportImageDialog } from './ui/FileExports';
+import { UndoHistoryDialog } from './ui/UndoHistory';
+import { TemplateDialog } from './ui/Templates';
+import { CapturePreview } from './ui/Capture';
+import { CommandFinderDialog } from './ui/CommandFinder';
 import { CameraDialog, useCamera } from './ui/Camera';
 import { ManageStatusDialog } from './ui/StatusModels';
 import { DocToolsDialogs, emailDocument, publishCompressed, useDocTools } from './ui/DocTools';
 import { copyPageToSnapshot, copyText, selectAllText } from './ui/textCommands';
-import { autosizeTextBoxes, balanceSplit, editAction, refreshDocument, removeSelectedFromGroup, saveAll, toggleFullScreen } from './ui/quickCommands';
+import { clearSession, saveSession } from './model/session';
+import { reopenLastSession } from './ui/FileAccess';
+import { autosizeTextBoxes, balanceSplit, closeAll, editAction, hideShowPanels, refreshDocument, removeSelectedFromGroup, saveAll, toggleFullScreen } from './ui/quickCommands';
 
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
@@ -60,15 +75,26 @@ export function App() {
   const [dialog, setDialog] = useState<'shortcuts' | 'about' | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
+  const darkMode = useApp((s) => !!s.toggles.darkMode);
+  useEffect(() => { document.documentElement.dataset.theme = darkMode ? 'dark' : 'light'; }, [darkMode]);
+  // Preferences > Show recent files on startup.
+  useEffect(() => { const st = useApp.getState(); if (st.prefs.showRecentOnStartup && !st.docs.length) st.setPanels({ left: 'files' }); }, []);
+  // Preferences > Reopen Files from Last Session on Startup.
+  useEffect(() => { if (useApp.getState().prefs.reopenLastSession && !useApp.getState().docs.length) void reopenLastSession(); }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isEditable(e.target)) return;
+      if (isEditable(e.target)) return; // form fields: see singleKeyInField (Viewer's form layer)
       const s = useApp.getState();
       // Saving or a page operation is in progress: edits now would be lost when it finishes.
       if (s.busy) { e.preventDefault(); return; }
       const d = activeDoc();
       const combo = resolveCombo(comboFromEvent(e), useApp.getState().customKeys);
       if (!combo) return;
+      // My Tools hot keys (Revu): 1-9 pick the tool at that position.
+      if (/^[1-9]$/.test(combo) && d) {
+        const p = s.toolSets[0]?.tools[Number(combo) - 1];
+        if (p) { e.preventDefault(); s.setTool(p.type, { preset: p }); return; }
+      }
       if (combo.startsWith('tool:')) {
         const id = combo.slice(5) as ToolId;
         if (d) { e.preventDefault(); s.setTool(id === 'radius' ? s.radiusTool : id); }
@@ -85,6 +111,7 @@ export function App() {
         case 'Ctrl+O': return run(openFile);
         case 'Ctrl+S': return run(() => s.save());
         case 'Ctrl+F2': return run(saveAll);
+        case 'Ctrl+Shift+W': return run(closeAll);
         case 'Ctrl+N': return run(() => useDocTools.setState({ open: 'new' }));
         case 'Ctrl+E': return run(() => d && emailDocument());
         case 'Ctrl+Shift+P': return run(() => d && publishCompressed());
@@ -102,6 +129,7 @@ export function App() {
         case 'Shift+F12': return run(balanceSplit);
         case 'Shift+Z': return run(() => d && s.setTool(s.tool === 'zoom' ? 'select' : 'zoom'));
         case 'F4': return run(() => s.toggle('navBar'));
+        case 'Ctrl+K': return run(() => usePrefsDialog.setState({ open: 'prefs' }));
         case 'Ctrl+Shift+S': return run(() => s.save(true));
         case 'Ctrl+F4': case 'Ctrl+W': return run(() => d && s.closeDoc(d.id));
         case 'Ctrl+P': return run(() => d && openPrint());
@@ -192,18 +220,19 @@ export function App() {
         case 'Ctrl+Shift+R': return run(() => d && openPagesDialog('rotate'));
         case 'Ctrl+Shift+M': return run(() => d && openPagesDialog('flatten'));
         case 'Ctrl+Shift+U': return run(() => d && unflattenMarkups());
-        case 'Shift+Alt++': case 'Shift+Alt+=': return run(() => d && s.transformDoc((lib) => rotatePages(lib, [d.page], 90), 'Rotated clockwise'));
-        case 'Shift+Alt+-': case 'Shift+Alt+_': return run(() => d && s.transformDoc((lib) => rotatePages(lib, [d.page], -90), 'Rotated counterclockwise'));
+        // Rotate all Pages by Default (Preferences > Document): every page turns, not only the current one.
+        case 'Shift+Alt++': case 'Shift+Alt+=': return run(() => d && s.transformDoc((lib) => rotatePages(lib, s.prefs.rotateAllPages ? d.loaded.pages.map((p) => p.index) : [d.page], 90), `Rotated clockwise${s.prefs.rotateAllPages ? ' (all pages)' : ''}`));
+        case 'Shift+Alt+-': case 'Shift+Alt+_': return run(() => d && s.transformDoc((lib) => rotatePages(lib, s.prefs.rotateAllPages ? d.loaded.pages.map((p) => p.index) : [d.page], -90), `Rotated counterclockwise${s.prefs.rotateAllPages ? ' (all pages)' : ''}`));
         case 'Ctrl+H': return run(() => s.splitView('h'));
         case 'Ctrl+2': return run(() => s.splitView('v'));
         case 'Ctrl+Shift+2': case 'Ctrl+Shift+@': return run(s.unsplit);
         case 'Ctrl+1': return run(() => s.split && s.focusPane(s.activePane ? 0 : 1));
-        case 'Ctrl+I': return run(() => (s.split ? s.unsplit() : s.splitView('v')));
+        case 'Ctrl+I': return run(s.toggleSplit);
         case 'Shift+F3': return run(() => nextHit(-1));
         case 'Alt+P': return right('properties');
         case 'Alt+X': return right('toolchest');
         case 'Alt+U': return right('measurements');
-        case 'Shift+F4': return run(() => s.setPanels({ left: null, right: null }));
+        case 'Shift+F4': return run(hideShowPanels);
         case 'F1': return run(() => setDialog('shortcuts'));
       }
       const arrows: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
@@ -223,7 +252,9 @@ export function App() {
 
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
-      if (useApp.getState().docs.some((d) => d.dirty)) e.preventDefault();
+      const st = useApp.getState();
+      if (st.prefs.reopenLastSession) saveSession(st.docs.map((d) => d.name)); else clearSession();
+      if (st.docs.some((d) => d.dirty)) e.preventDefault();
     };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
@@ -273,12 +304,26 @@ export function App() {
         <SideTabs side="right" />
       </div>
       <StatusBar />
+      <CommandFinderDialog />
       <ScaleDialog />
       <LinkDialog />
       <SpaceDialog />
       <PagesDialog />
       <CompareDialog />
+      <TagDialogs />
+      <BatchCompareDialog />
+      <SummaryDialog />
       <PrintDialog />
+      <MultiplyDialog />
+      <ReviewTextDialog />
+      <LinkUrlsDialog />
+      <PageSetupDialogs />
+      <ApplyStampDialog />
+      <ColorProcessDialogs />
+      <ExportImageDialog />
+      <UndoHistoryDialog />
+      <TemplateDialog />
+      <CapturePreview />
       <StyleManagerDialog />
       <SpellDialog />
       <SequenceDialog />

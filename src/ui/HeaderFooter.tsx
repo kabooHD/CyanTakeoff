@@ -1,9 +1,12 @@
 // Document > Header & Footer, Batch > Bates Numbering and Document >
 // Watermark: dialogs with a live preview; applied as page content (undoable
-// like other page operations) and removable from the same menus.
+// like other page operations) and removable from the same menus. Each can
+// run over all open documents (Revu's Batch); Bates numbers then continue
+// from one file to the next.
 import { useState } from 'react';
 import { create } from 'zustand';
 import { useApp, type DocState } from '../model/store';
+import { FilesRow, batchHint, targets } from './filesRow';
 import { parsePageRange } from '../model/measure';
 import { hexToRgb } from '../pdf/pdfutil';
 import {
@@ -74,6 +77,7 @@ function HeaderFooterForm({ d, bates }: { d: DocState; bates: boolean }) {
   const [range, setRange] = useState('all');
   const [custom, setCustom] = useState('');
   const [focus, setFocus] = useState<Slot>('fr');
+  const [all, setAll] = useState(() => batchHint.take());
   const pages = pagesOf(d, range, custom);
   const ctx = (pi: number, k: number) => ({ page: pi, pages: d.loaded.pages.length, label: d.loaded.pages[pi]?.label ?? '', date: new Date(), file: d.name, bates: batesText(o.bates, o.bates.start + k) });
   const setText = (slot: Slot, v: string) => setO({ ...o, texts: { ...o.texts, [slot]: v } });
@@ -81,10 +85,19 @@ function HeaderFooterForm({ d, bates }: { d: DocState; bates: boolean }) {
   const ok = async () => {
     save(HF_LS, o);
     close();
-    await useApp.getState().transformDoc((lib) => addHeaderFooter(lib, {
-      texts: o.texts, font: o.font, size: o.size, color: rgb(o.color), margins: { top: o.margin, bottom: o.margin, left: o.margin, right: o.margin },
-      pages, bates: o.bates, fileName: d.name, date: new Date(),
-    }, d.loaded.pages.map((p) => p.label)), bates ? 'Bates numbers added' : 'Header & Footer added');
+    const docs = targets(d, all);
+    let start = o.bates.start, n = 0;
+    for (const t of docs) {
+      const tp = pagesOf(t, range, custom);
+      if (!tp.length) continue;
+      const done = await useApp.getState().transformDoc((lib) => addHeaderFooter(lib, {
+        texts: o.texts, font: o.font, size: o.size, color: rgb(o.color), margins: { top: o.margin, bottom: o.margin, left: o.margin, right: o.margin },
+        pages: tp, bates: { ...o.bates, start }, fileName: t.name, date: new Date(),
+      }, t.loaded.pages.map((p) => p.label)), bates ? 'Bates numbers added' : 'Header & Footer added', undefined, undefined, t.id);
+      if (!done) continue;
+      start += tp.length; n++;
+    }
+    if (docs.length > 1) useApp.getState().setStatus(`${bates ? 'Bates numbers' : 'Header & Footer'} added to ${n} document${n === 1 ? '' : 's'}`);
   };
   const title = bates ? 'Bates Numbering' : 'Header & Footer';
   return (
@@ -121,6 +134,7 @@ function HeaderFooterForm({ d, bates }: { d: DocState; bates: boolean }) {
               </div>
             )}
             <PageRange d={d} range={range} setRange={setRange} custom={custom} setCustom={setCustom} />
+            <FilesRow all={all} setAll={setAll} />
           </div>
           <Preview d={d} page={pages[0] ?? 0} render={(W, H) => slots.map(([slot]) => {
             const t = expandTokens(o.texts[slot], ctx(pages[0] ?? 0, 0));
@@ -143,11 +157,18 @@ function WatermarkForm({ d }: { d: DocState }) {
   const [o, setO] = useState<WMSettings>(() => load(WM_LS, WM_DEFAULT));
   const [range, setRange] = useState('all');
   const [custom, setCustom] = useState('');
+  const [all, setAll] = useState(() => batchHint.take());
   const pages = pagesOf(d, range, custom);
   const ok = async () => {
     save(WM_LS, o);
     close();
-    await useApp.getState().transformDoc((lib) => addWatermark(lib, { ...o, color: rgb(o.color), pages }), 'Watermark added');
+    const docs = targets(d, all);
+    let n = 0;
+    for (const t of docs) {
+      const tp = pagesOf(t, range, custom);
+      if (tp.length && await useApp.getState().transformDoc((lib) => addWatermark(lib, { ...o, color: rgb(o.color), pages: tp }), 'Watermark added', undefined, undefined, t.id)) n++;
+    }
+    if (docs.length > 1) useApp.getState().setStatus(`Watermark added to ${n} document${n === 1 ? '' : 's'}`);
   };
   return (
     <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>
@@ -168,6 +189,7 @@ function WatermarkForm({ d }: { d: DocState }) {
               <label><input type="radio" name="wm-z" checked={o.behind} onChange={() => setO({ ...o, behind: true })} /> Behind page</label>
             </div>
             <PageRange d={d} range={range} setRange={setRange} custom={custom} setCustom={setCustom} />
+            <FilesRow all={all} setAll={setAll} />
           </div>
           <Preview d={d} page={pages[0] ?? 0} render={(W, H) => (
             <text x={W / 2} y={H / 2} fontSize={o.size} fill={o.color} fillOpacity={o.opacity} textAnchor="middle" dominantBaseline="central"

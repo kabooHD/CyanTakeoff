@@ -13,6 +13,8 @@ export interface FormField {
   options?: string[];
   multiline?: boolean;
   readOnly?: boolean;
+  /** Required (/Ff bit 2): Revu tints the field red until it is filled. */
+  required?: boolean;
   /** Widget rectangles in PDF space; radio widgets carry their option. */
   widgets: { page: number; rect: [number, number, number, number]; option?: string }[];
 }
@@ -36,7 +38,7 @@ export function readFields(doc: PDFDocument): FormField[] {
       const on = w.getOnValue?.();
       return { page: page ?? -1, rect: [r.x, r.y, r.x + r.width, r.y + r.height] as [number, number, number, number], option: on ? on.decodeText() : undefined };
     }).filter((w) => w.page >= 0);
-    const base = { name: f.getName(), widgets, readOnly: f.isReadOnly() };
+    const base = { name: f.getName(), widgets, readOnly: f.isReadOnly(), required: f.isRequired() || undefined };
     if (f instanceof PDFTextField) out.push({ ...base, type: 'text', value: f.getText() ?? '', multiline: f.isMultiline() });
     else if (f instanceof PDFCheckBox) out.push({ ...base, type: 'checkbox', value: f.isChecked() });
     else if (f instanceof PDFRadioGroup) {
@@ -70,7 +72,7 @@ export function writeFields(doc: PDFDocument, values: Record<string, FieldValue>
 
 // ---------------- Forms editor: create, rename, delete fields ----------------
 
-export type NewFieldType = 'text' | 'checkbox' | 'radio' | 'dropdown' | 'list' | 'signature';
+export type NewFieldType = 'text' | 'checkbox' | 'radio' | 'dropdown' | 'list' | 'signature' | 'button';
 
 export interface FieldSpec {
   type: NewFieldType;
@@ -83,6 +85,8 @@ export interface FieldSpec {
   multiline?: boolean;
   /** Radio: the value this button sets (buttons sharing a name form one group). */
   option?: string;
+  /** Button: its caption. */
+  caption?: string;
 }
 
 const box = (r: FieldSpec['rect']) => ({ x: Math.min(r[0], r[2]), y: Math.min(r[1], r[3]), width: Math.abs(r[2] - r[0]), height: Math.abs(r[3] - r[1]) });
@@ -124,6 +128,11 @@ export function createField(doc: PDFDocument, spec: FieldSpec) {
       const f = form.createOptionList(spec.name);
       f.addOptions(spec.options ?? []);
       f.addToPage(page, at);
+      break;
+    }
+    case 'button': {
+      const b = form.createButton(spec.name);
+      b.addToPage(spec.caption ?? spec.name, page, { ...at, borderWidth: 1 });
       break;
     }
     case 'signature': {
@@ -168,4 +177,53 @@ export function deleteField(doc: PDFDocument, name: string) {
 export function setFieldOptions(doc: PDFDocument, name: string, options: string[]) {
   const f = doc.getForm().getField(name);
   if (f instanceof PDFDropdown || f instanceof PDFOptionList) f.setOptions(options);
+}
+
+// ---------------- Forms panel: field layout and tab order ----------------
+
+/** Move / resize a field's widgets on `page` to `rect` (PDF space) and redraw them. */
+export function setWidgetRect(doc: PDFDocument, name: string, page: number, rect: [number, number, number, number], font: PDFFont) {
+  const form = doc.getForm();
+  const f = form.getField(name);
+  const pageRef = doc.getPage(page).ref.toString();
+  const annots = doc.getPage(page).node.Annots();
+  const onPage = new Set<string>();
+  if (annots) for (let i = 0; i < annots.size(); i++) onPage.add(String(annots.get(i)));
+  for (const w of f.acroField.getWidgets()) {
+    const ref = doc.context.getObjectRef(w.dict);
+    const here = w.P() ? w.P()!.toString() === pageRef : ref ? onPage.has(String(ref)) : false;
+    if (here) w.setRectangle({ x: Math.min(rect[0], rect[2]), y: Math.min(rect[1], rect[3]), width: Math.abs(rect[2] - rect[0]), height: Math.abs(rect[3] - rect[1]) });
+  }
+  if (!(f instanceof PDFSignature)) { try { form.updateFieldAppearances(font); } catch { /* fields without an appearance generator keep theirs */ } }
+}
+
+/** The page's automatic tab order: by Row, by Column, or Structure order; null removes it (Unspecified: /Annots order). */
+export function setPageTabs(doc: PDFDocument, page: number, mode: 'R' | 'C' | 'S' | null) {
+  const node = doc.getPage(page).node;
+  if (mode) node.set(PDFName.of('Tabs'), PDFName.of(mode)); else node.delete(PDFName.of('Tabs'));
+}
+
+/** The page's /Tabs entry as read. */
+export function pageTabs(doc: PDFDocument, page: number): 'R' | 'C' | 'S' | null {
+  const t = doc.getPage(page).node.get(PDFName.of('Tabs'));
+  const v = t instanceof PDFName ? t.decodeText() : null;
+  return v === 'R' || v === 'C' || v === 'S' ? v : null;
+}
+
+/** Manual tab order (Unspecified): the fields' widgets are put in `names` order at the end of the page's /Annots. */
+export function setFieldOrder(doc: PDFDocument, page: number, names: string[]) {
+  const form = doc.getForm();
+  const pg = doc.getPage(page);
+  const annots = pg.node.Annots();
+  if (!annots) return;
+  const refOf = new Map<string, number>(); // widget ref -> position in names
+  names.forEach((n, i) => {
+    const f = form.getFieldMaybe(n);
+    if (!f) return;
+    for (const w of f.acroField.getWidgets()) { const r = doc.context.getObjectRef(w.dict); if (r) refOf.set(String(r), i); }
+  });
+  const items = Array.from({ length: annots.size() }, (_, i) => annots.get(i));
+  const others = items.filter((r) => !refOf.has(String(r)));
+  const widgets = items.filter((r) => refOf.has(String(r))).sort((a, b) => refOf.get(String(a))! - refOf.get(String(b))!);
+  pg.node.set(PDFName.of('Annots'), doc.context.obj([...others, ...widgets]));
 }

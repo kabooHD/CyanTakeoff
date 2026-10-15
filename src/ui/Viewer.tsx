@@ -12,17 +12,33 @@ import { layerIds } from '../pdf/layers';
 import { markupShown, ocConfig, visibilityKey } from './layersView';
 import { openSignDialog } from './DigitalSignature';
 import { cancelPicking, pickAlignPoint, pickingPrompt, useCompareDialog } from './Compare';
+import { addToLegend, applyLegendToAllPages, copyLegendToSnapshot } from './legendCommands';
 import { STAMPS, downloadBase64, loadImage, pageText, pickFile, readAsDataUrl, snapshot, textRectsIn } from './toolActions';
 import { applyCutout, ellipsePolygon } from '../model/cutouts';
 import { expandGroups } from '../model/arrange';
+import { rgbaOf, wheelZoomFactor } from '../model/prefs';
+import { cssFamily, textStyleOf } from '../model/textStyle';
+import { MOVABLE_CAPTION, captionPosition, captionText, drawnLine, snapCaptionAngle } from '../model/measureDisplay';
+import { mergeCounts, nearestCountIndex, splitAll, splitCount } from '../model/count';
+import { autosizedBox, withBox } from '../model/textBox';
+import { textWidth } from './quickCommands';
+import { attachCapture, captureMenuItems, shrinkPhoto } from './Capture';
+import { openCameraFor } from './Camera';
 import { arrangeItems } from './arrangeMenu';
 import { legendKey, legendLayout, legendRows, type LegendDef } from '../model/legend';
-import { DynamicFillBar, FillOverlay, buildMask, fillDown, fillMove, fillUp, finishBoundary, resetFill, useFill } from './DynamicFill';
+import { DynamicFillBar, FillOverlay, applyFillPrefs, buildMask, fillDown, fillMove, fillUp, finishBoundary, resetFill, useFill } from './DynamicFill';
 import type { Markup, MarkupType, Pt, ToolId, Viewport } from '../model/types';
 import { toolById } from '../tools/tools';
 import { CURVABLE, arcSegment, bezierAt, closedType, flatPoints, hasCurves, insertHandle, removeHandle, segments, toggleCurve, type Handles } from '../model/curves';
 import { MarkupShape, handlePoints } from './renderMarkup';
 import { cutoutAt, hitTest, markupBounds, outline } from './hit';
+import { urlAt, urlRects, type UrlRect } from '../model/urls';
+import { singleKeyInField } from './toolShortcut';
+import { ROTATION_FIELD, angleAbout, canRotate, normDeg, rotateHandle, rotated, rotationCenter, snapRotation, unrotatePt } from '../model/rotate';
+import { aspectCorner, hasScaleHandles, oneGroup, oppositeCorner, scaleAbout, scaleFactor, scaleHandles, scaledStyle, selectionCorners } from '../model/scale';
+import { anchorOf, spaceAt } from '../model/spaces';
+import { bandOf, inBand } from '../model/select';
+import { fitZoom } from '../model/prefs';
 import { selectText } from '../model/textSelect';
 import { copyText, searchFor } from './textCommands';
 import { followPlace } from './LinksPanel';
@@ -37,6 +53,10 @@ import { ViewOverlays, recordView } from './Rulers';
 import { setVisualTemplate } from './VisualSearch';
 import { finishPickRect } from './pickRect';
 import { editText, eraseContent } from '../pdf/editText';
+import { SKETCH_TOOLS } from '../model/sketch';
+import { scaledPoints, toolScaleFactor } from '../model/toolScale';
+import { SketchBar } from './SketchBar';
+import { reviewTextMark } from './ReviewText';
 import type { TextBox } from './toolActions';
 import { formatSequence, nextInSequence, sequenceMembers } from '../model/sequence';
 import { renderLimits } from '../model/device';
@@ -51,6 +71,9 @@ const BASE_MAX_PIXELS = LIMITS.base;
 /** Pages other than the active one, in continuous / side-by-side views. */
 const TILE_MAX_PIXELS = LIMITS.tile;
 
+/** The scrolling element of each split pane (Synchronize Page). */
+const paneScrollers: (HTMLDivElement | null)[] = [null, null];
+
 /** Imperative hooks for menus/toolbar (fit page etc.). */
 export const viewerApi = {
   fitPage: () => {},
@@ -58,6 +81,8 @@ export const viewerApi = {
   zoomBy: (_f: number) => {},
   /** Scroll so page point `p` is in the middle of the view. */
   centerOn: (_p: Pt) => {},
+  /** Zoom so the page box (a, b) fills the view, centred (Markups List: Zoom Fit Markups when selected). */
+  fitRect: (_a: Pt, _b: Pt) => {},
   /** Scroll so page point `p` is at the top left of the view. */
   showAt: (_p: Pt) => {},
   /** Page point at the top left of the view. */
@@ -68,14 +93,43 @@ export const viewerApi = {
   viewSize: () => ({ w: 800, h: 600 }),
 };
 
+/** A selected measurement's caption: its centre, size (page units) and the rotation anchor to its right. */
+function captionBox(m: Markup, zoom: number): { at: Pt; w: number; h: number; anchor: Pt } | null {
+  if (!MEASURE_TYPES_WITH_CAPTION.has(m.type) || m.points.length < 2) return null;
+  const text = captionText(m);
+  if (!text) return null;
+  const at = captionPosition(m, m.points);
+  const w = textWidth(text, m.style.fontSize) + 6, h = m.style.fontSize * 1.3;
+  const a = ((m.display?.captionAngle ?? 0) * Math.PI) / 180;
+  const d = w / 2 + 10 / zoom;
+  return { at, w, h, anchor: { x: at.x + Math.cos(a) * d, y: at.y - Math.sin(a) * d } };
+}
+const MEASURE_TYPES_WITH_CAPTION = new Set(['length', 'polylength', 'perimeter', 'area', 'volume', 'angle', 'radius', 'diameter']);
+
 type Draft = { tool: ToolId; points: Pt[]; cursor: Pt | null; dragFrom?: { x: number; y: number }; target?: string;
   /** Curved segments drawn with Ctrl+drag: handlebars per point, and the point whose handlebar is being dragged. */
   handles?: Handles; curving?: number };
+/** How far (screen px) the purple scale handles sit outside the markup's box. */
+const SCALE_OUT = 11;
+
 type Drag =
   | { kind: 'pan'; sx: number; sy: number; left: number; top: number }
   | { kind: 'move'; start: Pt; snapshot: Markup[]; ids: string[]; moved: boolean }
   | { kind: 'vertex'; id: string; index: number; snapshot: Markup[]; moved: boolean }
+  /** The middle handle of a Length / Dimension: drags the line beside its points (leader offset, PDF /LL). */
+  | { kind: 'leader'; id: string; snapshot: Markup[]; moved: boolean }
+  /** Shift+drag a measurement caption (offset), or drag its anchor to turn it. */
+  | { kind: 'caption'; id: string; start: Pt; orig: Pt; snapshot: Markup[]; moved: boolean }
+  | { kind: 'captionRotate'; id: string; center: Pt; snapshot: Markup[]; moved: boolean }
+  /** The orange handle above a markup turns it (15° steps, Shift: free); `deg` is the turn applied so far. */
+  | { kind: 'rotate'; id: string; center: Pt; start: number; orig: Markup; snapshot: Markup[]; moved: boolean; deg: number }
+  /** A purple corner handle scales the markup about the opposite corner (Shift: each axis on its own). */
+  | { kind: 'scale'; id: string; fixed: Pt; corner: Pt; grab: Pt; orig: Markup; snapshot: Markup[]; moved: boolean }
+  /** Purple handles around several selected markups scale them together; `props`: line widths and font sizes follow (a Group, Scale Appearance Properties on). */
+  | { kind: 'scaleMany'; ids: string[]; fixed: Pt; corner: Pt; grab: Pt; origs: Markup[]; snapshot: Markup[]; moved: boolean; props: boolean }
   | { kind: 'band'; start: Pt; cur: Pt; add: boolean; right?: { x: number; y: number } }
+  /** Image tool: a dragged rectangle the picture is fitted into (a click places it at its own size). */
+  | { kind: 'imageBox'; start: Pt; cur: Pt }
   /** Move (corner -1) or resize (corner 0..3) the highlighted viewport. */
   | { kind: 'viewport'; id: string; corner: number; start: Pt; orig: [Pt, Pt]; rect: [Pt, Pt] }
   /** Drag a curve handlebar of vertex `index` (Ctrl: the two sides move independently). */
@@ -99,12 +153,19 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const zoomRaw = pane === 1 && split ? split.zoom : doc.zoom;
   const isActivePane = !split || s.activePane === pane;
   const page = doc.loaded.pages[Math.min(pageIdx, doc.loaded.pages.length - 1)];
-  const zoom = zoomRaw || 1;
+  const zoom = zoomRaw > 0 ? zoomRaw : 1;
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Synchronize Page: the active pane's scroll position is mirrored to the other pane.
+  useEffect(() => { const el = scrollRef.current; paneScrollers[pane] = el; return () => { if (paneScrollers[pane] === el) paneScrollers[pane] = null; }; }, [pane]);
   const baseRef = useRef<HTMLCanvasElement>(null);
   const detailRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [pdfPage, setPdfPage] = useState<PDFPageProxy | null>(null);
+  // Find Hyperlinks in PDF Content: the addresses in the page's text, and the one under the pointer.
+  const urlBoxes = useRef<UrlRect[]>([]);
+  const [urlHit, setUrlHit] = useState<UrlRect | null>(null);
+  // The zoom Fit Width set, for Lock Panning in Fit Width.
+  const fitWidthZoom = useRef(-1);
   const renderedPage = useRef<PDFPageProxy | null>(null);
   const [renderedIdx, setRenderedIdx] = useState(-1);
   const [baseScale, setBaseScale] = useState(0);
@@ -134,14 +195,15 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   // View mode and Rotate View: where each shown page sits in the scroll area.
   const mode = s.viewMode, rot = s.viewRotation;
   const multi = mode !== 'single';
-  const lay = layoutPages(doc.loaded.pages.map((p) => rotatedSize(p.width * zoom, p.height * zoom, rot)), mode, pageIdx, PAD, size);
+  const lay = layoutPages(doc.loaded.pages.map((p) => rotatedSize(p.width * zoom, p.height * zoom, rot)), mode, pageIdx, PAD, size, !!s.toggles.coverPage);
   const { innerW, innerH } = lay;
   const slot = lay.slots.find((x) => x.index === page.index)!;
   const left = slot.x, top = slot.y;
   /** Page pixels (unrotated, relative to the page) to scroll-area pixels, and back. */
   const outPt = (u: number, v: number) => { const q = rotateOut(u, v, pw, ph, rot); return { x: left + q.x, y: top + q.y }; };
   // Markups on hidden layers are not shown (nor hit or snapped to).
-  const markups = doc.markups.filter((m) => m.page === pageIdx && markupShown(doc, m, zoom));
+  const fillHides = useFill((f) => f.hideMarkups) && s.tool === 'dynamic-fill';
+  const markups = doc.markups.filter((m) => m.page === pageIdx && markupShown(doc, m, zoom) && !fillHides);
   const visKey = visibilityKey(doc, zoom);
   const viewports = doc.viewports[pageIdx] ?? [];
   /** Scale a measurement starting at `p` would use (viewport, else page). */
@@ -205,6 +267,15 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     const t = setTimeout(() => { snapGeometry(pdfPage, page.viewport).then((g) => alive && setGeom(g)).catch(() => {}); }, 300);
     return () => { alive = false; clearTimeout(t); };
   }, [pdfPage, page.viewport, wantGeom]);
+  const findHyperlinks = s.prefs.findHyperlinks;
+  useEffect(() => {
+    urlBoxes.current = [];
+    setUrlHit(null);
+    if (!pdfPage || !findHyperlinks) return;
+    let alive = true;
+    pageText(pdfPage, page.viewport).then((boxes) => { if (alive) urlBoxes.current = urlRects(boxes); }).catch(() => {});
+    return () => { alive = false; };
+  }, [pdfPage, page.viewport, findHyperlinks]);
 
   // ----- fit / zoom helpers -----
   const fitPage = useCallback(() => {
@@ -214,7 +285,9 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   }, [page, s]);
   const fitWidth = useCallback(() => {
     const el = scrollRef.current!;
-    s.setViewZoom(pane, (el.clientWidth - PAD * 2) / rotatedSize(page.width, page.height, s.viewRotation).w);
+    const z = (el.clientWidth - PAD * 2) / rotatedSize(page.width, page.height, s.viewRotation).w;
+    fitWidthZoom.current = z;
+    s.setViewZoom(pane, z);
   }, [page, s]);
   const zoomAt = useCallback((factor: number, cx?: number, cy?: number) => {
     const el = scrollRef.current!;
@@ -230,6 +303,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   useEffect(() => {
     if (!isActivePane) return;
     viewerApi.fitPage = fitPage;
+    viewerApi.fitRect = (a, b) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      s.setViewZoom(pane, fitZoom(el.clientWidth, el.clientHeight, Math.abs(b.x - a.x), Math.abs(b.y - a.y)));
+      setTimeout(() => viewerApi.centerOn({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }), 30);
+    };
     viewerApi.fitWidth = fitWidth;
     viewerApi.zoomBy = (f) => zoomAt(f);
     viewerApi.centerOn = (p) => {
@@ -256,7 +335,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitPage, fitWidth, zoomAt, left, top, zoom, isActivePane, rot]);
 
-  useEffect(() => { if (!zoomRaw) fitPage(); }, [zoomRaw, fitPage]);
+  // Zoom 0 means fit page (the default on opening), -1 fit width (Preferences > Document).
+  useEffect(() => { if (!zoomRaw) fitPage(); else if (zoomRaw === -1) fitWidth(); }, [zoomRaw, fitPage, fitWidth]);
 
   useLayoutEffect(() => {
     const a = anchor.current;
@@ -294,6 +374,10 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const scrollIdle = useRef(0);
   const reach = useRef('');
   const onScroll = () => {
+    if (split && s.toggles.sync && isActivePane) {
+      const other = paneScrollers[pane ? 0 : 1], el = scrollRef.current;
+      if (other && el && (other.scrollLeft !== el.scrollLeft || other.scrollTop !== el.scrollTop)) { other.scrollLeft = el.scrollLeft; other.scrollTop = el.scrollTop; }
+    }
     clearTimeout(scrollIdle.current);
     scrollIdle.current = window.setTimeout(() => setScrollTick((n) => n + 1), 120);
     if (multi) {
@@ -398,10 +482,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   useEffect(() => {
     const el = scrollRef.current!;
     const onWheel = (e: WheelEvent) => {
-      if (e.shiftKey || e.ctrlKey) return;
+      const st = useApp.getState();
+      const f = wheelZoomFactor(st.prefs, st.viewMode !== 'single' && st.viewMode !== 'side', e);
+      if (f === null) return; // the page scrolls
       e.preventDefault();
       const r = el.getBoundingClientRect();
-      zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+      zoomAt(f, e.clientX - r.left, e.clientY - r.top);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
@@ -487,7 +573,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     useApp.setState({ offsetOp: offsetSet.replace ? null : { id: offsetSrc.id } });
   };
   useEffect(() => {
-    if (s.tool === 'dynamic-fill' && pdfPage) buildMask(pdfPage, `${doc.id}:${pageIdx}`);
+    if (s.tool === 'dynamic-fill' && pdfPage) { applyFillPrefs(); buildMask(pdfPage, `${doc.id}:${pageIdx}`); }
     if (s.tool !== 'dynamic-fill') resetFill();
   }, [s.tool, pdfPage, doc.id, pageIdx, fillKey]);
 
@@ -495,6 +581,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (isEditable(e.target)) return;
+      if (e.key === 'Enter' && s.tool === 'pen' && !draft) penGroup.current = null; // the next stroke starts a new pen markup
       if (e.code === 'Space') { spaceDown.current = true; force((n) => n + 1); e.preventDefault(); }
       if (align && e.key === 'Escape') { cancelPicking(); e.stopImmediatePropagation(); return; }
       if (s.tool === 'dynamic-fill' && useFill.getState().draftBoundary.length) {
@@ -534,11 +621,11 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     const q = rotateIn(e.clientX - r.left, e.clientY - r.top, pw, ph, rot);
     return { x: q.x / zoom, y: q.y / zoom };
   };
-  const GRID = 12;
+  const GRID = Math.max(2, s.prefs.gridSpacing || 12);
   // Like Revu's status bar: Markup = snap to markups, Content = snap to the
   // drawing, Snap = snap to grid. Each works on its own.
   const snap = (p: Pt, exclude?: string): Pt => {
-    const tol = 10 / zoom;
+    const tol = Math.max(5, Math.min(25, s.prefs.snapSensitivity || 10)) / zoom;
     let best: Pt | null = null, bestD = tol;
     if (s.toggles.markup) {
       for (const m of markups) {
@@ -561,7 +648,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       const d = Math.max(Math.abs(p.x - prev.x), Math.abs(p.y - prev.y));
       return { x: prev.x + Math.sign(p.x - prev.x || 1) * d, y: prev.y + Math.sign(p.y - prev.y || 1) * d };
     }
-    if (e.shiftKey && prev) p = ortho(prev, p);
+    // Snap Orthogonal (Measurements menu) keeps measurements to 45° steps; Shift does it for one point.
+    if ((e.shiftKey || (s.toggles.snapOrtho && isMeasureTool(s.tool))) && prev) p = ortho(prev, p);
     return p;
   };
 
@@ -580,9 +668,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     return { seq: { id: p.id, run: p.sequence.run, n }, ...(textual ? { text: v } : { label: v }) };
   };
 
+  /** Pen strokes made within a second of each other are one grouped markup (Revu); Enter starts a new one. */
+  const penGroup = useRef<{ id: string; at: number; last: string; applied: boolean } | null>(null);
   const finish = (type: MarkupType, points: Pt[], extra: Partial<Markup> = {}) => {
     const preset = s.preset;
     const style = preset?.style ?? s.toolDefaults[type];
+    if (preset) extra = { toolId: preset.id, ...extra };
     let P = points;
     if (type === 'cloud' && points.length === 2) P = rectCorners(points[0], points[1]);
     if (type === 'callout') P = [points[0], points[1], { x: points[1].x + 144, y: points[1].y + 40 }];
@@ -635,23 +726,26 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     const def: LegendDef = { title: 'Legend', keys, source: 'page', showQuantity: true, showMeasurement: keys.some((k) => MEASURE_TYPES.has(k.split('|')[0])) };
     useApp.setState({ legendKeys: null });
     // The click is the table's top-left corner.
-    const L = legendLayout(def, legendRows(def, doc.markups, pageIdx), (s.preset?.style ?? s.toolDefaults.legend).fontSize);
+    const L = legendLayout(def, legendRows(def, doc.markups, pageIdx, { pageCount: doc.loaded.pages.length, columns: doc.columns }), (s.preset?.style ?? s.toolDefaults.legend).fontSize, doc.columns);
     finish('legend', [p, { x: p.x + L.w, y: p.y + L.h }], { legend: def });
   };
 
   // ----- tools that need text, files or a rendered snapshot -----
-  const placeImage = async (p: Pt) => {
+  /** Place a picture at `p` (its own size, at most 300 pt) or fitted into the rectangle p-q (Revu: drag with the Image tool). */
+  const placeImage = async (p: Pt, q?: Pt) => {
+    const box = q ? bounds([p, q]) : null;
+    const at = (w: number, h: number) => (box ? [{ x: box.minX, y: box.minY }, { x: box.maxX, y: box.maxY }] : [p, { x: p.x + w, y: p.y + h }]);
     const pending = s.pendingImage;
     if (pending) {
       useApp.setState({ pendingImage: null });
-      finish('image', [p, { x: p.x + pending.w, y: p.y + pending.h }], { image: pending.url, subject: pending.subject });
+      finish('image', at(pending.w, pending.h), { image: pending.url, subject: pending.subject });
       return;
     }
     const f = await pickFile('image/*');
     if (!f) return;
     const img = await loadImage(f);
     const k = Math.min(1, 300 / Math.max(img.w, img.h));
-    finish('image', [p, { x: p.x + img.w * k, y: p.y + img.h * k }], { image: img.url });
+    finish('image', at(img.w * k, img.h * k), { image: img.url });
   };
   const placeCustomStamp = (p: Pt) => {
     const c = customStampFields(s.stampName.slice(7), s.author);
@@ -660,8 +754,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       finish('image', [{ x: p.x - c.w / 2, y: p.y - c.h / 2 }, { x: p.x + c.w / 2, y: p.y + c.h / 2 }], { image: c.image, subject: c.name });
       return;
     }
-    const m = finish('stamp', [p], { subtitle: c.subtitle, subject: c.name, text: c.title });
-    if (c.color) s.updateMarkups([m.id], (x) => ({ style: { ...x.style, color: c.color! } }), { history: false });
+    const m = finish('stamp', [{ x: p.x - c.w / 2, y: p.y - c.h / 2 }, { x: p.x + c.w / 2, y: p.y + c.h / 2 }], { subtitle: c.subtitle, subject: c.name, text: c.title, stampBorder: c.border });
+    s.updateMarkups([m.id], (x) => ({ style: { ...x.style, color: c.color ?? x.style.color, opacity: c.opacity ?? x.style.opacity } }), { history: false });
   };
   const placeAttachment = async (p: Pt) => {
     const f = await pickFile();
@@ -680,7 +774,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     setDraft(null);
     if (!pdfPage) return;
     // Snapshot includes the markups; Snapshot Content (Shift+G) only the drawing (Revu).
-    const url = await snapshot(pdfPage, a, b, 3, content ? null : markups);
+    const url = await snapshot(pdfPage, a, b, s.prefs.snapshotDpi / 72, content || !s.prefs.includeMarkupsInSnapshots ? null : markups);
     const r = bounds([a, b]);
     const t = new Date().toISOString();
     const m: Markup = {
@@ -731,7 +825,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     }
     const t = toolById(draft.tool);
     const min = t.closed ? 3 : 2;
-    if (draft.points.length >= min) finish(draft.tool as MarkupType, draft.points, hasCurves(draft.handles) ? { handles: draft.handles } : {});
+    if (draft.points.length >= min) finish(baseType(draft.tool), draft.points, hasCurves(draft.handles) ? { handles: draft.handles } : {});
     else setDraft(null);
   };
 
@@ -809,6 +903,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
 
     if (tool === 'select') {
       const tol = (e.pointerType === 'touch' ? 14 : 5) / zoom;
+      // Find Hyperlinks in PDF Content: an address in the page's text opens on click (a markup on top of it wins).
+      if (urlHit && !markups.some((m) => hitTest(m, raw, tol))) {
+        window.open(urlHit.uri, '_blank', 'noopener');
+        s.setStatus(`Opened ${urlHit.uri}`);
+        return;
+      }
       // The viewport highlighted in the Measurements panel: drag its edge to move, a corner to resize.
       const av = viewports.find((v) => v.id === s.activeViewport);
       if (av) {
@@ -818,6 +918,20 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         if (corner >= 0 || onEdge) {
           setDrag({ kind: 'viewport', id: av.id, corner, start: raw, orig: av.rect, rect: av.rect });
           return;
+        }
+      }
+      // Purple handles around several selected markups scale them together.
+      if (doc.selection.length > 1) {
+        const sel = markups.filter((m) => selected.has(m.id) && !m.locked && m.points.length);
+        if (sel.length > 1) {
+          const sh = selectionCorners(sel, SCALE_OUT / zoom), corners = selectionCorners(sel);
+          const k = sh.findIndex((h) => dist(h, raw) <= 6 / zoom);
+          if (k >= 0) {
+            setDrag({ kind: 'scaleMany', ids: sel.map((m) => m.id), fixed: oppositeCorner(corners, k), corner: corners[k], grab: { x: raw.x - corners[k].x, y: raw.y - corners[k].y },
+              origs: sel, snapshot: doc.markups, moved: false, props: s.prefs.scaleGroupProps && oneGroup(sel) });
+            capture(e);
+            return;
+          }
         }
       }
       // vertex handles of a single selected markup
@@ -839,11 +953,34 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
               }
             }
           }
+          if (hasScaleHandles(m)) {
+            // Purple scale handles (Revu) sit at the corners of the box, outside the yellow points.
+            const sh = scaleHandles(m, SCALE_OUT / zoom), corners = scaleHandles(m);
+            const k = sh.findIndex((h) => dist(h, raw) <= 6 / zoom);
+            if (k >= 0) { setDrag({ kind: 'scale', id: m.id, fixed: oppositeCorner(corners, k), corner: corners[k], grab: { x: raw.x - corners[k].x, y: raw.y - corners[k].y }, orig: m, snapshot: doc.markups, moved: false }); capture(e); return; }
+          }
+          if ((m.type === 'length' || m.type === 'dimension') && m.points.length > 1 && !m.locked && !e.shiftKey) {
+            // The middle handle (Shift+drag there moves the caption instead) (Revu: "adjust the height"): the line moves beside its points, joined by leader lines.
+            const L = drawnLine(m, m.points);
+            if (dist({ x: (L[0].x + L[1].x) / 2, y: (L[0].y + L[1].y) / 2 }, raw) <= 6 / zoom) {
+              setDrag({ kind: 'leader', id: m.id, snapshot: doc.markups, moved: false }); capture(e); return;
+            }
+          }
           const hs = handlePoints(m);
           const i = hs.findIndex((h) => dist(h, raw) <= 6 / zoom);
           if (i >= 0 && curvable && (e.ctrlKey || e.metaKey)) {
             // Ctrl+click a control point: straight <-> curve (Revu).
             s.updateMarkups([m.id], (x) => ({ handles: cleanHandles(toggleCurve(x.points, x.handles, i, closedType(x.type))) }));
+            return;
+          }
+          if (i >= 0 && m.type === 'callout' && e.shiftKey && m.points.length > 2 && (i === 0 || i >= 3)) {
+            // Shift+click a leader's tip removes that leader (Revu); the last one gone leaves a text box.
+            s.updateMarkups([m.id], (x) => {
+              const extra = x.points.slice(3);
+              if (x.points.length === 3) return { type: 'textbox', points: [x.points[1], x.points[2]] };
+              if (i === 0) return { points: [extra[0], x.points[1], x.points[2], ...extra.slice(1)] };
+              return { points: [x.points[0], x.points[1], x.points[2], ...extra.filter((_, k) => k !== i - 3)] };
+            });
             return;
           }
           if (i >= 0 && curvable && e.shiftKey) {
@@ -871,6 +1008,25 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
           }
         }
       }
+      // Measurement captions (Revu): the anchor handle turns the caption; Shift+drag on the caption moves it.
+      if (doc.selection.length === 1) {
+        const sm = markups.find((x) => x.id === doc.selection[0]);
+        if (sm && canRotate(sm)) {
+          // The rotate handle above the markup (Revu: orange control point outside the box).
+          const rh = rotateHandle(sm, 18 / zoom);
+          if (dist(rh.at, raw) <= 7 / zoom) {
+            const center = rotationCenter(sm);
+            setDrag({ kind: 'rotate', id: sm.id, center, start: angleAbout(center, raw), orig: sm, snapshot: doc.markups, moved: false, deg: 0 }); capture(e); return;
+          }
+        }
+        const cap = sm && captionBox(sm, zoom);
+        if (cap) {
+          if (dist(cap.anchor, raw) <= 7 / zoom) { setDrag({ kind: 'captionRotate', id: sm.id, center: cap.at, snapshot: doc.markups, moved: false }); capture(e); return; }
+          if (e.shiftKey && MOVABLE_CAPTION.has(sm.type) && Math.abs(raw.x - cap.at.x) <= cap.w / 2 && Math.abs(raw.y - cap.at.y) <= cap.h / 2) {
+            setDrag({ kind: 'caption', id: sm.id, start: raw, orig: sm.display?.captionOffset ?? { x: 0, y: 0 }, snapshot: doc.markups, moved: false }); capture(e); return;
+          }
+        }
+      }
       const hit = [...markups].reverse().find((m) => hitTest(m, raw, tol));
       if (hit && s.painter) {
         // Format Painter: apply the picked-up style to the clicked markup (and its group).
@@ -895,9 +1051,13 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     // Tool Chest tool in Drawing mode: place a copy of the saved markup, centred on the click (Revu).
     if (!draft && s.preset?.mode === 'drawing' && s.preset.markup) {
       const shape = s.preset.markup;
-      const b = bounds(shape.points);
-      const moved = translated({ ...shape, id: '', page: pageIdx, author: '', created: '', modified: '' } as Markup, raw.x - (b.minX + b.w / 2), raw.y - (b.minY + b.h / 2));
-      const m = s.addMarkup({ ...shape, ...moved, page: pageIdx, scale: undefined, replies: undefined, groupId: undefined, seq: undefined, ...seqFields(shape.type) });
+      // A tool set with a scale keeps the tool's real size on this page's scale.
+      const setScale = s.toolSets.find((t) => t.tools.some((x) => x.id === s.preset!.id))?.scale;
+      const k = toolScaleFactor(setScale, scaleFor(raw));
+      const scaledShape = k === 1 ? shape : { ...shape, points: scaledPoints(shape.points, k), cutouts: shape.cutouts?.map((c) => ({ ...c, points: scaledPoints(c.points, k) })) };
+      const b = bounds(scaledShape.points);
+      const moved = translated({ ...scaledShape, id: '', page: pageIdx, author: '', created: '', modified: '' } as Markup, raw.x - (b.minX + b.w / 2), raw.y - (b.minY + b.h / 2));
+      const m = s.addMarkup({ ...scaledShape, ...moved, page: pageIdx, scale: undefined, replies: undefined, groupId: undefined, seq: undefined, toolId: s.preset.id, ...seqFields(shape.type) });
       if (!s.toolLocked && !s.toggles.reuse) s.setTool('select');
       s.select([m.id]);
       return;
@@ -930,7 +1090,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     switch (def.interaction) {
       case 'two-point': case 'box': case 'callout':
         if (!draft) setDraft({ tool: s.tool, points: [p], cursor: p, dragFrom: { x: e.clientX, y: e.clientY } });
-        else completeTwoPoint(p);
+        else completeTwoPoint(p, !s.prefs.textHighlighting || e.ctrlKey || e.metaKey);
         break;
       case 'poly': {
         const pts = draft ? [...draft.points, p] : [p];
@@ -939,8 +1099,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
           if (c) finish('radius', [c.center, pts[0]]);
           else s.setStatus('3-Point Radius: the three points are in a line; pick a point off the line.');
         } else if (def.maxPoints && pts.length >= def.maxPoints) finish(s.tool as MarkupType, pts.slice(0, def.maxPoints));
-        else if ((e.ctrlKey || e.metaKey) && CURVABLE.has(s.tool)) {
-          // Ctrl+drag: this point gets a curve handlebar, dragged out until release (Revu).
+        else if (!draft && !wantCurve(e) && closedType(s.tool as MarkupType) && CURVABLE.has(s.tool)) {
+          // Drag Rectangle (Revu's default Drag Behavior for Shapes): press and drag draws a rectangle; a click starts click-click drawing.
+          setDraft({ tool: s.tool, points: [p], cursor: p, dragFrom: { x: e.clientX, y: e.clientY } });
+          capture(e);
+        } else if (wantCurve(e) && CURVABLE.has(s.tool)) {
+          // Ctrl+drag (or a plain drag with Drag Curves): this point gets a curve handlebar, dragged out until release (Revu).
           const handles: Handles = [...(draft?.handles ?? (draft?.points ?? []).map(() => null)), null];
           setDraft({ tool: s.tool, points: pts, cursor: p, handles, curving: pts.length - 1 });
           capture(e);
@@ -969,7 +1133,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         break;
       case 'point':
         if (s.tool === 'legend') placeLegend(p);
-        else if (s.tool === 'image') placeImage(p);
+        else if (s.tool === 'image') { setDrag({ kind: 'imageBox', start: p, cur: p }); capture(e); }
         else if (s.tool === 'attachment') placeAttachment(p);
         else if (s.tool === 'stamp' && s.stampName.startsWith('custom:')) placeCustomStamp(p);
         else finish(s.tool as MarkupType, [p]);
@@ -991,12 +1155,14 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       }
       case 'count': {
         const cur = countId.current && doc.markups.find((m) => m.id === countId.current);
-        if (cur) s.updateMarkups([cur.id], (m) => ({ points: [...m.points, p] }));
+        // Automatically Split Count Measurements by Space (Revu): a count continued in another Space starts a new count.
+        const sameSpace = !cur || !s.prefs.splitCountBySpace || spaceAt(doc.spaces[pageIdx], p)?.id === spaceAt(doc.spaces[cur.page], anchorOf(cur))?.id;
+        if (cur && sameSpace) s.updateMarkups([cur.id], (m) => ({ points: [...m.points, p] }));
         else {
           const m = s.addMarkup({
             type: 'count', page: pageIdx, points: [p],
-            style: s.preset?.style ?? s.toolDefaults.count,
-            subject: s.preset?.subject ?? def.subject,
+            style: cur ? { ...cur.style } : s.preset?.style ?? s.toolDefaults.count,
+            subject: cur ? cur.subject : s.preset?.subject ?? def.subject,
           });
           countId.current = m.id;
         }
@@ -1005,7 +1171,10 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     }
   };
 
-  const completeTwoPoint = (p: Pt) => {
+  /** `free`: the Highlight tool draws a box even over text (Ctrl held, or Enable Text Highlighting off). */
+  /** Drag Behavior for Shapes (Preferences > Markup): Ctrl+drag pulls a curve with Drag Rectangle, a plain drag with Drag Curves. */
+  const wantCurve = (e: { ctrlKey: boolean; metaKey: boolean }) => (e.ctrlKey || e.metaKey) !== (s.prefs.dragShapes === 'curves');
+  const completeTwoPoint = (p: Pt, free = false) => {
     if (!draft) return;
     const a = draft.points[0];
     if (dist(a, p) * zoom < 2) return;
@@ -1030,18 +1199,28 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       });
       return;
     }
-    if (draft.tool === 'erase-content') {
+    if (draft.tool === 'erase-content' || draft.tool === 'cut-content') {
+      const cut = draft.tool === 'cut-content';
       setDraft(null);
       const [c0, c1] = [a, p].map((q) => page.viewport.convertToPdfPoint(q.x, q.y) as [number, number]);
       const rect: [number, number, number, number] = [Math.min(c0[0], c1[0]), Math.min(c0[1], c1[1]), Math.max(c0[0], c1[0]), Math.max(c0[1], c1[1])];
       let removed = false;
-      s.transformDoc(async (lib) => { removed = await eraseContent(lib, pageIdx, rect); }, 'Content erased', pageIdx)
-        .then((ok) => { if (ok && !removed) s.setStatus('Erase Content: nothing under that rectangle'); });
+      // Cut Content (Revu): the content goes to the clipboard as a Snapshot, then leaves the page.
+      (cut ? takeSnapshot(a, p, true) : Promise.resolve())
+        .then(() => s.transformDoc(async (lib) => { removed = await eraseContent(lib, pageIdx, rect); }, cut ? 'Content cut: paste with Ctrl+V' : 'Content erased', pageIdx))
+        .then((ok) => { if (ok && !removed) s.setStatus(`${cut ? 'Cut' : 'Erase'} Content: nothing under that rectangle`); });
       return;
     }
     if (draft.tool === 'region-pick') { setDraft(null); s.setTool('select'); finishPickRect(doc.id, pageIdx, a, p); return; }
     if (draft.tool === 'visual-pick') { setDraft(null); s.setTool('select'); setVisualTemplate(doc, pageIdx, a, p); return; }
     if (draft.tool === 'cloudplus') { setDraft({ ...draft, points: [a, p], dragFrom: undefined }); return; }
+    if (draft.tool === 'review-text') {
+      setDraft(null);
+      if (!pdfPage) return;
+      // A drag over text marks it for replacement; a click marks where text is inserted.
+      pageText(pdfPage, page.viewport).then((boxes) => reviewTextMark(pageIdx, Math.hypot(p.x - a.x, p.y - a.y) < 3 ? [] : textRectsIn(boxes, a, p), p));
+      return;
+    }
     if (def.interaction === 'text') {
       setDraft(null);
       textMarkup((draft.tool === 'redact-text' ? 'redaction' : draft.tool) as MarkupType, a, p).then((ok) => { if (!ok) s.setStatus('No text found there. Drag across text on the drawing.'); });
@@ -1061,8 +1240,9 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       return;
     }
     if (draft.tool === 'highlight') {
-      // Over text, Highlight marks the text lines; elsewhere it draws a box (Revu).
+      // Over text, Highlight marks the text lines; elsewhere (or with Ctrl, or the preference off) it draws a box (Revu).
       setDraft(null);
+      if (free) { finish('highlight', [a, p]); return; }
       textMarkup('highlight', a, p).then((done) => { if (!done) finish('highlight', [a, p]); });
       return;
     }
@@ -1084,26 +1264,82 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     const raw = toPage(e);
     if (longPress.current && Math.hypot(e.clientX - longPress.current.x, e.clientY - longPress.current.y) > 8) cancelLongPress();
     setCursor(raw, scaleFor(raw));
+    if (urlBoxes.current.length && !drag && (tool === 'select' || tool === 'pan')) {
+      const u = urlAt(urlBoxes.current, raw, 2 / zoom);
+      if (u !== urlHit) setUrlHit(u);
+    } else if (urlHit) setUrlHit(null);
     if (s.offsetOp) setOffsetCur(raw);
     if (s.tool === 'dynamic-fill') { fillMove(raw); setFillCursor(raw); }
     if (s.tool === 'eraser') { setFillCursor(raw); if (eraseSnapshot.current) { eraseAt(raw); return; } }
     if (drag) {
       if (drag.kind === 'pan') {
         const el = scrollRef.current!;
-        el.scrollLeft = drag.left - (e.clientX - drag.sx);
+        // Lock Panning in Fit Width: at the fit-width zoom the page only moves vertically.
+        if (!(s.prefs.lockPanFitWidth && Math.abs(zoom - fitWidthZoom.current) < 1e-9)) el.scrollLeft = drag.left - (e.clientX - drag.sx);
         el.scrollTop = drag.top - (e.clientY - drag.sy);
       } else if (drag.kind === 'move') {
         const dx = raw.x - drag.start.x, dy = raw.y - drag.start.y;
         const orig = new Map(drag.snapshot.map((m) => [m.id, m]));
-        s.updateMarkups(drag.ids, (m) => translated(orig.get(m.id)!, dx, dy), { history: false });
+        s.updateMarkups(drag.ids, (m) => {
+          const o = orig.get(m.id)!;
+          // Dragging a callout moves only its box; the leader tips stay put (Revu). Alt+drag moves the whole markup.
+          if (o.type === 'callout' && drag.ids.length === 1 && !e.altKey && o.points.length > 2) {
+            return { points: o.points.map((p, i) => (i === 1 || i === 2 ? { x: p.x + dx, y: p.y + dy } : p)) };
+          }
+          return translated(o, dx, dy);
+        }, { history: false });
         if (!drag.moved) setDrag({ ...drag, moved: true });
+      } else if (drag.kind === 'leader') {
+        // Signed distance of the pointer from the measured line, along the page-space normal (see leaderLine).
+        s.updateMarkups([drag.id], (m) => {
+          const [a, b] = m.points;
+          const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+          const d = ((raw.x - a.x) * -dy + (raw.y - a.y) * dx) / len;
+          return { leader: Math.abs(d) < 2 ? undefined : Math.round(d * 100) / 100 };
+        }, { history: false });
+        setDrag({ ...drag, moved: true });
       } else if (drag.kind === 'vertex') {
         const p = snap(raw, drag.id);
         s.updateMarkups([drag.id], (m) => {
           const pts = [...m.points];
-          pts[drag.index] = p;
+          let q = unrotatePt(m, p); // a turned box is edited in its own frame
+          // Ctrl+drag a box corner keeps the box's proportions (Revu: rectangles have no purple handles).
+          if ((e.ctrlKey || e.metaKey) && ROTATION_FIELD.has(m.type) && pts.length === 2 && drag.index < 2) {
+            const orig = drag.snapshot.find((x) => x.id === m.id);
+            if (orig) q = aspectCorner(pts[1 - drag.index], orig.points[drag.index], q);
+          }
+          pts[drag.index] = q;
           return { points: pts };
         }, { history: false });
+        if (!drag.moved) setDrag({ ...drag, moved: true });
+      } else if (drag.kind === 'scale') {
+        const { kx, ky } = scaleFactor(drag.fixed, drag.corner, { x: raw.x - drag.grab.x, y: raw.y - drag.grab.y }, e.shiftKey);
+        s.updateMarkups([drag.id], () => scaleAbout(drag.orig, drag.fixed, kx, ky), { history: false });
+        s.setStatus(`Scale: ${Math.round(kx * 100)}%${e.shiftKey ? ` × ${Math.round(ky * 100)}%` : ''} (Shift: width and height on their own)`);
+        if (!drag.moved) setDrag({ ...drag, moved: true });
+      } else if (drag.kind === 'scaleMany') {
+        const { kx, ky } = scaleFactor(drag.fixed, drag.corner, { x: raw.x - drag.grab.x, y: raw.y - drag.grab.y }, e.shiftKey);
+        const orig = new Map(drag.origs.map((m) => [m.id, m]));
+        const k = (kx + ky) / 2;
+        s.updateMarkups(drag.ids, (m) => { const o = orig.get(m.id)!; return { ...scaleAbout(o, drag.fixed, kx, ky), ...(drag.props ? { style: scaledStyle(o.style, k) } : {}) }; }, { history: false });
+        s.setStatus(`Scale: ${Math.round(kx * 100)}%${e.shiftKey ? ` × ${Math.round(ky * 100)}%` : ''}${drag.props ? ', line widths and text sizes follow' : ''} (Shift: width and height on their own)`);
+        if (!drag.moved) setDrag({ ...drag, moved: true });
+      } else if (drag.kind === 'rotate') {
+        const d = angleAbout(drag.center, raw) - drag.start;
+        const base = ROTATION_FIELD.has(drag.orig.type) ? drag.orig.rotation ?? 0 : 0;
+        const deg = normDeg(snapRotation(base + d, e.shiftKey) - base);
+        if (deg !== drag.deg || !drag.moved) {
+          s.updateMarkups([drag.id], () => rotated(drag.orig, deg), { history: false });
+          setDrag({ ...drag, moved: true, deg });
+          s.setStatus(`Rotation: ${normDeg(base + deg)}° (Shift: any angle)`);
+        }
+      } else if (drag.kind === 'caption') {
+        const off = { x: drag.orig.x + raw.x - drag.start.x, y: drag.orig.y + raw.y - drag.start.y };
+        s.updateMarkups([drag.id], (m) => ({ display: { ...m.display, captionOffset: off } }), { history: false });
+        if (!drag.moved) setDrag({ ...drag, moved: true });
+      } else if (drag.kind === 'captionRotate') {
+        const deg = snapCaptionAngle((-Math.atan2(raw.y - drag.center.y, raw.x - drag.center.x) * 180) / Math.PI, e.shiftKey);
+        s.updateMarkups([drag.id], (m) => ({ display: { ...m.display, captionAngle: deg || undefined } }), { history: false });
         if (!drag.moved) setDrag({ ...drag, moved: true });
       } else if (drag.kind === 'bezier') {
         const orig = drag.snapshot.find((x) => x.id === drag.id);
@@ -1123,6 +1359,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         }
       } else if (drag.kind === 'band') {
         setDrag({ ...drag, cur: raw });
+      } else if (drag.kind === 'imageBox') {
+        setDrag({ ...drag, cur: snap(raw) });
       } else if (drag.kind === 'viewport') {
         const [a, b] = drag.orig;
         const dx = raw.x - drag.start.x, dy = raw.y - drag.start.y;
@@ -1188,9 +1426,10 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     }
     if (s.tool === 'dynamic-fill') fillUp();
     if (drag) {
-      if ((drag.kind === 'move' || drag.kind === 'vertex') && drag.moved) s.pushUndo(drag.snapshot);
+      if ((drag.kind === 'move' || drag.kind === 'vertex' || drag.kind === 'leader' || drag.kind === 'caption' || drag.kind === 'captionRotate' || drag.kind === 'rotate' || drag.kind === 'scale' || drag.kind === 'scaleMany') && drag.moved) s.pushUndo(drag.snapshot);
       if (drag.kind === 'bezier') s.pushUndo(drag.snapshot);
       if (drag.kind === 'band') selectInBand(drag);
+      if (drag.kind === 'imageBox') { const moved = dist(drag.start, drag.cur) * zoom > 4; void placeImage(drag.start, moved ? drag.cur : undefined); }
       if (drag.kind === 'viewport' && drag.rect !== drag.orig) {
         const v = viewports.find((x) => x.id === drag.id);
         const [a, b] = drag.rect;
@@ -1209,24 +1448,42 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         s.setTool('select');
         return;
       }
-      if (draft.points.length > 1) finish('pen', draft.points);
-      else setDraft(null);
+      if (draft.points.length > 1) {
+        const now = Date.now(), g = penGroup.current;
+        const extra: Partial<Markup> = {};
+        if (g && now - g.at < 1000) {
+          extra.groupId = g.id;
+          if (!g.applied) { s.updateMarkups([g.last], () => ({ groupId: g.id }), { history: false }); g.applied = true; }
+        }
+        const m = finish('pen', draft.points, extra);
+        penGroup.current = { id: extra.groupId ?? crypto.randomUUID(), at: now, last: m.id, applied: !!extra.groupId };
+      } else setDraft(null);
+      return;
+    }
+    // Shapes (polygon, area, volume, cloud...): a drag draws a rectangle (Shift: a square); a click goes on click-click.
+    if (def.interaction === 'poly' && draft.dragFrom && draft.points.length === 1) {
+      const moved = Math.hypot(e.clientX - draft.dragFrom.x, e.clientY - draft.dragFrom.y) > 4;
+      if (!moved) { setDraft({ ...draft, dragFrom: undefined }); return; }
+      const a = draft.points[0], raw = toPage(e);
+      const side = Math.max(Math.abs(raw.x - a.x), Math.abs(raw.y - a.y));
+      const q = e.shiftKey ? { x: a.x + Math.sign(raw.x - a.x) * side, y: a.y + Math.sign(raw.y - a.y) * side } : snap(raw);
+      finish(baseType(draft.tool), rectCorners(a, q));
       return;
     }
     // Drag-to-draw for two-point and box tools; click-click otherwise.
     if (['two-point', 'box', 'cutout', 'cutout-ellipse', 'text', 'cloudplus'].includes(def.interaction) && draft.dragFrom && draft.points.length === 1) {
       const moved = Math.hypot(e.clientX - draft.dragFrom.x, e.clientY - draft.dragFrom.y) > 4;
-      if (moved) completeTwoPoint(constrain(toPage(e), e, draft.points[0]));
+      if (moved) completeTwoPoint(constrain(toPage(e), e, draft.points[0]), !s.prefs.textHighlighting || e.ctrlKey || e.metaKey);
+      // Review Text: a plain click marks where text is inserted.
+      else if (draft.tool === 'review-text') { setDraft(null); reviewTextMark(pageIdx, [], draft.points[0]); }
     }
   };
 
   const selectInBand = (band: Extract<Drag, { kind: 'band' }>) => {
-    const b = { minX: Math.min(band.start.x, band.cur.x), maxX: Math.max(band.start.x, band.cur.x), minY: Math.min(band.start.y, band.cur.y), maxY: Math.max(band.start.y, band.cur.y) };
+    // Revu: left to right picks markups entirely inside the band, right to left those it touches.
+    const { box: b, touch } = bandOf(band.start, band.cur);
     if (b.maxX - b.minX <= 1 / zoom) return;
-    const ids = markups.filter((m) => {
-      const mb = markupBounds(m);
-      return mb.minX >= b.minX && mb.maxX <= b.maxX && mb.minY >= b.minY && mb.maxY <= b.maxY;
-    }).map((m) => m.id);
+    const ids = markups.filter((m) => inBand(markupBounds(m), b, touch)).map((m) => m.id);
     s.select(ids, band.add);
   };
 
@@ -1241,7 +1498,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       // the second click of the double-click added a duplicate point
       const pts = draft.points.slice(0, -1);
       const min = def.closed ? 3 : 2;
-      if (pts.length >= min) finish(draft.tool as MarkupType, pts);
+      if (pts.length >= min) finish(baseType(draft.tool), pts);
       return;
     }
     if (s.tool === 'select') {
@@ -1289,7 +1546,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     const ts = useApp.getState().textSel;
     if (ts && ts.docId === doc.id && ts.page === pageIdx) {
       const rectPts = ts.rects.flat();
-      const make = (type: MarkupType) => () => { finish(type, rectPts); useApp.setState({ textSel: null }); };
+      // Preferences > Copy highlighted text into markup comment.
+      const make = (type: MarkupType) => () => { finish(type, rectPts, s.prefs.copyHighlightedText ? { comment: ts.text } : {}); useApp.setState({ textSel: null }); };
       setMenu({ x: e.clientX, y: e.clientY, items: [
         { label: 'Copy Text', shortcut: 'Ctrl+C', action: () => copyText() },
         { sep: true },
@@ -1298,6 +1556,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         { label: 'Underline', action: make('underline') },
         { label: 'Squiggly', action: make('squiggly') },
         { label: 'Mark for Redaction', action: make('redaction') },
+        { label: 'Replace Selected Text…', action: () => { reviewTextMark(pageIdx, rectPts, rectPts[rectPts.length - 1]); useApp.setState({ textSel: null }); } },
         { sep: true },
         { label: `Search for “${ts.text.length > 30 ? `${ts.text.slice(0, 30)}…` : ts.text}”`, action: () => searchFor(ts.text.split('\n')[0]) },
         { label: 'Deselect Text', action: () => useApp.setState({ textSel: null }) },
@@ -1339,6 +1598,75 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     } else if (hit) {
       if (!selected.has(hit.id)) s.select([hit.id]);
       const ids = selected.has(hit.id) ? doc.selection : [hit.id];
+      if ((hit.display?.captionOffset || hit.display?.captionAngle) && !hit.locked) {
+        items.push({ label: 'Reset Caption Position', action: () => s.updateMarkups([hit.id], (x) => ({ display: { ...x.display, captionOffset: undefined, captionAngle: undefined } })) });
+        items.push({ sep: true });
+      }
+      if ((hit.type === 'length' || hit.type === 'polylength' || hit.type === 'perimeter' || hit.type === 'dimension') && !hit.locked && captionText(hit)) {
+        // Flip Text (Revu): the caption turned 180°.
+        items.push({ label: 'Flip Text', action: () => s.updateMarkups([hit.id], (x) => ({ display: { ...x.display, captionAngle: (((x.display?.captionAngle ?? 0) + 180) % 360) || undefined } })) });
+        items.push({ sep: true });
+      }
+      if (hit.type === 'textbox' && !hit.locked && hit.points.length >= 2) {
+        // Add Leader on a text box (Revu): it gets a leader like a callout, the tip just outside the box's lower left.
+        items.push({ label: 'Add Leader', action: () => s.updateMarkups([hit.id], (x) => {
+          const b = bounds([x.points[0], x.points[1]]);
+          return { type: 'callout', points: [{ x: b.minX - 40, y: b.maxY + 40 }, x.points[0], x.points[1]] };
+        }) });
+        items.push({ sep: true });
+      }
+      if ((hit.type === 'polylength' || hit.type === 'perimeter' || hit.type === 'polyline') && !hit.locked && hit.points.length > 2) {
+        // Split (Revu): the right-clicked segment becomes its own markup; Split All breaks every segment apart.
+        const k = segmentAt(hit, raw, 6 / zoom);
+        const part = (pts: Pt[], handles?: Handles) => {
+          const { id: _id, source: _src, seq: _seq, groupId: _g, replies: _r, ...rest } = hit;
+          return s.addMarkup({ ...rest, points: pts, handles: handles && hasCurves(handles) ? handles : undefined });
+        };
+        const slice = (a: number, b: number): [Pt[], Handles | undefined] => [hit.points.slice(a, b + 1), hit.handles?.slice(a, b + 1)];
+        if (k >= 0) items.push({ label: 'Split', action: () => {
+          const n = hit.points.length;
+          // The original keeps the part before the segment (or after, for the first); the rest become new markups.
+          if (k === 0) { s.updateMarkups([hit.id], () => ({ points: hit.points.slice(1), handles: hit.handles?.slice(1) })); part(...slice(0, 1)); }
+          else { s.updateMarkups([hit.id], () => ({ points: hit.points.slice(0, k + 1), handles: hit.handles?.slice(0, k + 1) })); part(...slice(k, k + 1)); if (k + 2 < n) part(...slice(k + 1, n - 1)); }
+          s.setStatus('Split: the segment is its own measurement now.');
+        } });
+        items.push({ label: 'Split All', action: () => {
+          s.updateMarkups([hit.id], () => ({ points: hit.points.slice(0, 2), handles: hit.handles?.slice(0, 2) }));
+          for (let i = 1; i + 1 < hit.points.length; i++) part(...slice(i, i + 1));
+          s.setStatus(`Split All: ${hit.points.length - 1} segments`);
+        } });
+        items.push({ sep: true });
+      }
+      if (hit.type === 'callout' && !hit.locked && hit.points.length > 2) {
+        // Callout leaders (Revu): Add Leader at the clicked point; Delete Leader on a leader's tip.
+        const tips = [hit.points[0], ...hit.points.slice(3)];
+        const ti = tips.findIndex((q) => dist(q, raw) <= 8 / zoom);
+        items.push({ label: 'Add Leader', action: () => s.updateMarkups([hit.id], (x) => ({ points: [...x.points, raw] })) });
+        // The last leader removed turns the callout back into a text box (Revu).
+        if (ti === 0 && tips.length === 1) items.push({ label: 'Delete Leader', action: () => s.updateMarkups([hit.id], (x) => ({ type: 'textbox', points: [x.points[1], x.points[2]] })) });
+        if (ti >= 0 && tips.length > 1) {
+          items.push({ label: 'Delete Leader', action: () => s.updateMarkups([hit.id], (x) => {
+            const extra = x.points.slice(3);
+            if (ti === 0) return { points: [extra[0], x.points[1], x.points[2], ...extra.slice(1)] }; // the next leader becomes the main one
+            return { points: [x.points[0], x.points[1], x.points[2], ...extra.filter((_, k) => k !== ti - 1)] };
+          }) });
+        }
+        items.push({ sep: true });
+      }
+      if (hit.type === 'count' && !hit.locked) {
+        // Count menu (Revu): Resume Count, Delete from Group, Split Counts, Split All, Merge Counts.
+        const vi = nearestCountIndex(hit, raw, 8 / zoom);
+        const newCount = (points: Pt[]) => ({ type: 'count' as const, page: hit.page, points, style: { ...hit.style }, subject: hit.subject, label: hit.label, comment: hit.comment, depth: hit.depth, scale: hit.scale });
+        const otherCounts = doc.markups.filter((x) => x.type === 'count' && x.id !== hit.id && selected.has(x.id) && x.page === hit.page);
+        items.push({ label: 'Resume Count', action: () => { s.setTool('count'); setTimeout(() => { countId.current = hit.id; s.setStatus('Resume Count: click each item; Esc ends.'); }, 0); } });
+        if (vi >= 0 && hit.points.length > 1) {
+          items.push({ label: 'Delete from Group', action: () => s.updateMarkups([hit.id], (x) => ({ points: x.points.filter((_, k) => k !== vi) })) });
+          items.push({ label: 'Split Counts', action: () => { const r = splitCount(hit.points, [vi]); if (!r) return; s.updateMarkups([hit.id], () => ({ points: r.keep })); s.addMarkup(newCount(r.split)); } });
+        }
+        if (hit.points.length > 1) items.push({ label: 'Split All', action: () => { const parts = splitAll(hit.points); s.updateMarkups([hit.id], () => ({ points: parts[0] })); for (const part of parts.slice(1)) s.addMarkup(newCount(part)); s.setStatus(`Split All: ${parts.length} Counts`); } });
+        if (otherCounts.length) items.push({ label: `Merge Counts (${otherCounts.length + 1})`, action: () => { s.updateMarkups([hit.id], (x) => ({ points: mergeCounts(x, otherCounts) })); s.deleteMarkups(otherCounts.map((x) => x.id)); } });
+        items.push({ sep: true });
+      }
       if (CURVABLE.has(hit.type) && !hit.locked) {
         // Control point menu (Revu): curve a point, or turn a line into an arc.
         const vi = hit.points.findIndex((q) => dist(q, raw) <= 6 / zoom);
@@ -1363,6 +1691,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         ...(hit.link ? [{ label: 'Follow Action', action: () => followLink(hit) }] : []),
         { label: 'Add to My Tools', action: () => s.addToToolChest(hit) },
         ...(hit.seq ? [{ label: 'Select Sequence', action: () => s.select(sequenceMembers(doc.markups, hit)) }] : []),
+        ...captureMenuItems(hit, openCameraFor),
         { sep: true },
         ...statusMenuItems(hit, ids),
         { sep: true },
@@ -1382,12 +1711,21 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         { label: 'Reply', action: () => { s.setPanels({ markupsList: true }); useApp.setState({ replyTo: hit.id }); } },
         { label: hit.checked ? 'Uncheck' : 'Check', action: () => s.updateMarkups(ids, () => ({ checked: !hit.checked || undefined })) },
         { label: 'Clear All Checkmarks', action: () => s.updateMarkups(doc.markups.filter((x) => x.checked).map((x) => x.id), () => ({ checked: undefined })) },
-        { label: 'Create Legend', action: () => {
-          const sel = doc.markups.filter((m) => ids.includes(m.id) && m.type !== 'legend');
-          useApp.setState({ legendKeys: [...new Set(sel.map(legendKey))] });
-          s.setTool('legend');
-          s.setStatus('Click on the drawing to place the Legend.');
-        } },
+        ...(hit.type === 'legend' ? [
+          { label: 'Apply to All Pages', action: () => applyLegendToAllPages(hit) },
+          { label: 'Copy Legend to Snapshot', action: () => void copyLegendToSnapshot(hit) },
+        ] : [
+          { label: 'Legend › Create New Legend', action: () => {
+            const sel = doc.markups.filter((m) => ids.includes(m.id) && m.type !== 'legend');
+            useApp.setState({ legendKeys: [...new Set(sel.map(legendKey))] });
+            s.setTool('legend');
+            s.setStatus('Click on the drawing to place the Legend.');
+          } },
+          // Legend > <title>: add the selected markups to a Legend already on this page.
+          ...doc.markups.filter((m) => m.type === 'legend' && m.legend && m.page === pageIdx).map((l) => ({
+            label: `Legend › ${l.legend!.title || 'Legend'}`, action: () => addToLegend(l.id, doc.markups.filter((m) => ids.includes(m.id))),
+          })),
+        ]),
         { sep: true },
         ...arrangeItems(),
       );
@@ -1436,8 +1774,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     };
   } else if (draft && draft.cursor) {
     const pts = def.interaction === 'freehand' || draft.curving !== undefined ? draft.points : [...draft.points, draft.cursor];
-    const boxed = draft.tool.startsWith('form-') || draft.tool === 'lasso' || draft.tool === 'redact-text' || draft.tool === 'viewport' || draft.tool === 'snapshot' || draft.tool === 'snapshot-content' || draft.tool === 'select-text' || draft.tool === 'visual-pick' || draft.tool === 'region-pick' || draft.tool === 'erase-content' || draft.tool === 'link' || def.interaction === 'text';
-    let type = (draft.tool === 'calibrate' ? 'length' : boxed ? 'rectangle' : draft.tool) as MarkupType;
+    const boxed = draft.tool.startsWith('form-') || draft.tool === 'lasso' || draft.tool === 'redact-text' || draft.tool === 'viewport' || draft.tool === 'snapshot' || draft.tool === 'snapshot-content' || draft.tool === 'select-text' || draft.tool === 'visual-pick' || draft.tool === 'region-pick' || draft.tool === 'erase-content' || draft.tool === 'cut-content' || draft.tool === 'link' || def.interaction === 'text';
+    let type = (draft.tool === 'calibrate' ? 'length' : boxed ? 'rectangle' : baseType(draft.tool)) as MarkupType;
     let P = pts;
     if (draft.tool === 'cloudplus' && pts.length >= 3) P = [pts[0], pts[1], pts[2], { x: pts[2].x + 144, y: pts[2].y + 40 }];
     if (draft.tool === 'radius-3pt') {
@@ -1464,11 +1802,11 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   }
 
   const editingMarkup = editing ? doc.markups.find((m) => m.id === editing) : null;
-  const cursor = align ? 'crosshair' : tool === 'pan' ? (drag?.kind === 'pan' ? 'grabbing' : 'grab')
+  const cursor = align ? 'crosshair' : urlHit && !drag && (tool === 'select' || tool === 'pan') ? 'pointer' : tool === 'pan' ? (drag?.kind === 'pan' ? 'grabbing' : 'grab')
     : tool === 'select' ? 'default' : tool === 'zoom' ? 'zoom-in' : 'crosshair';
 
   return (
-    <div className={`viewer-wrap ${split ? (isActivePane ? 'pane-active' : 'pane-inactive') : ''} ${s.toggles.rulers ? 'with-rulers' : ''}`}
+    <div className={`viewer-wrap ${split ? (isActivePane ? 'pane-active' : 'pane-inactive') : ''} ${s.toggles.rulers ? 'with-rulers' : ''} ${s.toggles.noLineWeights ? 'no-line-weights' : ''}`}
       onPointerDownCapture={() => { if (split && !isActivePane) s.focusPane(pane); }}>
     <div className="viewer" ref={scrollRef} onScroll={onScroll} onPointerLeave={() => { pointerIn.current = false; }}>
       <div style={{ width: innerW, height: innerH, position: 'relative' }} onPointerMove={onLayoutMove}>
@@ -1494,12 +1832,23 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
             viewBox={`0 0 ${page.width} ${page.height}`} style={{ cursor }}
             onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
             onDoubleClick={onDoubleClick} onContextMenu={onContextMenu}
+            onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }}
+            onDrop={async (e) => {
+              // Revu: an image dropped on a markup is embedded in it (Capture); elsewhere the app opens the file.
+              const f = Array.from(e.dataTransfer.files).find((x) => x.type.startsWith('image/'));
+              if (!f) return;
+              const p = toPage(e);
+              const target = [...markups].reverse().find((m) => hitTest(m, p, 5 / zoom));
+              if (!target) return;
+              e.preventDefault(); e.stopPropagation();
+              try { attachCapture(target.id, await shrinkPhoto(f)); } catch { s.setStatus('That image could not be read.'); }
+            }}
             onPointerLeave={() => setCursor(null, null)}>
             {s.toggles.grid && (
               <>
                 <defs>
                   <pattern id="grid" width={GRID} height={GRID} patternUnits="userSpaceOnUse">
-                    <path d={`M${GRID} 0H0V${GRID}`} fill="none" stroke="#3a7bd5" strokeOpacity={0.25} strokeWidth={0.3} />
+                    <path d={`M${GRID} 0H0V${GRID}`} fill="none" stroke={s.prefs.snapColor || '#3a7bd5'} strokeOpacity={0.35} strokeWidth={0.3} />
                   </pattern>
                 </defs>
                 <rect width={page.width} height={page.height} fill="url(#grid)" pointerEvents="none" />
@@ -1514,7 +1863,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
                     fontSize={10 / zoom} fill={sp.color} fillOpacity={0.9}>{sp.title}</text>
                 </g>
               ))}
-            {(isMeasureTool(s.tool) || s.tool === 'viewport' || s.tool === 'calibrate') && viewports.map((v) => (
+            {((isMeasureTool(s.tool) && !s.toggles.noViewportHighlight) || s.tool === 'viewport' || s.tool === 'calibrate') && viewports.map((v) => (
               <ViewportBox key={v.id} v={v} zoom={zoom} />
             ))}
             {s.activeViewport && !isMeasureTool(s.tool) && viewports.filter((v) => v.id === s.activeViewport).map((v) => (
@@ -1552,14 +1901,34 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
                       </g>
                     );
                   }))}
+                  {doc.selection.length === 1 && (() => { const cap = captionBox(m, zoom); return cap ? <circle className="caption-anchor" cx={cap.anchor.x} cy={cap.anchor.y} r={3.5 / zoom} fill="#ff8c00" stroke="#fff" strokeWidth={1 / zoom} style={{ cursor: 'grab' }}><title>Drag to rotate the caption (Shift: 1° steps); Shift+drag the caption to move it</title></circle> : null; })()}
+                  {doc.selection.length === 1 && canRotate(m) && (() => {
+                    const rh = rotateHandle(m, 18 / zoom);
+                    const deg = drag?.kind === 'rotate' && drag.id === m.id ? normDeg((ROTATION_FIELD.has(m.type) ? m.rotation ?? 0 : drag.deg)) : null;
+                    return (
+                      <g className="rotate-handle">
+                        <line x1={rh.from.x} y1={rh.from.y} x2={rh.at.x} y2={rh.at.y} stroke="#ff8c00" strokeWidth={1 / zoom} />
+                        <circle cx={rh.at.x} cy={rh.at.y} r={4 / zoom} fill="#ff8c00" stroke="#fff" strokeWidth={1 / zoom} style={{ cursor: 'grab' }}><title>Drag to rotate (15° steps; Shift: any angle)</title></circle>
+                        {deg !== null && <text className="rotate-readout" x={rh.at.x + 8 / zoom} y={rh.at.y - 8 / zoom} fontSize={11 / zoom} fill="#ff8c00" fontFamily="Helvetica, Arial, sans-serif">{deg}°</text>}
+                      </g>
+                    );
+                  })()}
+                  {doc.selection.length === 1 && hasScaleHandles(m) && scaleHandles(m, SCALE_OUT / zoom).map((h, i) => (
+                    <rect key={`sc${i}`} className="scale-handle" x={h.x - 4 / zoom} y={h.y - 4 / zoom} width={8 / zoom} height={8 / zoom} rx={1.5 / zoom}
+                      fill="#a64dff" stroke="#fff" strokeWidth={1 / zoom}><title>Drag to scale (keeps the proportions; Shift: free)</title></rect>
+                  ))}
                   {doc.selection.length === 1 && handlePoints(m).map((h, i) => (
                     <rect key={i} x={h.x - 3.5 / zoom} y={h.y - 3.5 / zoom} width={7 / zoom} height={7 / zoom}
                       fill="#fff" stroke="#1a73e8" strokeWidth={1 / zoom} />
                   ))}
+                  {doc.selection.length === 1 && (m.type === 'length' || m.type === 'dimension') && m.points.length > 1 && (() => {
+                    const L = drawnLine(m, m.points), c = { x: (L[0].x + L[1].x) / 2, y: (L[0].y + L[1].y) / 2 };
+                    return <rect className="leader-handle" x={c.x - 3.5 / zoom} y={c.y - 3.5 / zoom} width={7 / zoom} height={7 / zoom} fill="#ffd400" stroke="#1a73e8" strokeWidth={1 / zoom}><title>Drag to move the line beside its points</title></rect>;
+                  })()}
                 </g>
               );
             })}
-            {drag?.kind === 'band' && (
+            {(drag?.kind === 'band' || drag?.kind === 'imageBox') && (
               <rect x={Math.min(drag.start.x, drag.cur.x)} y={Math.min(drag.start.y, drag.cur.y)}
                 width={Math.abs(drag.cur.x - drag.start.x)} height={Math.abs(drag.cur.y - drag.start.y)}
                 fill="#1a73e8" fillOpacity={0.08} stroke="#1a73e8" strokeWidth={1 / zoom} pointerEvents="none" />
@@ -1573,6 +1942,14 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
                 <path d={`M${q.x - 10 / zoom} ${q.y}H${q.x + 10 / zoom}M${q.x} ${q.y - 10 / zoom}V${q.y + 10 / zoom}`} />
               </g>
             ))}
+            {doc.selection.length > 1 && tool === 'select' && (() => {
+              const sel = markups.filter((m) => selected.has(m.id) && !m.locked && m.points.length);
+              if (sel.length < 2) return null;
+              return selectionCorners(sel, SCALE_OUT / zoom).map((h, i) => (
+                <rect key={`msc${i}`} className="scale-handle" x={h.x - 4 / zoom} y={h.y - 4 / zoom} width={8 / zoom} height={8 / zoom} rx={1.5 / zoom}
+                  fill="#a64dff" stroke="#fff" strokeWidth={1 / zoom}><title>Drag to scale the selection (keeps the proportions; Shift: free)</title></rect>
+              ));
+            })()}
             {snapPt && (
               <rect x={snapPt.x - 5 / zoom} y={snapPt.y - 5 / zoom} width={10 / zoom} height={10 / zoom}
                 fill="none" stroke="#00b050" strokeWidth={1.5 / zoom} pointerEvents="none" />
@@ -1606,6 +1983,10 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
               if (text !== (editingMarkup.text ?? '')) {
                 s.updateMarkups([editingMarkup.id], (m) => m.type === 'typewriter'
                   ? { text, points: typewriterBox(m.points[0], text, m.style.fontSize) } : { text });
+                // Preferences > Autosize text box and callout markups.
+                if (s.prefs.autosizeText && (editingMarkup.type === 'textbox' || editingMarkup.type === 'callout')) {
+                  s.updateMarkups([editingMarkup.id], (m) => { const box = autosizedBox({ ...m, text }, textWidth); return box ? withBox(m, box) : {}; });
+                }
               }
               setEditing(null);
             }} />
@@ -1627,6 +2008,11 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         </div>
       )}
       {offsetSrc && isActivePane && <OffsetBar scale={scaleFor(offsetSrc.points[0])} />}
+      {SKETCH_TOOLS[s.tool] && isActivePane && (
+        <SketchBar kind={SKETCH_TOOLS[s.tool]!} points={draft?.points ?? []} scale={scaleFor(draft?.points[0])}
+          onPoint={(p) => setDraft((d) => ({ ...(d ?? { tool: s.tool, points: [], cursor: null }), points: [...(d?.points ?? []), p] }))}
+          onCommit={(type, pts) => finish(type, pts)} onFinish={finishPoly} onCancel={() => { setDraft(null); s.setTool('select'); }} />
+      )}
       {s.tool === 'stamp' && (
         <div className="fill-bar" role="toolbar" aria-label="Stamp">
           <strong>Stamp</strong>
@@ -1716,6 +2102,8 @@ const cleanHandles = (h: Handles): Handles | undefined => (hasCurves(h) ? h : un
 
 /** Tools that draw a region: drag a rectangle, or click points and close the shape. */
 const isRegion = (t: ToolId) => t === 'cutout' || t === 'space';
+/** The markup a drawing tool makes (Sketch to Scale tools make plain markups). */
+const baseType = (t: ToolId): MarkupType => (SKETCH_TOOLS[t] ?? t) as MarkupType;
 const isMeasureTool = (t: ToolId) => MEASURE_TYPES.has(t) || t === 'radius-3pt';
 
 /** Corners of a viewport rectangle: top-left, top-right, bottom-right, bottom-left. */
@@ -1775,13 +2163,14 @@ function MeasurePreview({ markup }: { markup: Markup | null }) {
 
 function TextEditor({ m, zoom, onDone }: { m: Markup; zoom: number; onDone: (t: string) => void }) {
   const [text, setText] = useState(m.text ?? '');
+  const spell = useApp((x) => x.prefs.spellCheck);
   const box = m.type === 'callout' ? [m.points[1], m.points[2]] : m.type === 'cloudplus' ? [m.points[2], m.points[3]]
     : m.type === 'typewriter' ? typewriterBox(m.points[0], text, m.style.fontSize) : [m.points[0], m.points[1]];
   const x = Math.min(box[0].x, box[1].x), y = Math.min(box[0].y, box[1].y);
   const w = Math.abs(box[1].x - box[0].x), h = Math.abs(box[1].y - box[0].y);
   return (
-    <textarea className="text-editor" spellCheck lang="en" autoFocus value={text}
-      style={{ left: x * zoom, top: y * zoom, width: w * zoom, height: h * zoom, fontSize: m.style.fontSize * zoom, color: m.style.color }}
+    <textarea className="text-editor" spellCheck={spell} lang="en" autoFocus value={text}
+      style={{ left: x * zoom, top: y * zoom, width: w * zoom, height: h * zoom, fontSize: m.style.fontSize * zoom, color: m.style.textColor ?? m.style.color, fontFamily: cssFamily(textStyleOf(m.style).font), fontWeight: m.style.bold ? 'bold' : undefined, fontStyle: m.style.italic ? 'italic' : undefined, textAlign: m.style.align, lineHeight: textStyleOf(m.style).lineHeight }}
       onChange={(e) => setText(e.target.value)}
       onBlur={() => onDone(text)}
       onKeyDown={(e) => {
@@ -1796,26 +2185,29 @@ function FormLayer({ doc, pageIdx, zoom, interactive }: { doc: DocState; pageIdx
   const s = useApp();
   const items = doc.loaded.fields.flatMap((f) => f.widgets.filter((w) => w.page === pageIdx).map((w, i) => ({ f, w, i })));
   return (
-    <div className="form-layer" style={{ pointerEvents: 'none' }}>
+    <div className={`form-layer ${s.toggles.noFieldHighlight ? 'no-highlight' : ''}`} style={{ pointerEvents: 'none', '--field-bg': rgbaOf(s.prefs.fieldHighlightColor, s.prefs.fieldHighlightOpacity) } as React.CSSProperties}>
       {items.map(({ f, w, i }) => {
         const [x0, y0, x1, y1] = w.rect;
         const style: React.CSSProperties = { left: x0 * zoom, top: y0 * zoom, width: (x1 - x0) * zoom, height: (y1 - y0) * zoom, fontSize: Math.max(8, Math.min(14, (y1 - y0) * 0.65)) * zoom, pointerEvents: interactive && !f.readOnly ? 'auto' : 'none' };
         const value = f.name in doc.formValues ? doc.formValues[f.name] : f.value;
         const set = (v: string | boolean) => s.setFieldValue(f.name, v);
         const key = `${f.name}:${i}`;
-        const stop = { onPointerDown: (e: React.PointerEvent) => e.stopPropagation(), onKeyDown: (e: React.KeyboardEvent) => e.stopPropagation() };
+        const stop = {
+          onPointerDown: (e: React.PointerEvent) => e.stopPropagation(),
+          onKeyDown: (e: React.KeyboardEvent) => { e.stopPropagation(); if (singleKeyInField(e.nativeEvent)) { e.preventDefault(); (e.target as HTMLElement).blur(); } },
+        };
         switch (f.type) {
           case 'text':
             return f.multiline
-              ? <textarea key={key} className="form-field" aria-label={f.name} style={style} value={String(value)} onChange={(e) => set(e.target.value)} {...stop} />
-              : <input key={key} className="form-field" aria-label={f.name} style={style} value={String(value)} onChange={(e) => set(e.target.value)} {...stop} />;
+              ? <textarea key={key} className={`form-field ${f.required && !value ? 'required' : ''}`} aria-label={f.name} style={style} value={String(value)} onChange={(e) => set(e.target.value)} {...stop} />
+              : <input key={key} className={`form-field ${f.required && !value ? 'required' : ''}`} aria-label={f.name} style={style} value={String(value)} onChange={(e) => set(e.target.value)} {...stop} />;
           case 'checkbox':
-            return <input key={key} type="checkbox" className="form-field" aria-label={f.name} style={style} checked={!!value} onChange={(e) => set(e.target.checked)} {...stop} />;
+            return <input key={key} type="checkbox" className={`form-field ${f.required && !value ? 'required' : ''}`} aria-label={f.name} style={style} checked={!!value} onChange={(e) => set(e.target.checked)} {...stop} />;
           case 'radio':
             return <input key={key} type="radio" className="form-field" aria-label={`${f.name} ${w.option}`} style={style} name={`${doc.id}:${f.name}`} checked={value === w.option} onChange={() => set(w.option ?? '')} {...stop} />;
           case 'dropdown': case 'list':
             return (
-              <select key={key} className="form-field" aria-label={f.name} style={style} value={String(value)} onChange={(e) => set(e.target.value)} {...stop}>
+              <select key={key} className={`form-field ${f.required && !value ? 'required' : ''}`} aria-label={f.name} style={style} value={String(value)} onChange={(e) => set(e.target.value)} {...stop}>
                 <option value="" />
                 {(f.options ?? []).map((o) => <option key={o}>{o}</option>)}
               </select>

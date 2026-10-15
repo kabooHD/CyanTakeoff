@@ -16,9 +16,11 @@ const OCR_FILES: Record<string, string> = {
   ...Object.fromEntries(['eng', 'fra', 'deu', 'spa', 'ita', 'por', 'nld', 'pol', 'tur', 'rus', 'ukr', 'ell', 'ara', 'heb', 'chi_sim', 'chi_tra', 'jpn', 'kor'].map((l) => [
     `ocr/lang/${l}.traineddata.gz`, `node_modules/@tesseract.js-data/${l}/4.0.0_best_int/${l}.traineddata.gz`,
   ])),
-  // Spell check dictionary (Hunspell English, MIT/BSD), loaded on first use.
-  'dict/en.aff': 'node_modules/dictionary-en/index.aff',
-  'dict/en.dic': 'node_modules/dictionary-en/index.dic',
+  // Spell check dictionaries (Hunspell, from wooorm/dictionaries; each with its licence), loaded on first use.
+  // Keep in step with SPELL_LANGUAGES in src/ui/Spell.tsx.
+  ...Object.fromEntries(['en', 'en-gb', 'fr', 'de', 'es', 'it', 'nl', 'pt', 'pl', 'sv', 'da'].flatMap((l) => [
+    [`dict/${l}.aff`, `node_modules/dictionary-${l}/index.aff`], [`dict/${l}.dic`, `node_modules/dictionary-${l}/index.dic`], [`dict/${l}.license`, `node_modules/dictionary-${l}/license`],
+  ])),
 };
 
 function ocrAssets(): Plugin {

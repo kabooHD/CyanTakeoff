@@ -2,19 +2,24 @@
 // (Shift+Alt+O), Deskew (Ctrl+Alt+D), File > Email (Ctrl+E) and Publish as
 // Compressed (Ctrl+Shift+P).
 import { useState } from 'react';
+import { pickFile } from './toolActions';
+import { FilesRow, batchHint, targets } from './filesRow';
+import { addLayerFromPage, buildLayeredPdf, readLayers, refId, writeLayers } from '../pdf/layers';
 import { create } from 'zustand';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, type PDFRef } from 'pdf-lib';
 import { activeDoc, serialize, useApp, type DocState } from '../model/store';
 import { parsePageRange } from '../model/measure';
 import { estimateSkew } from '../model/deskew';
 import { PAPER, blankPdf, cropPages, imagesToPdf, rotateContent } from '../pdf/docTools';
+import { pickFiles } from './toolActions';
 import { hasSignatures } from '../pdf/incremental';
+import { fileRevisions, revisionBytes } from '../pdf/fileRevisions';
 import { DEFAULT_REDUCE } from '../pdf/reduce';
 import { reduceLib } from './ReduceSize';
 import { pickRect } from './pickRect';
 import type { Pt } from '../model/types';
 
-export const useDocTools = create<{ open: 'new' | 'crop' | 'deskew' | null; cropRect?: { page: number; a: Pt; b: Pt } }>(() => ({ open: null }));
+export const useDocTools = create<{ open: 'new' | 'crop' | 'deskew' | 'revert' | null; cropRect?: { page: number; a: Pt; b: Pt } }>(() => ({ open: null }));
 
 const base = (name: string) => name.replace(/\.pdf$/i, '');
 function download(bytes: Uint8Array, name: string) {
@@ -55,12 +60,81 @@ export function DocToolsDialogs() {
   if (!d) return null;
   if (open === 'crop') return <CropDialog d={d} />;
   if (open === 'deskew') return <DeskewDialog d={d} />;
+  if (open === 'revert') return <RevertAsDialog d={d} />;
   return null;
+}
+
+// ---------- Revert As ----------
+
+/**
+ * File > Revert As (Revu): the earlier versions a file saved with Maintain
+ * Revisions still holds (each incremental update keeps the one before).
+ * The chosen revision opens as a document of its own, to look at or save.
+ */
+function RevertAsDialog({ d }: { d: DocState }) {
+  const s = useApp();
+  const revs = fileRevisions(d.bytes);
+  const [pick, setPick] = useState(Math.max(0, revs.length - 2));
+  const close = () => useDocTools.setState({ open: null });
+  const kb = (n: number) => `${Math.max(1, Math.round(n / 1024))} KB`;
+  const ok = async () => {
+    const r = revs[pick];
+    if (!r) return;
+    close();
+    const name = d.name.replace(/\.pdf$/i, '') + ` (revision ${r.n}).pdf`;
+    await s.openBytes(revisionBytes(d.bytes, r), name);
+    s.setStatus(`Revert As: opened ${name}${d.dirty ? ' (the unsaved changes stay in the original)' : ''}`);
+  };
+  return (
+    <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>
+      <div className="modal" role="dialog" aria-label="Revert As" onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') close(); }}>
+        <div className="modal-title">Revert As</div>
+        {revs.length < 2
+          ? <p className="muted">{d.name} holds no earlier revision. Files saved with Preferences &gt; Document &gt; Save Mode &gt; Maintain Revisions keep every saved version.</p>
+          : <>
+            <p className="muted small">Revisions in {d.name}, oldest first. The chosen one opens as a new document.</p>
+            <select aria-label="Revision" size={Math.min(8, revs.length)} value={pick} onChange={(e) => setPick(Number(e.target.value))} style={{ width: '100%' }}>
+              {revs.map((r, i) => <option key={r.n} value={i}>Revision {r.n}{i === revs.length - 1 ? ' (current)' : ''} — {kb(r.end)}</option>)}
+            </select>
+          </>}
+        <div className="modal-actions">
+          <button onClick={close}>Cancel</button>
+          <button className="primary" disabled={revs.length < 2 || pick === revs.length - 1} onClick={ok}>Open Revision</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ---------- New PDF ----------
 
-async function readImage(f: File): Promise<{ bytes: Uint8Array; type: 'jpg' | 'png'; w: number; h: number } | null> {
+export const IMAGE_ACCEPT = '.png,.jpg,.jpeg,.webp,.gif,.bmp,image/png,image/jpeg,image/webp,image/gif,image/bmp';
+export const isImageFile = (f: File) => /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name);
+
+/**
+ * File > Create > From File / From Multiple Files (Revu): each chosen file
+ * becomes a PDF of its own; images become one page at `dpi` (PDFs open as
+ * they are). Returns how many documents were made.
+ */
+export async function createFromFiles(picked?: File[], dpi = 150): Promise<number> {
+  const s = useApp.getState();
+  const files = picked ?? await pickFiles(`.pdf,application/pdf,${IMAGE_ACCEPT}`, true);
+  let n = 0;
+  for (const f of files) {
+    if (isImageFile(f)) {
+      const im = await readImage(f);
+      if (!im) { s.setStatus(`${f.name}: the image could not be read.`); continue; }
+      await s.openBytes(await imagesToPdf([im], dpi), `${f.name.replace(/\.[^.]+$/, '')}.pdf`);
+      const d = activeDoc();
+      if (d) useApp.setState((st) => ({ docs: st.docs.map((x) => (x.id === d.id ? { ...x, dirty: true } : x)) }));
+    } else await s.openBytes(new Uint8Array(await f.arrayBuffer()), f.name);
+    n++;
+  }
+  if (files.length) s.setStatus(`Created ${n} PDF${n === 1 ? '' : 's'} from ${files.length} file${files.length === 1 ? '' : 's'}.`);
+  return n;
+}
+
+export async function readImage(f: File): Promise<{ bytes: Uint8Array; type: 'jpg' | 'png'; w: number; h: number } | null> {
   try {
     const bmp = await createImageBitmap(f);
     const w = bmp.width, h = bmp.height;
@@ -115,6 +189,58 @@ function NewPdfDialog() {
   );
 }
 
+// ---------- Insert Layered Pages ----------
+
+/** Document > Insert > Layered Pages: each page of a chosen PDF becomes a layer on the matching page here. */
+export async function insertLayeredPages() {
+  const s = useApp.getState();
+  const d = activeDoc();
+  if (!d) return;
+  const f = await pickFile('.pdf,application/pdf');
+  if (!f) return;
+  let src: PDFDocument;
+  try { src = await PDFDocument.load(new Uint8Array(await f.arrayBuffer()), { ignoreEncryption: true, updateMetadata: false }); }
+  catch { s.setStatus(`${f.name} could not be read as a PDF.`); return; }
+  const name = f.name.replace(/\.pdf$/i, '');
+  const n = Math.min(src.getPageCount(), d.loaded.pages.length);
+  await s.transformDoc(async (lib) => {
+    let ref: PDFRef | undefined;
+    for (let i = 0; i < n; i++) ref = await addLayerFromPage(lib, i, src, i, name, null, ref);
+    if (!ref) return;
+    const set = readLayers(lib) ?? { layers: {}, order: [], configs: [] };
+    const id = refId(ref);
+    set.layers[id] = { id, name, on: true, locked: false, print: true };
+    set.order.push({ id, kids: [] });
+    writeLayers(lib, set);
+  }, `Layered Pages: "${name}" added as a layer on ${n} page${n === 1 ? '' : 's'}`);
+  s.setPanels({ left: 'layers' });
+}
+
+// ---------- File > Create > Layered PDF ----------
+
+/** Pick several PDFs; page N of each becomes a layer (named after the file) on page N of a new document. */
+export async function createLayeredPdf(picked?: File[]) {
+  const s = useApp.getState();
+  const files = picked ?? await new Promise<File[]>((resolve) => {
+    const input = Object.assign(document.createElement('input'), { type: 'file', accept: '.pdf,application/pdf', multiple: true });
+    input.onchange = () => resolve(Array.from(input.files ?? []));
+    input.oncancel = () => resolve([]);
+    input.click();
+  });
+  if (!files.length) return;
+  const srcs: { name: string; doc: PDFDocument }[] = [];
+  for (const f of files) {
+    try { srcs.push({ name: f.name.replace(/\.pdf$/i, ''), doc: await PDFDocument.load(new Uint8Array(await f.arrayBuffer()), { ignoreEncryption: true, updateMetadata: false }) }); }
+    catch { s.setStatus(`${f.name} could not be read as a PDF.`); return; }
+  }
+  const { out, n } = await buildLayeredPdf(srcs);
+  await s.openBytes(await out.save(), 'Layered.pdf');
+  const d = useApp.getState().docs.find((x) => x.name === 'Layered.pdf');
+  if (d) useApp.setState({ docs: useApp.getState().docs.map((x) => (x.id === d.id ? { ...x, dirty: true } : x)) });
+  useApp.getState().setStatus(`Layered PDF: ${srcs.length} file${srcs.length === 1 ? '' : 's'} as layers on ${n} page${n === 1 ? '' : 's'}`);
+  useApp.getState().setPanels({ left: 'layers' });
+}
+
 // ---------- Crop Pages ----------
 
 function CropDialog({ d }: { d: DocState }) {
@@ -123,6 +249,7 @@ function CropDialog({ d }: { d: DocState }) {
   const [custom, setCustom] = useState('');
   const [mode, setMode] = useState<'rect' | 'margins'>(rect ? 'rect' : 'margins');
   const [m, setM] = useState({ left: 0.5, bottom: 0.5, right: 0.5, top: 0.5 });
+  const [all, setAll] = useState(() => batchHint.take());
   const close = () => useDocTools.setState({ open: null, cropRect: undefined });
   const pages = pagesOf(d, range, custom);
   const draw = () => {
@@ -139,8 +266,14 @@ function CropDialog({ d }: { d: DocState }) {
       how = { rect: [Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1)] };
     } else if (!remove) how = { margins: [m.left * 72, m.bottom * 72, m.right * 72, m.top * 72] };
     close();
-    await s.transformDoc((lib) => { n = cropPages(lib, pages, how); }, remove ? 'Crop removed' : 'Pages cropped');
-    s.setStatus(remove ? `Crop removed from ${n} page${n === 1 ? '' : 's'}` : `Cropped ${n} page${n === 1 ? '' : 's'}`);
+    // A drawn rectangle belongs to one page; margins (or Remove Crop) can run over every open document.
+    const docs = how && 'rect' in how ? [d] : targets(d, all);
+    for (const t of docs) {
+      const tp = t === d ? pages : pagesOf(t, range, custom);
+      if (!tp.length) continue;
+      await s.transformDoc((lib) => { n += cropPages(lib, tp, how); }, remove ? 'Crop removed' : 'Pages cropped', undefined, undefined, t.id);
+    }
+    s.setStatus(remove ? `Crop removed from ${n} page${n === 1 ? '' : 's'}` : `Cropped ${n} page${n === 1 ? '' : 's'}${docs.length > 1 ? ` in ${docs.length} documents` : ''}`);
   };
   const num = (k: keyof typeof m, label: string) => (
     <label className="inline">{label} <input type="number" aria-label={`Crop ${label}`} step={0.125} min={0} value={m[k]} onChange={(e) => { setM({ ...m, [k]: Number(e.target.value) || 0 }); setMode('margins'); }} style={{ width: 60 }} /></label>
@@ -151,6 +284,7 @@ function CropDialog({ d }: { d: DocState }) {
       <div className="form-row"><label><input type="radio" checked={mode === 'rect'} disabled={!rect} onChange={() => setMode('rect')} /> Rectangle{rect ? ` drawn on ${d.loaded.pages[rect.page]?.label}` : ''}</label><button onClick={draw}>Draw Rectangle</button></div>
       <div className="form-row"><label><input type="radio" checked={mode === 'margins'} onChange={() => setMode('margins')} /> Trim margins (in)</label></div>
       <div className="form-row crop-margins">{num('left', 'Left')}{num('right', 'Right')}{num('top', 'Top')}{num('bottom', 'Bottom')}</div>
+      {mode === 'margins' && <FilesRow all={all} setAll={setAll} />}
       <p className="muted small">Cropping hides what is outside; nothing is deleted, and Remove Crop shows it again.</p>
       <div className="modal-actions"><button onClick={() => run(true)} disabled={!pages.length}>Remove Crop</button><span className="spacer" /><button className="primary" disabled={!pages.length} onClick={() => run()}>Crop</button><button onClick={close}>Cancel</button></div>
     </Frame>
@@ -207,17 +341,22 @@ function DeskewDialog({ d }: { d: DocState }) {
 
 /** Send the document: the system share sheet with the file where the browser has one, else download and an email draft. */
 export async function emailDocument() {
-  const s = useApp.getState(), d = activeDoc();
+  const d = activeDoc();
   if (!d) return;
-  const bytes = await serialize(d);
-  const file = new File([bytes as BlobPart], d.name, { type: 'application/pdf' });
+  await emailBytes(await serialize(d), d.name);
+}
+
+/** Share a PDF by email: the system share sheet when it takes files, else a download plus a mailto draft. */
+export async function emailBytes(bytes: Uint8Array, name: string) {
+  const s = useApp.getState();
+  const file = new File([bytes as BlobPart], name, { type: 'application/pdf' });
   const nav = navigator as Navigator & { canShare?: (x: object) => boolean };
   if (nav.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: d.name }); return; } catch (e) { if ((e as Error).name === 'AbortError') return; }
+    try { await navigator.share({ files: [file], title: name }); return; } catch (e) { if ((e as Error).name === 'AbortError') return; }
   }
-  download(bytes, d.name);
-  location.href = `mailto:?subject=${encodeURIComponent(d.name)}&body=${encodeURIComponent(`Please find ${d.name} attached.`)}`;
-  s.setStatus(`${d.name} was downloaded; attach it to the email that opened.`);
+  download(bytes, name);
+  location.href = `mailto:?subject=${encodeURIComponent(name)}&body=${encodeURIComponent(`Please find ${name} attached.`)}`;
+  s.setStatus(`${name} was downloaded; attach it to the email that opened.`);
 }
 
 /** Save a compressed copy (images resampled to 150 dpi, unused data removed); the open document is unchanged. */

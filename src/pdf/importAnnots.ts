@@ -18,6 +18,23 @@ import { PDFArray, PDFDict, PDFHexString, PDFName, PDFString, PDFNumber, PDFRawS
 import type { CustomColumn, Markup, MarkupStatus, MarkupStyle, MarkupType, Pt, Reply, Scale } from '../model/types';
 import { DEFAULT_STYLES, toolById } from '../tools/tools';
 import { MEASURE_TYPES } from '../model/measure';
+import { DEFAULT_LINE_HEIGHT, alignOfQuadding, parseDS } from '../model/textStyle';
+import { symbolOfCountStyle } from '../model/count';
+import { LINE_END_TYPES, defaultEnds, lineEndOfName } from '../model/lineEnds';
+import { blendOfName, defaultBlend } from '../model/blend';
+import { noteIconOf } from '../model/noteIcons';
+
+/** /LE (an array for lines, a name for callouts) as lineStart/lineEnd, only when they differ from the type's defaults. */
+function readLineEnds(doc: PDFDocument, dict: PDFDict, type: MarkupType): Pick<MarkupStyle, 'lineStart' | 'lineEnd'> {
+  if (!LINE_END_TYPES.has(type)) return {};
+  const le = dict.get(PDFName.of('LE'));
+  const arr = getArray(doc, dict, 'LE');
+  const names = arr ? [0, 1].map((i) => String(lookup(doc, arr.get(i)) ?? '')) : le instanceof PDFName ? ['None', le.toString()] : [];
+  if (!names.length) return {};
+  const d = defaultEnds(type);
+  const start = lineEndOfName(names[0]), end = lineEndOfName(names[1]);
+  return { ...(start && start !== d.start ? { lineStart: start } : {}), ...(end && end !== d.end ? { lineEnd: end } : {}) };
+}
 import {
   N, colorToHex, getArray, getDict, getName, getNumber, getText, lookup, numbers,
   parsePdfDate, readMeasure,
@@ -30,6 +47,7 @@ export interface CTData {
   label?: string;
   /** Stamp subtitle as placed. */
   subtitle?: string;
+  stampBorder?: Markup['stampBorder'];
   status?: MarkupStatus;
   statusModel?: string;
   statusBy?: string;
@@ -49,8 +67,15 @@ export interface CTData {
   custom?: Markup['custom'];
   legend?: Markup['legend'];
   checked?: boolean;
+  rotation?: number; // box shapes turned about their centre (degrees, counter-clockwise)
+  imageSource?: string; mask?: Markup['mask']; imageEncoding?: Markup['imageEncoding']; // image settings (the untouched picture when masked)
   groupId?: string; // Revu-style markup group
   seq?: Markup['seq']; // Sequence member
+  display?: Markup['display']; // caption, segment values, centroid, units
+  capture?: Markup['capture']; // Capture photos
+  valign?: MarkupStyle['valign']; margin?: number; autoSize?: boolean; shape?: MarkupStyle['shape']; // text box extras
+  countSymbol?: MarkupStyle['countSymbol']; countScale?: number; // Count appearance
+  cloudSize?: number; cloudInvert?: boolean; // Cloud arcs (size also in /BE /I)
   handles?: (number[] | null)[]; // curved segments: PDF-space [inX, inY, outX, outY] offsets per vertex
 }
 
@@ -126,6 +151,9 @@ function readCT(doc: PDFDocument, dict: PDFDict): CTData | undefined {
 
 function readStyle(doc: PDFDocument, dict: PDFDict, type: MarkupType, ct?: CTData): MarkupStyle {
   const defaults = DEFAULT_STYLES[type];
+  const blend = readBlend(doc, dict);
+  const be = getDict(doc, dict, 'BE');
+  const cloudSize = ct?.cloudSize ?? (be ? getNumber(doc, be, 'I') : undefined);
   const stroke = colorToHex(numbers(doc, getArray(doc, dict, 'C')));
   const fill = colorToHex(numbers(doc, getArray(doc, dict, 'IC')));
   const ca = getNumber(doc, dict, 'CA');
@@ -133,14 +161,28 @@ function readStyle(doc: PDFDocument, dict: PDFDict, type: MarkupType, ct?: CTDat
   const width = (bs && getNumber(doc, bs, 'W')) ?? numbers(doc, getArray(doc, dict, 'Border'))[2] ?? defaults.width;
   const dashed = bs && getName(doc, bs, 'S') === 'D';
   const da = getText(doc, dict, 'DA') ?? getText(doc, dict, 'DS') ?? '';
-  const fontSize = Number(da.match(/([\d.]+)\s*(?:Tf|pt)/)?.[1]) || defaults.fontSize;
+  const ds = parseDS(getText(doc, dict, 'DS') ?? '');
+  const fontSize = ds.fontSize || Number(da.match(/([\d.]+)\s*(?:Tf|pt)/)?.[1]) || defaults.fontSize;
   const textColor = da.match(/([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+rg/);
   const textual = type === 'textbox' || type === 'callout';
+  const textTypes = textual || type === 'typewriter' || type === 'cloudplus';
+  // Text formatting: /DS, /Q and the DA font name (ours or Revu's), plus our extras.
+  const daFont = /\/(He|Ti|Co|Helv|Cour|Arial|Times)[A-Za-z]*/.exec(da)?.[0] ?? '';
+  const text: Partial<MarkupStyle> = textTypes ? {
+    ...ds,
+    font: ds.font ?? (/^\/(Ti|Times)/.test(daFont) ? 'Times' : /^\/(Co|Cour)/.test(daFont) ? 'Courier' : undefined),
+    bold: ds.bold ?? (/^\/(HeBo|HeBO|TiBo|TiBI|CoBo|CoBO)/.test(daFont) || undefined),
+    italic: ds.italic ?? (/^\/(HeOb|HeBO|TiIt|TiBI|CoOb|CoBO)/.test(daFont) || undefined),
+    align: ds.align ?? alignOfQuadding(getNumber(doc, dict, 'Q')),
+    valign: ct?.valign, margin: ct?.margin, autoSize: ct?.autoSize || undefined, shape: ct?.shape,
+  } : {};
+  if (text.lineHeight === DEFAULT_LINE_HEIGHT) delete text.lineHeight;
+  for (const k of Object.keys(text) as (keyof MarkupStyle)[]) if (text[k] === undefined || text[k] === false) delete text[k];
   // Polylines/lines: Revu writes /IC as the arrowhead fill, not a shape fill.
   const fillable = !['line', 'arrow', 'length', 'polyline', 'polylength', 'perimeter', 'pen'].includes(type);
   return {
     ...defaults,
-    color: textual && textColor ? colorToHex(textColor.slice(1, 4).map(Number))! : stroke ?? defaults.color,
+    color: textual ? stroke ?? (textColor ? colorToHex(textColor.slice(1, 4).map(Number))! : defaults.color) : stroke ?? defaults.color,
     fill: type === 'highlight' ? stroke ?? defaults.fill : fillable ? fill : null,
     opacity: ca ?? 1,
     fillOpacity: ct?.fillOpacity ?? getNumber(doc, dict, 'FillOpacity') ?? ca ?? defaults.fillOpacity,
@@ -148,7 +190,14 @@ function readStyle(doc: PDFDocument, dict: PDFDict, type: MarkupType, ct?: CTDat
     lineStyle: ct?.lineStyle ?? (dashed ? 'dashed' : 'solid'),
     ...(ct?.lineDef ? { lineDef: ct.lineDef } : {}),
     ...(ct?.hatch ? { hatch: ct.hatch, hatchScale: ct.hatchScale } : {}),
+    ...(blend && blend !== defaultBlend(type) ? { blend } : {}),
+    ...((type === 'cloud' || type === 'cloudplus') && cloudSize && cloudSize !== 1 ? { cloudSize } : {}),
+    ...(ct?.cloudInvert ? { cloudInvert: true } : {}),
     fontSize,
+    ...readLineEnds(doc, dict, type),
+    ...(type === 'count' ? { countSymbol: ct?.countSymbol ?? symbolOfCountStyle(getName(doc, dict, 'CountStyle')), countScale: ct?.countScale } : {}),
+    ...text,
+    ...(textTypes && (ds.textColor ?? (textColor ? colorToHex(textColor.slice(1, 4).map(Number)) : undefined)) ? { textColor: ds.textColor ?? colorToHex(textColor!.slice(1, 4).map(Number))! } : {}),
   };
 }
 
@@ -181,8 +230,14 @@ function baseMarkup(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number, 
     custom: ct?.custom,
     legend: ct?.legend,
     checked: ct?.checked,
+    rotation: ct?.rotation,
+    imageSource: ct?.imageSource, mask: ct?.mask, imageEncoding: ct?.imageEncoding,
+    noteIcon: type === 'note' && getName(doc, dict, 'Name') && getName(doc, dict, 'Name') !== 'Comment' ? noteIconOf(getName(doc, dict, 'Name')) : undefined,
     seq: ct?.seq,
+    display: ct?.display,
+    capture: ct?.capture,
     locked: ((getNumber(doc, dict, 'F') ?? 0) & 128) !== 0 || undefined,
+    hidden: ((getNumber(doc, dict, 'F') ?? 0) & 2) !== 0 || undefined,
     layer: dict.get(PDFName.of('OC')) instanceof PDFRef ? refId(dict.get(PDFName.of('OC')) as PDFRef) : undefined,
     link: type === 'link' ? undefined : readAction(doc, dict),
   } satisfies Omit<Markup, 'points'>;
@@ -249,12 +304,20 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
       const le = getArray(doc, dict, 'LE');
       const ends = le ? [0, 1].map((i) => String(lookup(doc, le.get(i)) ?? '')) : [];
       type = intent === 'LineDimension' ? (/^dimension/i.test(subj) ? 'dimension' : 'length') : ends.some((e) => /Arrow/.test(e)) ? 'arrow' : 'line';
+      // Leader lines (/LL): the line is drawn that far beside its points (Revu's Length height).
+      const ll = lookup(doc, dict.get(PDFName.of('LL')));
+      if (ll instanceof PDFNumber && ll.asNumber() && (type === 'length' || type === 'dimension')) extra = { ...extra, leader: ll.asNumber() };
       break;
     }
     case 'Redact':
       pts = quadRects();
       if (!pts.length && rect.length === 4) pts = rectPts(rect);
       type = 'redaction';
+      break;
+    case 'Caret':
+      if (rect.length !== 4) return null;
+      pts = rectPts(rect);
+      type = 'caret';
       break;
     case 'StrikeOut': case 'Underline': case 'Squiggly':
       pts = quadRects();
@@ -271,6 +334,7 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
       } else {
         text = ct.text ?? '';
         if (ct.subtitle !== undefined) extra = { subtitle: ct.subtitle };
+        if (ct.stampBorder) extra = { ...extra, stampBorder: ct.stampBorder };
       }
       break;
     }
@@ -597,6 +661,23 @@ const toBase64 = (b: Uint8Array) => {
   for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
   return btoa(s);
 };
+
+/** The blend mode (/BM) of the first graphics state in the annotation's appearance. */
+export function readBlend(doc: PDFDocument, dict: PDFDict): ReturnType<typeof blendOfName> {
+  const ap = getDict(doc, dict, 'AP');
+  const n = ap && lookup(doc, ap.get(N('N')));
+  if (!(n instanceof PDFRawStream)) return undefined;
+  const res = getDict(doc, n.dict, 'Resources');
+  const gss = res && getDict(doc, res, 'ExtGState');
+  if (!gss) return undefined;
+  for (const key of gss.keys()) {
+    const gs = lookup(doc, gss.get(key));
+    const bm = gs instanceof PDFDict ? gs.get(N('BM')) : undefined;
+    const name = bm instanceof PDFName ? bm.decodeText() : bm instanceof PDFArray ? (bm.get(0) as PDFName | undefined)?.decodeText?.() : undefined;
+    if (name) return blendOfName(name);
+  }
+  return undefined;
+}
 
 /** The picture of a CyanTakeoff image stamp, from its appearance (/Im0), as a data: URL. */
 function readImage(doc: PDFDocument, dict: PDFDict): string | undefined {

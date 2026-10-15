@@ -1,3 +1,5 @@
+import { layoutForPage, withDefaults, type Prefs, lastPageOf, rememberLastPage } from './prefs';
+import { profileColumns } from './columns';
 import { create } from 'zustand';
 import { useStatusModels } from './statusModels';
 import { rememberFile } from './recent';
@@ -6,6 +8,7 @@ import type { LoadedDoc } from '../pdf/document';
 import { openPdf } from '../pdf/document';
 import { savePdf } from '../pdf/save';
 import { DEFAULT_STYLES, toolById } from '../tools/tools';
+import { DEFAULT_TOOL_CHEST, type ToolChestPrefs } from './toolScale';
 import { MEASURE_TYPES, scaleAt } from './measure';
 import { translated } from './markup';
 import { expandGroups } from './arrange';
@@ -13,6 +16,7 @@ import { columnDefaults } from './columns';
 import type { RulerUnit } from './rulers';
 import type { HatchDef, LineStyleDef } from './lineStyles';
 import type { LayerSet } from '../pdf/layers';
+import { pasteLayers } from './pasteLayers';
 import type { Bookmark } from '../pdf/bookmarks';
 import { PERM, PasswordRequired, allowed, encryptPdf, looksEncrypted, openEncrypted, type NewSecurity, type Security } from '../pdf/crypt';
 import { askPassword } from './prompts';
@@ -23,7 +27,7 @@ import type {
   CustomColumn, Markup, MarkupStyle, MarkupType, Pt, Scale, Space, ToolId, ToolPreset, ToolSet, Toggles, Viewport,
 } from './types';
 
-export type LeftPanel = 'thumbnails' | 'bookmarks' | 'spaces' | 'search' | 'sets' | 'signatures' | 'layers' | 'links' | 'files' | null;
+export type LeftPanel = 'thumbnails' | 'bookmarks' | 'spaces' | 'search' | 'sets' | 'signatures' | 'layers' | 'links' | 'files' | 'flags' | null;
 export type RightPanel = 'properties' | 'toolchest' | 'measurements' | null;
 
 /** Page scales and viewports, for undoing scale changes. */
@@ -121,6 +125,8 @@ export interface DocState {
  */
 export interface ScaleDialogState {
   page: number;
+  /** Pages selected in the Thumbnails panel when the dialog was opened (its Selected option). */
+  pages?: number[];
   pagePts?: number;
   then?: ToolId;
   reuse?: boolean;
@@ -148,6 +154,11 @@ interface AppState {
   /** Tool Chest tool sets; the first is "My Tools". */
   toolSets: ToolSet[];
   recentTools: ToolPreset[];
+  /** Tool Chest settings (Revu): Comment Persistence, Update Tool Set Item on Reuse, Maximum Recents, icon size. */
+  toolChest: ToolChestPrefs;
+  /** Tool Chest > Recent Tools > Hide (this session). */
+  recentHidden?: boolean;
+  setToolChest(p: Partial<ToolChestPrefs>): void;
   /**
    * Apply Scale to Pages dialog. `pagePts` is set after calibrating (distance
    * between the two picked points); `then` is the measure tool to resume.
@@ -159,6 +170,8 @@ interface AppState {
   replyTo: string | null;
   /** Markup kinds the next Legend lists (from a selection or a tool set). */
   legendKeys: string[] | null;
+  /** Markups the filtered Markups List shows (null: no filter), so the others can be dimmed on the page. */
+  listVisible: Set<string> | null;
   /** Image the Image tool places next (signature), instead of asking for a file. */
   pendingImage: { url: string; w: number; h: number; subject: string } | null;
   /** Stamp placed by the Stamp tool. */
@@ -175,6 +188,9 @@ interface AppState {
   status: string;
   busy: boolean;
   clipboard: Markup[];
+  /** The document the clipboard was copied from, and its layer names by id (Retain Layer information when copying). */
+  clipboardFrom: string | null;
+  clipboardLayers: Record<string, string>;
 
   openBytes(bytes: Uint8Array, name: string, handle?: FileSystemFileHandle): Promise<void>;
   closeDoc(id: string): void;
@@ -207,9 +223,13 @@ interface AppState {
   rotateView(delta: 90 | -90): void;
   splitView(dir: 'h' | 'v'): void;
   unsplit(): void;
+  /** Toggle Split (Ctrl+I): vertical <-> horizontal (splits vertically when there is no split). */
+  toggleSplit(): void;
   focusPane(pane: 0 | 1): void;
   setTool(tool: ToolId, opts?: { locked?: boolean; preset?: ToolPreset | null }): void;
   addMarkup(m: Omit<Markup, 'id' | 'author' | 'created' | 'modified' | 'status' | 'label' | 'comment'> & Partial<Markup>): Markup;
+  /** Add ready-made markups (copies) as one undo step. */
+  addMarkups(ms: Markup[], docId?: string): void;
   updateMarkups(ids: string[], fn: (m: Markup) => Partial<Markup>, opts?: { history?: boolean }): void;
   pushUndo(snapshot: Markup[]): void;
   deleteMarkups(ids: string[]): void;
@@ -243,6 +263,9 @@ interface AppState {
   customLineStyles: LineStyleDef[];
   customHatches: HatchDef[];
   setView(p: Partial<Pick<AppState, 'dimLevel' | 'rulerUnit' | 'customLineStyles' | 'customHatches'>>): void;
+  /** Revu > Preferences (Ctrl+K). */
+  prefs: Prefs;
+  setPrefs(p: Partial<Prefs>): void;
   setPanels(p: Partial<Pick<AppState, 'left' | 'right' | 'markupsList'>>): void;
   setAuthor(a: string): void;
   /** Add a markup as a tool (to the first set, or `setId`). */
@@ -262,7 +285,7 @@ interface AppState {
    * Returns false if it failed (the status bar says why).
    */
   /** Change the file with pdf-lib (undoable). `markups` replaces the document's markups in the file first (for changes that move both). */
-  transformDoc(fn: (lib: PDFDocument, bytes: Uint8Array) => Promise<void | Uint8Array> | void | Uint8Array, done: string, page?: number, markups?: Markup[]): Promise<boolean>;
+  transformDoc(fn: (lib: PDFDocument, bytes: Uint8Array) => Promise<void | Uint8Array> | void | Uint8Array, done: string, page?: number, markups?: Markup[], docId?: string): Promise<boolean>;
   /** Replace the document's custom columns. */
   setColumns(cols: CustomColumn[]): void;
   setFieldValue(name: string, value: string | boolean): void;
@@ -295,9 +318,9 @@ function savePrefs(s: AppState) {
   try {
     localStorage.setItem(LS, JSON.stringify({
       toolDefaults: s.toolDefaults, toggles: s.toggles, author: s.author,
-      toolSets: s.toolSets, customKeys: s.customKeys, recentTools: s.recentTools, savedScales: s.savedScales,
+      toolSets: s.toolSets, customKeys: s.customKeys, recentTools: s.recentTools, savedScales: s.savedScales, toolChest: s.toolChest,
       left: s.left, right: s.right, markupsList: s.markupsList, dimLevel: s.dimLevel, rulerUnit: s.rulerUnit,
-      customLineStyles: s.customLineStyles, customHatches: s.customHatches,
+      customLineStyles: s.customLineStyles, customHatches: s.customHatches, prefs: s.prefs,
     }));
   } catch { /* storage unavailable */ }
 }
@@ -347,10 +370,11 @@ export function serialize(d: DocState): Promise<Uint8Array> {
     original: d.bytes, pages: d.loaded.pages, markups: d.markups,
     importedRefs: d.importedRefs, calibrations: d.calibrations, viewports: d.viewports,
     dirtyCalibrations: d.dirtyCalibrations, spaces: d.spaces, dirtySpaces: d.dirtySpaces,
-    columns: d.dirtyColumns ? d.columns : undefined,
+    columns: d.dirtyColumns ? d.columns : undefined, legendColumns: d.columns,
     formValues: d.formValues,
     layers: d.dirtyLayers ? d.layers : undefined,
     bookmarks: d.dirtyBookmarks ? d.bookmarks : undefined,
+    saveMode: useApp.getState().prefs.saveMode,
   });
 }
 
@@ -392,6 +416,9 @@ function rescoped(d: DocState, pages: number[], calibrations: (Scale | null)[], 
   return { calibrations, viewports, dirtyCalibrations, markups, undo: [...d.undo, snap], redo: [], dirty: true };
 }
 
+/** Layer names by id (for the clipboard). */
+const layerNames = (d: DocState) => Object.fromEntries(Object.values(d.layers?.layers ?? {}).map((l) => [l.id, l.name]));
+
 export const useApp = create<AppState>((set, get) => {
   /** Mutate the active document. */
   const withDoc = (fn: (d: DocState) => Partial<DocState>) => {
@@ -412,6 +439,8 @@ export const useApp = create<AppState>((set, get) => {
     customLineStyles: prefs.customLineStyles ?? [],
     customHatches: prefs.customHatches ?? [],
     setView(p) { set(p); savePrefs(get()); },
+    prefs: withDefaults((prefs as { prefs?: Partial<Prefs> }).prefs),
+    setPrefs(p) { set({ prefs: { ...get().prefs, ...p } }); savePrefs(get()); },
     left: prefs.left === undefined ? 'thumbnails' : prefs.left,
     right: prefs.right === undefined ? 'properties' : prefs.right,
     markupsList: prefs.markupsList ?? true,
@@ -423,12 +452,15 @@ export const useApp = create<AppState>((set, get) => {
       { id: 'takeoff', name: 'Sample Takeoff', tools: SAMPLE_TOOL_CHEST },
     ],
     recentTools: prefs.recentTools ?? [],
+    toolChest: { ...DEFAULT_TOOL_CHEST, ...(prefs.toolChest ?? {}) },
+    setToolChest(p) { set((st) => ({ toolChest: { ...st.toolChest, ...p } })); savePrefs(get()); },
     scaleDialog: null,
     calibrateFor: null,
     radiusTool: 'radius',
     stampName: 'APPROVED',
     pendingImage: null,
     legendKeys: null,
+    listVisible: null,
     replyTo: null,
     linkDialog: null,
     activeViewport: null,
@@ -436,6 +468,8 @@ export const useApp = create<AppState>((set, get) => {
     status: 'Ready',
     busy: false,
     clipboard: [],
+    clipboardFrom: null,
+    clipboardLayers: {},
 
     async openBytes(bytes, name, handle) {
       set({ busy: true, status: `Opening ${name}…` });
@@ -479,16 +513,22 @@ export const useApp = create<AppState>((set, get) => {
           dirtyCalibrations: new Set(),
           spaces: loaded.spaces,
           dirtySpaces: new Set(),
-          columns: loaded.columns,
-          dirtyColumns: false,
+          // Manage Columns > Save to Profile: a file without custom columns starts with the profile's.
+          columns: loaded.columns.length ? loaded.columns : profileColumns(),
+          dirtyColumns: !loaded.columns.length && profileColumns().length > 0,
           formValues: {},
-          page: 0, zoom: 0, selection: [], undo: [], redo: [], dirty: false,
+          // Preferences > Document: the page it was closed at (Remember Last Page) and the display on opening (zoom 0: fit page, -1: fit width).
+          page: get().prefs.rememberLastPage ? Math.max(0, Math.min(lastPageOf(name), loaded.pages.length - 1)) : 0,
+          zoom: get().prefs.openDisplay === 'actual' ? 1 : get().prefs.openDisplay === 'fitWidth' ? -1 : 0,
+          selection: [], undo: [], redo: [], dirty: false,
           ...layerState(loaded), bookmarks: loaded.bookmarks, dirtyBookmarks: false,
           security, securityChange: null,
         };
         const why = security && loaded.readOnly ? 'the file\'s permissions do not allow markups' : 'file could not be parsed for editing';
         rememberFile(name, bytes.length, handle).catch(() => {});
-        set((s) => ({ docs: [...s.docs, doc], activeId: doc.id, status: loaded.readOnly ? `${name} opened read-only (${why})` : `Opened ${name}${security ? ' (password protected)' : ''}` }));
+        // Preferences > Document > Page Layout: the layout a document opens in (Single Page keeps whatever is shown).
+        const layout = get().prefs.defaultLayout === 'single' ? null : layoutForPage(loaded.pages[0]?.height ?? 0, get().prefs.defaultLayout);
+        set((s) => ({ docs: [...s.docs, doc], activeId: doc.id, ...(layout ? { viewMode: layout } : {}), status: loaded.readOnly ? `${name} opened read-only (${why})` : `Opened ${name}${security ? ' (password protected)' : ''}` }));
       } catch (e) {
         console.error(e);
         set({ status: `Could not open ${name}: ${(e as Error).message}` });
@@ -503,6 +543,7 @@ export const useApp = create<AppState>((set, get) => {
       const sp = get().split;
       if (sp && (sp.docId === id || sp.mainDocId === id)) set({ split: null, activePane: 0 });
       d?.loaded.pdf.loadingTask.destroy();
+      if (d && get().prefs.rememberLastPage) rememberLastPage(d.name, d.page);
       if (d) dropEntries([...d.undo, ...d.redo], d);
       set((s) => {
         const docs = s.docs.filter((x) => x.id !== id);
@@ -517,22 +558,36 @@ export const useApp = create<AppState>((set, get) => {
     setPage: (page) => get().setViewPage(get().split ? get().activePane : 0, page),
     setZoom: (zoom) => get().setViewZoom(get().split ? get().activePane : 0, zoom),
     setViewPage(pane, page, keep) {
-      const { split, docs } = get();
+      const { split, docs, toggles } = get();
+      const clampTo = (id: string, p: number) => { const d = docs.find((x) => x.id === id); return d ? Math.max(0, Math.min(d.loaded.pages.length - 1, p)) : 0; };
+      // Synchronize Document (Revu): the other pane follows to the same page index.
+      const follow = split && toggles.syncDoc;
       if (pane === 1 && split) {
-        const d = docs.find((x) => x.id === split.docId);
-        if (d) set({ split: { ...split, page: Math.max(0, Math.min(d.loaded.pages.length - 1, page)) } });
+        set({
+          split: { ...split, page: clampTo(split.docId, page) },
+          ...(follow ? { docs: docs.map((d) => (d.id === split.mainDocId ? { ...d, page: clampTo(d.id, page) } : d)) } : {}),
+        });
         if (!keep) withDoc(() => ({ selection: [] }));
         return;
       }
       const id = split ? split.mainDocId : get().activeId;
-      set({ docs: docs.map((d) => (d.id === id ? { ...d, page: Math.max(0, Math.min(d.loaded.pages.length - 1, page)), selection: keep ? d.selection : [] } : d)) });
+      set({
+        docs: docs.map((d) => (d.id === id ? { ...d, page: clampTo(d.id, page), selection: keep ? d.selection : [] } : d)),
+        ...(follow ? { split: { ...split, page: clampTo(split.docId, page) } } : {}),
+      });
     },
     setViewZoom(pane, zoom) {
-      const z = Math.max(0.02, Math.min(64, zoom));
-      const { split, docs } = get();
-      if (pane === 1 && split) { set({ split: { ...split, zoom: z } }); return; }
+      const z = Math.max(0.02, Math.min((get().prefs.maxZoom || 6400) / 100, zoom));
+      const { split, docs, toggles } = get();
+      // Synchronize Page (Revu): both panes share the zoom (the Viewer mirrors the scroll).
+      const both = split && toggles.sync;
+      if (pane === 1 && split && !both) { set({ split: { ...split, zoom: z } }); return; }
       const id = split ? split.mainDocId : get().activeId;
-      set({ docs: docs.map((d) => (d.id === id ? { ...d, zoom: z } : d)) });
+      set({ docs: docs.map((d) => (d.id === id ? { ...d, zoom: z } : d)), ...(both ? { split: { ...split, zoom: z } } : {}) });
+    },
+    toggleSplit() {
+      const { split } = get();
+      if (split) set({ split: { ...split, dir: split.dir === 'v' ? 'h' : 'v' } }); else get().splitView('v');
     },
     split: null,
     splitRatio: 0.5,
@@ -595,13 +650,27 @@ export const useApp = create<AppState>((set, get) => {
       // Recent Tools, like Revu: newest first, unique by type+subject+colour.
       const p: ToolPreset = { id: crypto.randomUUID(), name: m.subject, type: m.type, style: m.style, subject: m.subject, depth: m.depth };
       const key = (x: ToolPreset) => `${x.type}|${x.subject}|${x.style.color}|${x.style.fill}`;
-      set((st) => ({ recentTools: [p, ...st.recentTools.filter((r) => key(r) !== key(p))].slice(0, 12) }));
+      set((st) => ({ recentTools: [p, ...st.recentTools.filter((r) => key(r) !== key(p))].slice(0, Math.max(1, st.toolChest.maxRecents)) }));
       savePrefs(get());
       return m;
     },
 
+    addMarkups(ms, docId) {
+      if (!ms.length) return;
+      const id = docId ?? get().activeId;
+      set((st) => ({ docs: st.docs.map((doc) => (doc.id === id ? { ...doc, markups: [...doc.markups, ...ms], undo: [...doc.undo, doc.markups], redo: [], dirty: true } : doc)) }));
+    },
     updateMarkups(ids, fn, opts = { history: true }) {
       const set_ = new Set(ids);
+      // Update Tool Set Item on Reuse (Revu): a style change on a markup made with a tool goes back to the tool.
+      if (get().toolChest.updateOnReuse) {
+        const d0 = activeDoc();
+        const changed = (d0?.markups ?? []).filter((m) => set_.has(m.id) && m.toolId).map((m) => ({ m, patch: fn(m) })).filter((x) => x.patch.style);
+        if (changed.length) {
+          set((st) => ({ toolSets: st.toolSets.map((t) => ({ ...t, tools: t.tools.map((p) => { const c = changed.find((x) => x.m.toolId === p.id); return c ? { ...p, style: { ...p.style, ...c.patch.style } } : p; }) })) }));
+          savePrefs(get());
+        }
+      }
       withDoc((d) => ({
         markups: d.markups.map((m) => {
           if (!set_.has(m.id)) return m;
@@ -684,7 +753,7 @@ export const useApp = create<AppState>((set, get) => {
     copy() {
       const d = activeDoc();
       if (!d) return;
-      set({ clipboard: d.markups.filter((m) => d.selection.includes(m.id)) });
+      set({ clipboard: d.markups.filter((m) => d.selection.includes(m.id)), clipboardFrom: d.id, clipboardLayers: layerNames(d) });
     },
     paste(inPlace) {
       const d = activeDoc();
@@ -692,15 +761,20 @@ export const useApp = create<AppState>((set, get) => {
       if (!d || !clip.length) return;
       const off = inPlace ? 0 : 18;
       const t = now();
-      const copies = clip.map((m) => ({
+      const raw = clip.map((m) => ({
         ...m, id: crypto.randomUUID(), page: d.page, created: t, modified: t, source: undefined,
         ...translated(m, off, off),
       }));
+      // From another file: Retain Layer information when copying Markups (the layers are created here when missing).
+      const cross = get().clipboardFrom !== d.id;
+      const pl = cross ? pasteLayers(raw, get().clipboardLayers, d.layers, get().prefs.retainLayer, () => `new:${crypto.randomUUID()}`) : { markups: raw, layers: d.layers, added: [] as string[] };
+      const copies = pl.markups;
       withDoc((doc) => ({
         markups: [...doc.markups, ...copies], selection: copies.map((c) => c.id),
         undo: [...doc.undo, doc.markups], redo: [], dirty: true,
+        ...(pl.added.length ? { layers: pl.layers, dirtyLayers: true, layerVisible: { ...doc.layerVisible, ...Object.fromEntries(pl.added.map((id) => [id, true])) } } : {}),
       }));
-      set({ clipboard: copies });
+      set({ clipboard: copies, clipboardFrom: d.id, clipboardLayers: layerNames(activeDoc()!) });
     },
 
     setCalibration(page, scale, allPages) {
@@ -734,8 +808,8 @@ export const useApp = create<AppState>((set, get) => {
       });
     },
     setActiveViewport: (activeViewport) => set({ activeViewport }),
-    async transformDoc(fn, done, page, markups) {
-      const d = activeDoc();
+    async transformDoc(fn, done, page, markups, docId) {
+      const d = docId ? get().docs.find((x) => x.id === docId) : activeDoc();
       if (!d) return false;
       if (d.loaded.readOnly) { set({ status: 'This file could not be parsed for editing.' }); return false; }
       set({ busy: true, status: 'Updating pages…' });

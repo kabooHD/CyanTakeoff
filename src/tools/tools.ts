@@ -41,6 +41,13 @@ export const TOOLS: ToolDef[] = [
   { id: 'select-text', name: 'Select Text', group: 'navigate', shortcut: 'Shift+T', interaction: 'box', subject: '' },
   { id: 'edit-text', name: 'Edit Text', group: 'navigate', interaction: 'point', subject: '' },
   { id: 'erase-content', name: 'Erase Content', group: 'navigate', interaction: 'box', subject: '' },
+  { id: 'cut-content', name: 'Cut Content', group: 'navigate', interaction: 'box', subject: '' },
+  { id: 'review-text', name: 'Review Text', group: 'navigate', interaction: 'text', subject: '' },
+  // Sketch to Scale: sizes typed in the Sketch bar (src/ui/SketchBar.tsx); the first click is the anchor.
+  { id: 'sketch-polygon', name: 'Polygon Sketch to Scale', group: 'navigate', interaction: 'poly', subject: 'Polygon', closed: true },
+  { id: 'sketch-polyline', name: 'Polyline Sketch to Scale', group: 'navigate', interaction: 'poly', subject: 'Polyline' },
+  { id: 'sketch-rectangle', name: 'Rectangle Sketch to Scale', group: 'navigate', interaction: 'poly', subject: 'Rectangle' },
+  { id: 'sketch-ellipse', name: 'Ellipse Sketch to Scale', group: 'navigate', interaction: 'poly', subject: 'Ellipse' },
   { id: 'region-pick', name: 'Select Region', group: 'navigate', interaction: 'box', subject: '' },
   { id: 'visual-pick', name: 'VisualSearch: Get Rectangle', group: 'navigate', interaction: 'box', subject: '' },
   { id: 'lasso', name: 'Lasso', group: 'navigate', shortcut: 'Shift+O', interaction: 'freehand', subject: '' },
@@ -65,6 +72,7 @@ export const TOOLS: ToolDef[] = [
   { id: 'flag', name: 'Flag', group: 'markup', shortcut: 'Shift+F', interaction: 'point', subject: 'Flag' },
   { id: 'strikeout', name: 'Strikethrough', group: 'markup', shortcut: 'D', interaction: 'text', subject: 'Strikethrough' },
   { id: 'underline', name: 'Underline', group: 'markup', shortcut: 'U', interaction: 'text', subject: 'Underline' },
+  { id: 'caret', name: 'Insert Text', group: 'markup', interaction: 'point', subject: 'Insert Text' },
   { id: 'squiggly', name: 'Squiggly', group: 'markup', shortcut: 'Shift+U', interaction: 'text', subject: 'Squiggly' },
   { id: 'image', name: 'Image', group: 'markup', shortcut: 'I', interaction: 'point', subject: 'Image' },
   { id: 'snapshot', name: 'Snapshot', group: 'markup', shortcut: 'G', interaction: 'box', subject: 'Snapshot' },
@@ -100,6 +108,7 @@ export const TOOLS: ToolDef[] = [
   { id: 'form-dropdown', name: 'Dropdown', group: 'form', interaction: 'box', subject: '' },
   { id: 'form-list', name: 'List Box', group: 'form', interaction: 'box', subject: '' },
   { id: 'form-signature', name: 'Signature Field', group: 'form', shortcut: 'X', interaction: 'box', subject: '' },
+  { id: 'form-button', name: 'Button', group: 'form', interaction: 'box', subject: '' },
 ];
 
 export const toolById = (id: ToolId) => TOOLS.find((t) => t.id === id)!;
@@ -145,6 +154,7 @@ export const DEFAULT_STYLES: Record<MarkupType, MarkupStyle> = {
   flag: { ...base, color: '#e00000', fill: '#e00000', fillOpacity: 1 },
   stamp: { ...base, color: '#c00000', width: 2, fontSize: 18 },
   strikeout: { ...base, color: '#ff0000' },
+  caret: { ...base, color: '#1a73e8' },
   underline: { ...base, color: '#0066ff' },
   squiggly: { ...base, color: '#00a000' },
   image: { ...base, width: 0 },

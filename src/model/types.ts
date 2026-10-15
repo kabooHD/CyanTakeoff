@@ -37,14 +37,15 @@ export type MarkupType =
   | 'strikeout'
   | 'underline'
   | 'squiggly'
+  | 'caret'
   | 'image'
   | 'link'
   | 'attachment'
   | 'legend'
   | 'redaction';
 
-export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cutout' | 'ellipse-cutout' | 'viewport' | 'radius-3pt' | 'dynamic-fill' | 'snapshot' | 'eraser' | 'lasso' | 'space' | 'redact-text' | 'visual-pick' | 'region-pick' | 'edit-text' | 'erase-content' | 'select-text' | 'snapshot-content'
-  | 'form-text' | 'form-checkbox' | 'form-radio' | 'form-dropdown' | 'form-list' | 'form-signature';
+export type ToolId = MarkupType | 'select' | 'pan' | 'calibrate' | 'zoom' | 'cutout' | 'ellipse-cutout' | 'viewport' | 'radius-3pt' | 'dynamic-fill' | 'snapshot' | 'eraser' | 'lasso' | 'space' | 'redact-text' | 'visual-pick' | 'region-pick' | 'edit-text' | 'erase-content' | 'cut-content' | 'review-text' | 'sketch-polygon' | 'sketch-polyline' | 'sketch-rectangle' | 'sketch-ellipse' | 'select-text' | 'snapshot-content'
+  | 'form-text' | 'form-checkbox' | 'form-radio' | 'form-dropdown' | 'form-list' | 'form-signature' | 'form-button';
 
 /** A hole subtracted from an Area or Volume measurement. Ellipse: two opposite corners. */
 /** Polygon cutouts may have curved edges (`handles`, as on markups). */
@@ -110,6 +111,15 @@ export interface CustomColumn {
   type: 'text' | 'number' | 'checkmark' | 'choice' | 'date' | 'formula';
   /** Choice items. */
   options?: string[];
+  /** Choice: Subject the item links to (filters) and a numeric value for formulas, per item (by item name). */
+  choiceMeta?: Record<string, { subject?: string; value?: number }>;
+  /** Choice: the cell accepts text that is not in the list. */
+  allowCustomText?: boolean;
+  /** Number: allowed range. */
+  min?: number;
+  max?: number;
+  /** Text: wraps onto several lines. */
+  multiline?: boolean;
   /** Default for new markups ('today' for Date: the current date). */
   defaultValue?: string | number | boolean;
   expression?: string;
@@ -140,6 +150,36 @@ export interface MarkupStyle {
   hatch?: HatchDef;
   hatchScale?: number;
   fontSize: number; // points
+  /** Blend mode (PDF /BM); undefined = the type's default (see model/blend.ts). */
+  blend?: import('./blend').BlendMode;
+  /** Cloud and Cloud+: arc size (1 = default, saved as /BE /I) and Invert (arcs bulge inward). */
+  cloudSize?: number;
+  cloudInvert?: boolean;
+  // Text formatting (Text Box, Callout, Typewriter, Cloud+); undefined = Revu defaults.
+  font?: 'Helvetica' | 'Times' | 'Courier';
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strike?: boolean;
+  align?: 'left' | 'center' | 'right';
+  valign?: 'top' | 'middle' | 'bottom';
+  /** Line spacing as a multiple of the font size (1.15 = Revu's 13.8pt for 12pt). */
+  lineHeight?: number;
+  /** Space between the text and the box border, points. */
+  margin?: number;
+  /** Text colour when it differs from the line colour. */
+  textColor?: string;
+  /** Auto: the largest font size that fits the box. */
+  autoSize?: boolean;
+  /** Shape of a text box / callout box. */
+  shape?: 'rectangle' | 'circle' | 'triangle' | 'hexagon';
+  /** Count: the symbol placed at each counted item and its size (1 = default). */
+  countSymbol?: 'circle' | 'square' | 'triangle' | 'diamond' | 'cross' | 'x' | 'check' | 'star';
+  countScale?: number;
+  /** Line ends (lines, arrows, polylines, callout leaders): Revu's Start / End and their size (1 = default). */
+  lineStart?: 'none' | 'openArrow' | 'closedArrow' | 'circle' | 'square' | 'diamond' | 'slash' | 'butt' | 'rOpenArrow' | 'rClosedArrow';
+  lineEnd?: 'none' | 'openArrow' | 'closedArrow' | 'circle' | 'square' | 'diamond' | 'slash' | 'butt' | 'rOpenArrow' | 'rClosedArrow';
+  lineEndSize?: number;
 }
 
 export interface Markup {
@@ -161,6 +201,12 @@ export interface Markup {
   statusDate?: string;
   /** Text content for textbox/callout. */
   text?: string;
+  /** Note: its icon (PDF /Name; default Comment). */
+  noteIcon?: import('./noteIcons').NoteIcon;
+  /** Image: the untouched picture when a mask or re-encoding changed `image`, the mask colour, and the stored encoding. */
+  imageSource?: string;
+  mask?: import('./imageMask').ImageMask;
+  imageEncoding?: 'zip' | 'jpeg';
   /** Scale captured from the page when the measurement was made. */
   scale?: Scale;
   /** Depth in scale units (ft or m): volume, or wall area for lengths. */
@@ -169,6 +215,8 @@ export interface Markup {
   slope?: { unit: 'pitch' | 'degree' | 'grade'; value: number };
   /** Rise/Drop added to a length, in scale units (piping, conduit). */
   rise?: number;
+  /** Length / Dimension: the line sits this far (page points) beside the measured points, joined by leader lines (PDF /LL; sign = side). */
+  leader?: number;
   /** Holes cut out of an Area or Volume measurement. */
   cutouts?: Cutout[];
   /** Layer (optional content group) the markup is on: its id from src/pdf/layers.ts. */
@@ -184,16 +232,28 @@ export interface Markup {
   link?: { uri?: string; page?: number; file?: string; dest?: string };
   /** Stamp: the small line under the title (default: author and date). */
   subtitle?: string;
+  /** Stamp: its border (default: a rounded rectangle). */
+  stampBorder?: 'none' | 'rect' | 'rounded';
   /** Markups sharing a group id move and select together (Revu Group). */
   groupId?: string;
   /** Locked markups cannot be moved, resized or deleted (Revu Lock). */
   locked?: boolean;
+  /** Hidden markups (Edit > Hide) are not drawn; PDF /F Hidden flag. */
+  hidden?: boolean;
+  /** Rotation in degrees (counter-clockwise) of a box shape: rectangle, ellipse, text boxes, stamps, images (see model/rotate.ts). */
+  rotation?: number;
   /** Legend settings (Legend markups). */
   legend?: import('./legend').LegendDef;
   /** Replies to this markup (PDF: /Text annotations with /IRT to it). */
   replies?: Reply[];
   /** Member of a Sequence: the tool's id, its run and this markup's value. */
   seq?: { id: string; run: number; n: number };
+  /** How a measurement shows: caption, segment values, centroid, own units. */
+  display?: import('./measureDisplay').MeasureDisplay;
+  /** Capture (Revu): photos embedded in the markup, as JPEG data URLs. */
+  capture?: { name: string; data: string }[];
+  /** The Tool Chest tool this markup was made with (Update Tool Set Item on Reuse); not saved. */
+  toolId?: string;
   /** Markups List Checkmark column. */
   checked?: boolean;
   /** Values of the document's custom columns, by column id. */
@@ -224,7 +284,15 @@ export interface ToolPreset {
 }
 
 /** A named tool set in the Tool Chest. */
-export interface ToolSet { id: string; name: string; tools: ToolPreset[] }
+export interface ToolSet {
+  id: string; name: string; tools: ToolPreset[];
+  /** Tool Chest > Hide: the set stays but is not shown. */
+  hidden?: boolean;
+  /** Symbol (icons only) or Detail (a table) view. */
+  view?: 'symbol' | 'detail';
+  /** Set Scale: Drawing mode tools are resized for the page's scale so they keep their real size. */
+  scale?: Scale;
+}
 
 export interface Toggles {
   snap: boolean;
@@ -243,4 +311,28 @@ export interface Toggles {
   penMode: boolean;
   /** Window > Navigation Bar (F4): page navigation in the status bar. */
   navBar: boolean;
+  /** View > Show Cover Page in Side-by-Side: the first page alone, then pairs 2-3, 4-5… */
+  coverPage?: boolean;
+  /** View > Dark Mode. */
+  darkMode?: boolean;
+  /** View > Disable Line Weights: markups drawn with a 1 px line whatever the zoom. */
+  noLineWeights?: boolean;
+  /** View > Always Show Reply Indicators: a bubble on markups that have replies. */
+  replyIndicators?: boolean;
+  /** Form > Highlight Fields off: form fields drawn without their blue tint. */
+  noFieldHighlight?: boolean;
+  /** Window > Auto-Hide Tabs: the document tabs fold away until the pointer reaches the top of the workspace. */
+  autoHideTabs?: boolean;
+  /** Window > Auto-Hide Panel Access: a side bar folds away while its panel is hidden; hover brings it back. */
+  autoHidePanelAccess?: boolean;
+  /** View > Synchronize Document: both panes of a split view show the same page index. */
+  syncDoc?: boolean;
+  /** Markups List > Hide Markups: every markup off the drawing and the printout, until turned off. */
+  hideMarkups?: boolean;
+  /** Measurements > Snap Orthogonal: measurements limited to 45° steps (Shift does it temporarily). */
+  snapOrtho?: boolean;
+  /** Measurements > Highlight Viewports off: viewports are not tinted while measuring. */
+  noViewportHighlight?: boolean;
+  /** Measurements > Show Measurement Tools off: no tool buttons in the panel. */
+  noMeasureTools?: boolean;
 }

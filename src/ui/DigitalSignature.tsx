@@ -6,14 +6,30 @@ import { create } from 'zustand';
 import { useApp, type DocState } from '../model/store';
 import { certificateInfo, signPdf, verifySignatures, type SignatureInfo, type Signer } from '../pdf/sign';
 import { pickFile } from './toolActions';
+import { FilesRow, batchHint, targets } from './filesRow';
 import { readCertificates } from '../pdf/sign';
 import { saveTrust, toTrusted, trustBytes, useTrust } from '../model/trust';
 
-interface Pending { p12: Uint8Array; password: string; reason: string; location: string; signer: Signer; tsa?: string }
-export const useDigitalSign = create<{ open: boolean; field?: string; pending: Pending | null; tick: number }>(() => ({ open: false, pending: null, tick: 0 }));
+interface Pending { p12: Uint8Array; password: string; reason: string; location: string; signer: Signer; tsa?: string; certify?: 1 | 2 | 3 }
+export const useDigitalSign = create<{ open: boolean; field?: string; certify?: boolean; pending: Pending | null; tick: number }>(() => ({ open: false, pending: null, tick: 0 }));
 
 /** Open the Sign Document dialog, optionally for an empty signature field. */
-export const openSignDialog = (field?: string) => useDigitalSign.setState({ open: true, field, pending: null });
+export const openSignDialog = (field?: string, certify = false) => useDigitalSign.setState({ open: true, field, certify, pending: null });
+
+/** Document > Validate Signatures: re-check every signature and show the Signatures panel. */
+export async function validateSignatures() {
+  const app = useApp.getState();
+  const d = app.docs.find((x) => x.id === app.activeId);
+  if (!d) return;
+  app.setStatus('Validating signatures…');
+  try {
+    const list = await verifySignatures(d.bytes, trustBytes());
+    app.setPanels({ left: 'signatures' });
+    useDigitalSign.setState((x) => ({ tick: x.tick + 1 }));
+    const valid = list.filter((x) => x.status === 'valid').length;
+    app.setStatus(list.length ? `Validate Signatures: ${valid} of ${list.length} valid${list.some((x) => x.certified) ? ' (document certified)' : ''}` : 'This document has no digital signatures.');
+  } catch (e) { app.setStatus(`Validate Signatures failed: ${(e as Error).message}`); }
+}
 
 /** True while waiting for the user to drag the visible signature's box. */
 export const awaitingSignatureBox = () => !!useDigitalSign.getState().pending;
@@ -23,10 +39,25 @@ export async function signActive(p: Pending, place: { page?: number; rect?: [num
   const app = useApp.getState();
   useDigitalSign.setState({ pending: null });
   const ok = await app.transformDoc(
-    (_lib, bytes) => signPdf(bytes, { p12: p.p12, password: p.password, reason: p.reason || undefined, location: p.location || undefined, tsa: p.tsa || undefined, ...place }),
-    `Signed by ${p.signer.name}. Save (Ctrl+S) to write the signed file.`,
+    (_lib, bytes) => signPdf(bytes, { p12: p.p12, password: p.password, reason: p.reason || undefined, location: p.location || undefined, tsa: p.tsa || undefined, certify: p.certify, hash: app.prefs.hashAlgorithm, ...place }),
+    `${p.certify ? 'Certified' : 'Signed'} by ${p.signer.name}. Save (Ctrl+S) to write the signed file.`,
   );
   if (ok) useDigitalSign.setState((x) => ({ tick: x.tick + 1 }));
+}
+
+/** Batch > Sign & Seal: an invisible signature on every open document. */
+async function signAll(p: Pending, active: DocState) {
+  const app = useApp.getState();
+  let n = 0;
+  for (const d of targets(active, true)) {
+    const ok = await app.transformDoc(
+      (_lib, bytes) => signPdf(bytes, { p12: p.p12, password: p.password, reason: p.reason || undefined, location: p.location || undefined, tsa: p.tsa || undefined, certify: p.certify, hash: app.prefs.hashAlgorithm }),
+      `Signed by ${p.signer.name}`, undefined, undefined, d.id,
+    );
+    if (ok) n++;
+  }
+  useDigitalSign.setState((x) => ({ tick: x.tick + 1 }));
+  app.setStatus(`Sign & Seal: ${n} document${n === 1 ? '' : 's'} signed by ${p.signer.name}. Save All (Ctrl+F2) to write them.`);
 }
 
 /** The visible signature's box was dragged (page space) on `page`. */
@@ -47,6 +78,8 @@ export function DigitalSignDialog() {
 
 function SignForm({ doc }: { doc: DocState }) {
   const field0 = useDigitalSign((x) => x.field);
+  const certify0 = useDigitalSign((x) => x.certify);
+  const [certify, setCertify] = useState<0 | 1 | 2 | 3>(certify0 ? 2 : 0);
   const [file, setFile] = useState<{ name: string; bytes: Uint8Array } | null>(null);
   const [password, setPassword] = useState('');
   const [signer, setSigner] = useState<Signer | null>(null);
@@ -56,6 +89,7 @@ function SignForm({ doc }: { doc: DocState }) {
   const [tsa, setTsa] = useState(() => { try { return localStorage.getItem('cyantakeoff:tsa') ?? ''; } catch { return ''; } });
   const empty = doc.loaded.fields.filter((f) => f.type === 'signature' && !f.value);
   const [where, setWhere] = useState<string>(field0 ? `field:${field0}` : empty.length ? `field:${empty[0].name}` : 'box');
+  const [all, setAll] = useState(() => batchHint.take());
   const close = () => useDigitalSign.setState({ open: false });
   const check = async () => {
     setError(''); setSigner(null);
@@ -64,9 +98,10 @@ function SignForm({ doc }: { doc: DocState }) {
   };
   const sign = async () => {
     if (!file || !signer) return;
-    const p: Pending = { p12: file.bytes, password, reason, location, signer, tsa: tsa.trim() };
+    const p: Pending = { p12: file.bytes, password, reason, location, signer, tsa: tsa.trim(), certify: certify || undefined };
     try { localStorage.setItem('cyantakeoff:tsa', tsa.trim()); } catch { /* ignore */ }
     close();
+    if (all) { await signAll(p, doc); return; }
     if (where === 'box') {
       useDigitalSign.setState({ pending: p });
       useApp.getState().setTool('form-signature');
@@ -77,7 +112,7 @@ function SignForm({ doc }: { doc: DocState }) {
   return (
     <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>
       <div className="modal" role="dialog" aria-label="Sign Document" onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') close(); }}>
-        <div className="modal-title">Sign Document</div>
+        <div className="modal-title">{certify0 ? 'Certify Document' : 'Sign Document'}</div>
         <div className="scale-dialog">
           <div className="form-row"><span>Digital ID</span>
             <button onClick={async () => {
@@ -96,6 +131,16 @@ function SignForm({ doc }: { doc: DocState }) {
           <div className="form-row"><span>Reason</span><input aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Approved" /></div>
           <div className="form-row"><span>Location</span><input aria-label="Location" value={location} onChange={(e) => setLocation(e.target.value)} /></div>
           <div className="form-row"><span>Timestamp server</span><input aria-label="Timestamp server" value={tsa} onChange={(e) => setTsa(e.target.value)} placeholder="https://… (optional, RFC 3161)" /></div>
+          <div className="form-row"><span>Certify</span>
+            <select aria-label="Certification" value={certify} onChange={(e) => setCertify(Number(e.target.value) as 0)}>
+              <option value={0}>Not certified (ordinary signature)</option>
+              <option value={1}>Certified: no changes allowed</option>
+              <option value={2}>Certified: form filling and signing allowed</option>
+              <option value={3}>Certified: form filling, signing and markups allowed</option>
+            </select>
+          </div>
+          <FilesRow all={all} setAll={setAll} />
+          {all && <p className="muted small">Sign &amp; Seal: every open document gets an invisible signature (place a seal stamp first with Batch &gt; Apply Stamp).</p>}
           <div className="form-row"><span>Appearance</span>
             <select aria-label="Signature placement" value={where} onChange={(e) => setWhere(e.target.value)}>
               {empty.map((f) => <option key={f.name} value={`field:${f.name}`}>In field "{f.name}"</option>)}

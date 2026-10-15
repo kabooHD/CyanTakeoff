@@ -21,6 +21,10 @@ describe('Revu 20 measure.pdf', async () => {
     expect(pageScales[0]!.factor * 72).toBeCloseTo(4, 4); // 1/4" = 1'-0" -> 4 ft per paper inch
   });
 
+  it('reads the leader offset (/LL) of the Length', () => {
+    expect(byType('length')[0]?.markup.leader).toBe(10);
+  });
+
   it('imports the measurement types CyanTakeoff edits', () => {
     expect(byType('length')).toHaveLength(1);
     expect(byType('area')).toHaveLength(1);

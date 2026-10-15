@@ -165,3 +165,13 @@ function dp(pts: Pt[], tol: number): Pt[] {
   if (max <= tol) return [a, b];
   return [...dp(pts.slice(0, idx + 1), tol).slice(0, -1), ...dp(pts.slice(idx), tol)];
 }
+
+/** Seed every cell within `r` cells of (cx, cy): the Fill Size (a bigger cursor crosses small gaps). */
+export function seedDisc(flood: Flood, cx: number, cy: number, r: number) {
+  const rr = Math.max(0, r);
+  for (let dy = -Math.ceil(rr); dy <= Math.ceil(rr); dy++) {
+    for (let dx = -Math.ceil(rr); dx <= Math.ceil(rr); dx++) {
+      if (dx * dx + dy * dy <= rr * rr + 1e-9) flood.seed(cx + dx, cy + dy);
+    }
+  }
+}

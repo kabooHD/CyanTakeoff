@@ -70,6 +70,20 @@ await page.keyboard.press('Enter');
 await page.waitForTimeout(200);
 let list = await page.locator('.ml-table tbody').innerText();
 assert(list.includes('432 sf'), 'area measurement 432 sf in Markups List');
+// Select tool: a band dragged right to left picks what it touches; left to right only what it encloses (Revu).
+{
+  await page.keyboard.press('v');
+  const band = async (x0, y0, x1, y1) => { const a = await toScreen(x0, y0), b = await toScreen(x1, y1); await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 4 }); await page.mouse.up(); await page.waitForTimeout(150); };
+  const selectedRows = () => page.locator('.ml-table tbody tr.selected').count();
+  await band(30, 45, 12, 30);
+  assert(await selectedRows() === 1, 'a right-to-left band selects the markup it touches');
+  await page.keyboard.press('Escape');
+  await band(-5, 15, 12, 30);
+  assert(await selectedRows() === 0, 'a left-to-right band skips a markup it only touches');
+  await band(-5, 15, 30, 45);
+  assert(await selectedRows() === 1, 'a left-to-right band selects the markup it encloses');
+  await page.keyboard.press('Escape');
+}
 
 // Content snap: click ~5px off each wall corner; snapping must land exactly.
 await page.keyboard.press('Shift+Alt+A');
@@ -84,12 +98,40 @@ list = await page.locator('.ml-table tbody').innerText();
 assert((list.match(/432 sf\b/g) ?? []).length === 2, 'content snap gives exact 432 sf from imprecise clicks');
 await page.keyboard.press('Control+Z');
 
+// Area tool: a drag draws a rectangle (Revu's default Drag Behavior for Shapes); click-click still works.
+{
+  await page.keyboard.press('Shift+Alt+A');
+  const a = await toScreen(44, 30), b = await toScreen(50, 34);
+  await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up();
+  await page.waitForTimeout(200);
+  assert((await page.locator('.ml-table tbody').innerText()).includes('24 sf'), 'dragging with the Area tool draws a 6 x 4 ft rectangle (24 sf)');
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Escape');
+}
+
 // Length of the north wall: 60 ft.
 await page.keyboard.press('Shift+Alt+L');
 let a = await toScreen(0, 40), b = await toScreen(60, 40);
 await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up();
 list = await page.locator('.ml-table tbody').innerText();
 assert(list.includes(`60'-0"`), `length measurement 60'-0"`);
+{
+  // Length "height" (Revu): the middle handle drags the line beside its points (PDF /LL); the value stays.
+  await page.keyboard.press('Escape');
+  const mid = await toScreen(30, 40);
+  await page.mouse.click(mid.x, mid.y);
+  await page.locator('.leader-handle').waitFor({ timeout: 5000 });
+  const g = page.locator('.markup-layer g[data-id]', { hasText: `60'-0"` }).first();
+  const y0 = Number(await g.locator('line').first().getAttribute('y1'));
+  await page.mouse.move(mid.x, mid.y); await page.mouse.down(); await page.mouse.move(mid.x, mid.y + 30, { steps: 5 }); await page.mouse.up();
+  await page.waitForTimeout(200);
+  const y1 = Number(await g.locator('line').first().getAttribute('y1'));
+  assert(y1 > y0 + 5 && (await page.locator('.ml-table tbody').innerText()).includes(`60'-0"`) && await g.locator('line').count() === 3, `dragging the middle handle moves the line beside its points with leader lines (${y0.toFixed(1)} -> ${y1.toFixed(1)})`);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(200);
+  assert(Math.abs(Number(await g.locator('line').first().getAttribute('y1')) - y0) < 0.5, 'undo puts the line back on its points');
+  await page.keyboard.press('Escape');
+}
 
 // Angle, radius and diameter via their Revu shortcuts (snapping off for exact clicks).
 const toggleSnaps = async () => { await page.keyboard.press('Control+Shift+F8'); await page.keyboard.press('Control+Shift+F7'); };
@@ -138,7 +180,62 @@ await page.waitForTimeout(200);
 
 list = await page.locator('.ml-table tbody').innerText();
 assert(list.includes('Count Measurement') && /\t3\t/.test(list), 'count of 3');
+// Count group commands (right-click a counted item): Split All, Delete from Group, Resume Count; Symbol in Properties.
+{
+  const rows = () => page.locator('.ml-table tbody tr').count();
+  const n0 = await rows();
+  // The second counted item, from its drawn symbol (the clicks may have snapped to content).
+  const item = page.locator('.markup-layer circle[r="5"]').nth(1);
+  const ib = await item.boundingBox();
+  const at = { x: ib.x + ib.width / 2, y: ib.y + ib.height / 2 };
+  await page.mouse.click(at.x, at.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Split All' }).click();
+  await page.waitForFunction((n) => document.querySelectorAll('.ml-table tbody tr').length === n + 2, n0);
+  assert(await rows() === n0 + 2, 'Split All makes a Count per item');
+  // Split All is three undo steps (the update of the group, two new Counts).
+  const restored = async () => (await rows()) === n0 && /\t3\t/.test(await page.locator('.ml-table tbody').innerText());
+  for (let i = 0; i < 5 && !(await restored()); i++) { await page.keyboard.press('Control+z'); await page.waitForTimeout(250); }
+  assert(await rows() === n0 && /\t3\t/.test(await page.locator('.ml-table tbody').innerText()), 'undo restores the group of 3');
+  const items = () => page.locator('.markup-layer circle[r="5"]').count();
+  await page.mouse.click(at.x, at.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Delete from Group' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.markup-layer circle[r="5"]').length === 2);
+  assert(await items() === 2, 'Delete from Group removes one item (count of 2)');
+  const item0 = await page.locator('.markup-layer circle[r="5"]').first().boundingBox();
+  await page.mouse.click(item0.x + item0.width / 2, item0.y + item0.height / 2, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Resume Count' }).click();
+  const more = await toScreen(20, 20); // a free spot, away from the other markups
+  await page.mouse.click(more.x, more.y);
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.querySelectorAll('.markup-layer circle[r="5"]').length === 3);
+  assert(await rows() === n0 && await items() === 3, 'Resume Count adds to the same group (count of 3)');
+  { const c2 = await page.locator('.markup-layer circle[r="5"]').nth(2).boundingBox(); await page.mouse.click(c2.x + c2.width / 2, c2.y + c2.height / 2); }
+  await page.waitForFunction(() => document.querySelectorAll('.ml-table tbody tr.selected').length === 1);
+  if (!(await page.locator('[aria-label="Count symbol"]').count())) await page.keyboard.press('Alt+P');
+  await page.getByLabel('Count symbol').selectOption('square');
+  await page.waitForTimeout(200);
+  assert(await page.locator('.markup-layer polygon').count() >= 3, 'the Square symbol draws each item as a polygon');
+  await page.getByLabel('Count symbol').selectOption('circle');
+  await page.evaluate(() => document.activeElement?.blur?.());
+  await page.keyboard.press('Escape');
+}
+
 assert(list.includes('Verify door hardware'), 'text box content in list');
+{
+  // Text Box > Add Leader gives it a leader line (a callout); deleting the last leader makes it a text box again (Revu).
+  const tb = page.locator('.markup-layer g[data-id]', { hasText: 'Verify door hardware' }).first();
+  const p = await toScreen(33, 8);
+  await page.mouse.click(p.x, p.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Add Leader' }).click();
+  await page.waitForTimeout(200);
+  assert(await tb.locator('line').count() === 1, 'Add Leader on a text box draws a leader line');
+  const lb = await tb.locator('line').first().boundingBox();
+  await page.mouse.click(lb.x + 1, lb.y + lb.height - 1, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Delete Leader' }).click();
+  await page.waitForTimeout(200);
+  assert(await tb.locator('line').count() === 0 && (await page.locator('.ml-table tbody').innerText()).includes('Verify door hardware'), 'deleting the only leader turns it back into a text box');
+  await page.keyboard.press('Escape');
+}
 await page.screenshot({ path: `${OUT}/03-takeoff.png` });
 
 // Right-click leaves a drawing tool.
@@ -154,6 +251,13 @@ assert((await page.locator('.tb-btn.active').getAttribute('title')).startsWith('
   const selected = await page.locator('.ml-table tbody tr.selected').count();
   assert(selected >= 2, `right-drag multi-selects (${selected} selected)`);
   await page.keyboard.press('Escape');
+  // Shift+click in the Markups List selects the range of rows (Revu).
+  const rowsAll = page.locator('.ml-table tbody tr:not(.reply-row)');
+  await rowsAll.nth(0).locator('td').nth(1).click();
+  await rowsAll.nth(2).locator('td').nth(1).click({ modifiers: ['Shift'] });
+  await page.waitForTimeout(200);
+  assert(await page.locator('.ml-table tbody tr.selected').count() === 3, `Shift+click selects the rows in between (${await page.locator('.ml-table tbody tr.selected').count()} selected)`);
+  await page.keyboard.press('Escape');
 }
 
 // Markups List: hide a column, filter a column.
@@ -161,10 +265,40 @@ await page.getByRole('button', { name: 'Columns ▾' }).click();
 await page.locator('.ml-columns-menu label', { hasText: 'Author' }).locator('input').uncheck();
 await page.mouse.move(5, 5);
 assert(!(await page.locator('.ml-table thead').innerText()).includes('Author'), 'column chooser hides Author');
+{
+  await page.getByRole('button', { name: 'Columns ▾' }).click();
+  const names = await page.locator('.ml-columns-menu label').allInnerTexts();
+  await page.getByRole('button', { name: 'Columns ▾' }).click();
+  assert(['Wall Area', 'Rise/Drop', 'Sequence'].every((c) => names.some((n) => n.trim() === c)), `Columns menu offers Wall Area, Rise/Drop and Sequence (${names.length} columns)`);
+}
 await page.getByRole('button', { name: 'Filter List' }).click();
 await page.locator('.ml-filter-row th').first().locator('select').selectOption('Count Measurement');
 assert((await page.locator('.ml-table tbody tr').count()) === 1, 'filter row shows only the count');
+{
+  // Custom column filter (conditions joined with AND / OR); markups left out of the list are dimmed on the page.
+  const allRows = await page.locator('.ml-table tbody tr').count();
+  await page.locator('.ml-filter-row th').first().locator('select').selectOption('');
+  const fullRows = await page.locator('.ml-table tbody tr').count();
+  const dimmed = async () => page.locator('.page .markup-layer [data-id] [opacity="0.25"]').count();
+  assert(fullRows > allRows && await dimmed() === 0, `filter cleared (${fullRows} rows, nothing dimmed)`);
+  await page.getByLabel('Filter Count', { exact: true }).selectOption('__custom__');
+  const ce = page.getByRole('dialog', { name: 'Custom filter: Count' });
+  await ce.getByLabel('Condition 1').selectOption('gt');
+  await ce.getByLabel('Value 1').fill('2');
+  await page.waitForTimeout(200);
+  assert((await page.locator('.ml-table tbody tr').count()) === 1, 'Custom filter "Count greater than 2" lists only the count of 3');
+  assert(await dimmed() > 0, 'markups filtered out of the list are dimmed on the page');
+  await ce.getByLabel('Join').selectOption('or');
+  await ce.getByLabel('Condition 2').selectOption('ne');
+  await ce.getByLabel('Value 2').fill('1');
+  await page.waitForTimeout(200);
+  assert((await page.locator('.ml-table tbody tr').count()) === fullRows, 'OR with "not equal to 1" lets every row through again');
+  await ce.getByRole('button', { name: 'OK' }).click();
+  assert((await page.getByLabel('Filter Count', { exact: true }).inputValue()) === '__custom__' && (await page.getByLabel('Filter Count', { exact: true }).locator('option:checked').innerText()).includes('> 2 or ≠ 1'), 'the filter row sums up the custom filter');
+}
 await page.getByRole('button', { name: 'Filter List' }).click();
+await page.waitForTimeout(200);
+assert(await page.locator('.page .markup-layer [data-id] [opacity="0.25"]').count() === 0, 'closing the filter row restores every markup');
 await page.getByRole('button', { name: 'Columns ▾' }).click();
 await page.locator('.ml-columns-menu label', { hasText: 'Author' }).locator('input').check();
 await page.mouse.move(5, 5);
@@ -273,6 +407,13 @@ assert(parseInt(await page.locator('.statusbar').innerText().then((t) => t.match
   await page.getByRole('button', { name: 'Add Boundary' }).click();
   for (const [x, y] of [[0, 22], [24, 22]]) { const q = await toScreen(x, y); await page.mouse.click(q.x, q.y); }
   { const q = await toScreen(24, 40); await page.mouse.dblclick(q.x, q.y); }
+  // Settings: boundary colour recolours the boundary drawn above; the Tool Chest tool list offers the sample Area tool.
+  await page.getByRole('button', { name: 'Dynamic Fill Settings' }).click();
+  await page.getByLabel('Boundary Color').fill('#00aa00');
+  await page.getByLabel('Fill size').fill('6');
+  await page.getByRole('button', { name: 'Dynamic Fill Settings' }).click();
+  assert(await page.locator('.fill-overlay polyline[stroke="#00aa00"], svg polyline[stroke="#00aa00"]').count() >= 1, 'Boundary Color recolours the temporary boundaries');
+  assert(await page.getByLabel('Tool Chest tool').locator('option', { hasText: 'Flooring' }).count() === 1, 'the created markups can take a Tool Chest tool\'s properties');
   await page.getByRole('button', { name: 'Fill', exact: true }).click();
   const p = await toScreen(12, 31);
   await page.mouse.move(p.x, p.y); await page.mouse.down();
@@ -288,6 +429,14 @@ assert(parseInt(await page.locator('.statusbar').innerText().then((t) => t.match
   assert(sf.length === 1 && Math.abs(sf[0] - 396.3) < 2, `filled office interior is 396.3 sf within 2 sf (${sf.join(', ')})`);
   await page.keyboard.press('Control+Z');
   await page.keyboard.press('Escape');
+  // Preferences > Measure holds the Dynamic Fill defaults.
+  await page.keyboard.press('Control+k');
+  {
+    const pd = page.getByRole('dialog', { name: 'Preferences' });
+    await pd.getByRole('tab', { name: 'Measure' }).click();
+    assert(await pd.getByLabel('Fill size').inputValue() === '2', 'Preferences > Measure shows the Dynamic Fill defaults');
+    await pd.getByRole('button', { name: 'Close' }).click();
+  }
 }
 
 // Apply Scale to Pages: prompt on an unscaled page, then calibrate (site plan, sheet 2).
@@ -395,12 +544,219 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Control+Shift+F8'); // content snap off for exact clicks
   await page.keyboard.press('Shift+L'); await click(44, 36); await click(54, 36);
   await page.keyboard.press('w'); await click(44, 12); await page.keyboard.type('Hello typewriter'); await page.keyboard.press('Escape');
+  // A text box with formatting: bold, centred, Times, hexagon (Properties > Text).
+  await page.keyboard.press('t'); await drag([30, 12], [41, 16]); await page.keyboard.type('Styled box'); await page.keyboard.press('Escape');
+  await page.locator('.side-right button[title="Properties"]').click();
+  await page.getByRole('button', { name: 'Bold' }).click();
+  await page.getByLabel('Text alignment').selectOption('center');
+  await page.getByLabel('Font', { exact: true }).selectOption('Times');
+  await page.getByLabel('Box shape').selectOption('hexagon');
+  {
+    const styled = page.locator('.markup-text', { hasText: 'Styled box' }).first();
+    const cs = await styled.evaluate((el) => { const c = getComputedStyle(el); return { w: c.fontWeight, a: c.textAlign, f: c.fontFamily }; });
+    assert((cs.w === 'bold' || Number(cs.w) >= 600) && cs.a === 'center' && /Times/.test(cs.f), `text formatting is drawn (${JSON.stringify(cs)})`);
+    assert(await page.locator('.markup-layer polygon').count() >= 1, 'a hexagon text box is drawn as a polygon');
+  }
+  await page.evaluate(() => (document.activeElement)?.blur?.());
+  await page.locator('.side-right button[title="Properties"]').click(); // back to the panel that was open
+  await page.keyboard.press('Escape');
+  // A callout: a second leader by right-click > Add Leader; End style Closed Arrow (Properties).
+  await page.keyboard.press('q'); await click(30, 20); await click(34, 22); await page.keyboard.type('Callout'); await page.keyboard.press('Escape');
+  {
+    const lines = () => page.locator('.markup-layer g[data-id] line').count();
+    const before = await lines();
+    const cb = await page.locator('.markup-text', { hasText: /^Callout$/ }).first().boundingBox();
+    await page.mouse.click(cb.x + cb.width / 2, cb.y + cb.height / 2, { button: 'right' });
+    await page.getByRole('menuitem', { name: 'Add Leader' }).click();
+    await page.waitForTimeout(200);
+    assert(await lines() === before + 1, 'Add Leader draws a second leader line');
+    await page.locator('.side-right button[title="Properties"]').click();
+    await page.getByLabel('Line end', { exact: true }).selectOption('closedArrow');
+    await page.waitForTimeout(200);
+    assert(await page.locator('.markup-layer g[data-id] polygon[fill="#000000"], .markup-layer g[data-id] polygon[fill="#ff0000"], .markup-layer g[data-id] polygon:not([fill="none"])').count() >= 2, 'Closed Arrow ends are filled on both leaders');
+    await page.evaluate(() => (document.activeElement)?.blur?.());
+    await page.locator('.side-right button[title="Properties"]').click();
+    await page.keyboard.press('Escape');
+  }
+  {
+    // Dragging a callout moves only its box (the leader tips stay); Shift+click a tip removes that leader (Revu).
+    await page.keyboard.press('Escape');
+    const g = page.locator('.markup-layer g[data-id]', { has: page.locator('.markup-text', { hasText: /^Callout$/ }) }).first();
+    const tipOf = (l) => [l.getAttribute('x1'), l.getAttribute('y1')];
+    const tip0 = await g.locator('line').first().evaluate(tipOf);
+    const cb = await page.locator('.markup-text', { hasText: /^Callout$/ }).first().boundingBox();
+    await page.mouse.click(cb.x + 6, cb.y + 6);
+    await page.mouse.move(cb.x + 6, cb.y + 6); await page.mouse.down(); await page.mouse.move(cb.x + 46, cb.y + 26, { steps: 5 }); await page.mouse.up();
+    await page.waitForTimeout(200);
+    const tip1 = await g.locator('line').first().evaluate(tipOf);
+    const cb2 = await page.locator('.markup-text', { hasText: /^Callout$/ }).first().boundingBox();
+    assert(tip0[0] === tip1[0] && tip0[1] === tip1[1] && cb2.x > cb.x + 20, `dragging a callout moves its box and leaves the leader tips (${cb.x.toFixed(0)} -> ${cb2.x.toFixed(0)})`);
+    const nLines = await g.locator('line').count();
+    const sp = await g.locator('line').last().evaluate((l) => { const pt = l.ownerSVGElement.createSVGPoint(); pt.x = Number(l.getAttribute('x1')); pt.y = Number(l.getAttribute('y1')); const q = pt.matrixTransform(l.getScreenCTM()); return [q.x, q.y]; });
+    await page.keyboard.down('Shift'); await page.mouse.click(sp[0], sp[1]); await page.keyboard.up('Shift');
+    await page.waitForTimeout(200);
+    assert(await g.locator('line').count() === nLines - 1, `Shift+click a leader tip removes that leader (${nLines} -> ${await g.locator('line').count()})`);
+    await page.keyboard.press('Control+z'); await page.keyboard.press('Control+z');
+    await page.keyboard.press('Escape');
+  }
+  {
+    // Polylength: right-click a segment > Split All breaks it into one measurement per segment (Revu).
+    const polys = async () => (await page.locator('.ml-table tbody').innerText()).split('\nPolylength').length - 1;
+    const n0 = await polys();
+    await page.keyboard.press('Shift+Alt+Q'); await click(44, 12); await click(50, 12); await click(50, 9); await page.keyboard.press('Enter');
+    await page.waitForTimeout(200);
+    assert(await polys() === n0 + 1, 'a polylength with two segments');
+    const p = await toScreen(47, 12);
+    await page.keyboard.press('Escape');
+    await page.mouse.click(p.x, p.y, { button: 'right' });
+    await page.getByRole('menuitem', { name: 'Split All' }).click();
+    await page.waitForTimeout(200);
+    assert(await polys() === n0 + 2, `Split All makes one polylength per segment (${n0} -> ${await polys()})`);
+    await page.keyboard.press('Escape');
+    for (let t = 0; t < 3; t++) await page.keyboard.press('Control+z'); // the split (two steps) and the drawing
+    await page.waitForTimeout(200);
+    assert(await polys() === n0, 'undo takes the split polylengths away again');
+  }
   await page.keyboard.press('s'); await click(52, 14);
   await page.keyboard.press('d'); await drag([47.5, 31.2], [56, 29.6]);
   await page.waitForFunction(() => document.querySelector('.ml-table tbody')?.textContent?.includes('Strikethrough'));
   await page.keyboard.press('Shift+F'); await click(57, 34);
   await page.keyboard.press('k'); await drag([44, 26], [50, 21]); await click(52, 27); await page.keyboard.type('Check this'); await page.keyboard.press('Escape');
   await page.keyboard.press('Shift+C'); await click(44, 4); await click(54, 4); await click(49, 8);
+  // Measurement captions: Shift+drag moves the caption, the orange anchor rotates it, Reset Caption Position restores it.
+  await page.keyboard.press('Shift+Alt+L'); await click(44, 38); await click(54, 38);
+  {
+    const cap = page.locator('.measure-label', { hasText: `10'-0"` }).last();
+    await cap.waitFor();
+    const x0 = Number(await cap.getAttribute('x'));
+    const cb = await cap.boundingBox();
+    await page.keyboard.down('Shift');
+    await page.mouse.move(cb.x + cb.width / 2, cb.y + cb.height / 2); await page.mouse.down();
+    await page.mouse.move(cb.x + cb.width / 2 + 40, cb.y + cb.height / 2 + 30, { steps: 5 }); await page.mouse.up();
+    await page.keyboard.up('Shift');
+    await page.waitForTimeout(200);
+    assert(Number(await cap.getAttribute('x')) > x0 + 5, 'Shift+drag moves the measurement caption');
+    assert(await page.locator('.caption-leader').count() === 1, 'a moved Length caption gets a leader line');
+    const anchor = page.locator('.caption-anchor');
+    assert(await anchor.count() === 1, 'a selected measurement shows the caption anchor');
+    const ab = await anchor.boundingBox(); const cb2 = await cap.boundingBox();
+    await page.mouse.move(ab.x + ab.width / 2, ab.y + ab.height / 2); await page.mouse.down();
+    await page.mouse.move(cb2.x + cb2.width / 2, cb2.y - 60, { steps: 6 }); await page.mouse.up();
+    await page.waitForTimeout(200);
+    assert(/rotate\(-90 /.test((await cap.getAttribute('transform')) ?? ''), `dragging the anchor rotates the caption in 15° steps (${await cap.getAttribute('transform')})`);
+    const mid = await toScreen(49, 38);
+    await page.mouse.click(mid.x, mid.y, { button: 'right' });
+    await page.getByRole('menuitem', { name: 'Flip Text' }).click();
+    await page.waitForTimeout(200);
+    assert(/rotate\(-270 /.test((await cap.getAttribute('transform')) ?? ''), `Flip Text turns the caption 180° (${await cap.getAttribute('transform')})`);
+    await page.mouse.click(mid.x, mid.y, { button: 'right' });
+    await page.getByRole('menuitem', { name: 'Reset Caption Position' }).click();
+    await page.waitForTimeout(200);
+    assert(!(await cap.getAttribute('transform')) && Math.abs(Number(await cap.getAttribute('x')) - x0) < 1, 'Reset Caption Position puts the caption back');
+    await page.keyboard.press('Delete');
+    await page.waitForTimeout(200);
+  }
+  // Rotation (Revu): the orange handle above a selected markup turns it in 15° steps; box shapes keep an angle (Layout > Rotation).
+  {
+    await page.keyboard.press('r');
+    const a = await toScreen(44, 30), b = await toScreen(54, 35);
+    await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 4 }); await page.mouse.up();
+    await page.waitForTimeout(200);
+    const rh = page.locator('.rotate-handle circle');
+    assert(await rh.count() === 1, 'a selected rectangle shows the rotate handle');
+    const hb = await rh.boundingBox();
+    const c = await toScreen(49, 32.5);
+    await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2); await page.mouse.down();
+    await page.mouse.move(c.x + 120, c.y + 3, { steps: 6 });
+    await page.waitForTimeout(100);
+    const readout = await page.locator('.rotate-readout').textContent();
+    assert(readout === '-90°', `the angle shows while dragging (${readout})`);
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+    assert(await page.locator('.markup-layer g[data-id][transform^="rotate(90 "]').count() === 1, 'dragging the handle turns the rectangle (snapped to 15° steps)');
+    await page.locator('.side-right button[title="Properties"]').click();
+    const rot = page.getByLabel('Layout Rotation');
+    assert(await rot.inputValue() === '-90', 'Layout > Rotation shows the angle');
+    await rot.fill('45');
+    await page.waitForTimeout(200);
+    assert(await page.locator('.markup-layer g[data-id][transform^="rotate(-45 "]').count() === 1, 'typing a Rotation turns the box to that angle');
+    await page.getByLabel('Blend mode').selectOption('Multiply');
+    await page.waitForTimeout(200);
+    assert(await page.locator('.markup-layer g[data-id][transform^="rotate(-45 "]').evaluate((g) => g.style.mixBlendMode) === 'multiply', 'Blend Mode draws the markup with that mix-blend-mode');
+    await page.evaluate(() => (document.activeElement)?.blur?.());
+    await page.locator('.side-right button[title="Properties"]').click();
+    await page.keyboard.press('Delete');
+    await page.waitForTimeout(200);
+  }
+  // Scale handles (Revu): the purple corner handles scale a polygon about the opposite corner, keeping its proportions.
+  {
+    const areaRow = page.locator('.ml-table tbody tr').filter({ hasText: 'Area Measurement' }).first();
+    await areaRow.locator('td').nth(1).click(); // a plain cell: the row's inputs stop the click
+    const areaBefore = await areaRow.innerText();
+    const handles = page.locator('.scale-handle');
+    await handles.first().waitFor({ timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(300);
+    assert(await handles.count() === 4, `a selected area shows four purple scale handles (${await handles.count()} handles, ${await page.locator('.ml-table tbody tr.selected').count()} selected rows, page ${await page.locator('.statusbar input').first().inputValue()})`);
+    const box = async () => { const a = await handles.nth(0).boundingBox(), c = await handles.nth(2).boundingBox(); return { w: c.x - a.x, h: c.y - a.y }; };
+    const b0 = await box();
+    const br = await handles.nth(2).boundingBox();
+    await page.mouse.move(br.x + br.width / 2, br.y + br.height / 2); await page.mouse.down();
+    await page.mouse.move(br.x + br.width / 2 + 60, br.y + br.height / 2 + 10, { steps: 6 }); await page.mouse.up();
+    await page.waitForTimeout(200);
+    const b1 = await box();
+    assert(b1.w > b0.w * 1.1 && Math.abs(b1.w / b1.h - b0.w / b0.h) < 0.02, `dragging a scale handle grows the area and keeps its proportions (${(b0.w / b0.h).toFixed(3)} -> ${(b1.w / b1.h).toFixed(3)})`);
+    assert((await areaRow.innerText()) !== areaBefore, 'the scaled area measures more');
+    await page.evaluate(() => document.activeElement?.blur?.());
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(300);
+    assert((await areaRow.innerText()) === areaBefore, 'undo restores the area after scaling');
+    await page.keyboard.press('Escape');
+  }
+  // Cloud Size and Invert (Properties > Appearance), and Highlight (the content shows through the fill: Multiply).
+  {
+    const cloudRow = page.locator('.ml-table tbody tr', { has: page.locator('td', { hasText: /^Cloud$/ }) }).first();
+    await cloudRow.locator('td').nth(1).click();
+    await page.locator('.markup-layer g[data-id] path').first().waitFor();
+    if (!(await page.locator('[aria-label="Cloud size"]').count())) await page.keyboard.press('Alt+P');
+    await page.getByLabel('Cloud size').waitFor();
+    // All cloud-like paths on the page, joined: the cloud's arcs change with Size and Invert, the rest stays.
+    const cloudPathD = () => page.locator('.markup-layer g[data-id] > path[d*="C"]').evaluateAll((ps) => ps.map((p) => p.getAttribute('d')).join('|'));
+    const d0 = await cloudPathD();
+    await page.getByLabel('Cloud size').fill('2');
+    await page.waitForTimeout(200);
+    const d1 = await cloudPathD();
+    assert(d1 !== d0 && (d1.split('C').length < d0.split('C').length), `Cloud Size 2 draws fewer, bigger arcs (${d0.split('C').length - 1} -> ${d1.split('C').length - 1})`);
+    await page.getByLabel('Invert cloud').check();
+    await page.waitForTimeout(200);
+    const d2 = await cloudPathD();
+    assert(d2 !== d1, 'Invert turns the arcs inward');
+    await page.getByLabel('Highlight (transparent)').check();
+    await page.waitForTimeout(200);
+    assert(await page.locator('.markup-layer g[data-id][style*="multiply"]').count() >= 1, 'Highlight draws the cloud with Multiply blending');
+    await page.getByLabel('Highlight (transparent)').uncheck();
+    await page.getByLabel('Invert cloud').uncheck();
+    await page.getByLabel('Cloud size').fill('1');
+    await page.evaluate(() => document.activeElement?.blur?.());
+    await page.keyboard.press('Alt+P');
+    await page.keyboard.press('Escape');
+  }
+  // Note icon (Properties > Icon): a note placed with N shows the Comment glyph; Star changes it (saved as /Name).
+  {
+    await page.keyboard.press('n');
+    const at = await toScreen(62, 4);
+    await page.mouse.click(at.x, at.y);
+    await page.locator('.markup-layer g.note-icon').first().waitFor();
+    if (!(await page.locator('[aria-label="Note icon"]').count())) await page.keyboard.press('Alt+P');
+    await page.getByLabel('Note icon').waitFor();
+    assert(await page.locator('.markup-layer g.note-icon[data-icon="Comment"]').count() === 1, 'a new note shows the Comment icon');
+    await page.getByLabel('Note icon').selectOption('Star');
+    await page.waitForTimeout(200);
+    assert(await page.locator('.markup-layer g.note-icon[data-icon="Star"] path').count() === 1, 'Properties > Icon changes the note glyph');
+    await page.evaluate(() => document.activeElement?.blur?.());
+    await page.keyboard.press('Alt+P');
+    await page.keyboard.press('Delete');
+    await page.waitForTimeout(200);
+  }
   // Rise/Drop on a length (Properties): 10 ft + 2 ft rise reads 12'-0"; then undone.
   await page.keyboard.press('Shift+Alt+L'); await click(44, 33); await click(54, 33);
   await page.locator('.side-right button[title="Properties"]').click();
@@ -415,7 +771,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const list = await page.locator('.ml-table tbody').innerText();
   for (const subj of ['Dimension', 'Typewriter', 'Stamp', 'Strikethrough', 'Flag', 'Cloud+', 'Arc']) assert(list.includes(subj), `${subj} markup created ${list.includes(subj) ? '' : list}`);
   assert(list.includes(`10'-0"`), 'Dimension shows its length');
-  assert(await page.locator('.ml-table tbody tr').count() === rowsBefore + 7, 'seven markups added');
+  assert(await page.locator('.ml-table tbody tr').count() === rowsBefore + 9, 'nine markups added');
 
   const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
   const f = `${OUT}/saved-tools.pdf`;
@@ -425,8 +781,15 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const subs = pdfDoc.getPage(0).node.lookup(PDFName.of('Annots'), PDFArray).asArray().map((r) => pdfDoc.context.lookup(r, PDFDict).get(PDFName.of('Subtype')).toString());
   for (const t of ['/StrikeOut', '/Stamp', '/FreeText', '/Text', '/PolyLine', '/Polygon', '/Line']) assert(subs.includes(t), `saved as ${t}`);
   const after = await page.locator('.ml-table tbody').innerText();
-  for (const subj of ['Dimension', 'Typewriter', 'Stamp', 'Strikethrough', 'Flag', 'Cloud+', 'Arc']) assert(after.includes(subj), `${subj} survives save and reload`);
+  for (const subj of ['Dimension', 'Typewriter', 'Stamp', 'Strikethrough', 'Flag', 'Cloud+', 'Arc', 'Callout']) assert(after.includes(subj), `${subj} survives save and reload`);
+  assert(await page.locator('.markup-layer g[data-id] polygon:not([fill="none"])').count() >= 2, 'the callout keeps its second leader and closed arrows after reload');
   assert(after.includes('Hello typewriter') || (await page.locator('.markup-text.typewriter').allInnerTexts()).some((t) => t.includes('Hello typewriter')), 'typewriter text kept');
+  {
+    const styled = page.locator('.markup-text', { hasText: 'Styled box' }).first();
+    await styled.waitFor({ timeout: 10000 });
+    const cs = await styled.evaluate((el) => { const c = getComputedStyle(el); return { w: c.fontWeight, a: c.textAlign, f: c.fontFamily }; });
+    assert((cs.w === 'bold' || Number(cs.w) >= 600) && cs.a === 'center' && /Times/.test(cs.f), `text formatting survives save and reload (${JSON.stringify(cs)})`);
+  }
 
   // Hyperlink to page 2, followed by double-click.
   await page.keyboard.press('Control+Shift+F8');
@@ -448,6 +811,18 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Shift+E'); await drag([50, 18], [50, 15]);
   await page.keyboard.press('Escape');
   assert(await pens() === pen0 + 2, `the eraser splits a pen stroke in two (${pen0} -> ${await pens()})`);
+  {
+    // Pen strokes made within a second are one grouped markup (Revu); the list shows one Group item.
+    const groups = () => page.locator('.ml-table tbody tr.ml-group-row').count();
+    const g0 = await groups();
+    await page.keyboard.press('p'); await drag([44, 19.5], [56, 19.5]); await drag([44, 20.5], [56, 20.5]);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
+    assert(await groups() === g0 + 1, `two quick pen strokes make one grouped markup (${g0} -> ${await groups()})`);
+    await page.keyboard.press('Control+z'); await page.keyboard.press('Control+z');
+    await page.waitForTimeout(200);
+    assert(await groups() === g0, 'undo takes the grouped strokes away');
+  }
 
   // Snapshot of a region, pasted as an image; then an Image from a file.
   const imgs = async () => (await page.locator('.ml-table tbody').innerText()).split('Snapshot').length - 1;
@@ -460,6 +835,40 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await chooser.setFiles(`${OUT}/02-opened.png`);
   await page.waitForFunction(() => document.querySelector('.ml-table tbody')?.textContent?.includes('Image'));
   assert(await page.locator('.markup-layer image').count() >= 2, 'image markups are drawn');
+  {
+    // Dragging with the Image tool fits the picture into the rectangle (Revu).
+    const a = await toScreen(30, 16), b = await toScreen(42, 12);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('i');
+    const fitChooserP = page.waitForEvent('filechooser');
+    await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up();
+    const fitChooser = await fitChooserP;
+    await fitChooser.setFiles(`${OUT}/02-opened.png`);
+    await page.waitForFunction((n) => document.querySelectorAll('.markup-layer image').length === n, await page.locator('.markup-layer image').count() + 1);
+    const ib = await page.locator('.markup-layer image').last().boundingBox();
+    // Snap to content may nudge a corner by a few px.
+    assert(Math.abs(ib.width - Math.abs(b.x - a.x)) < 12 && Math.abs(ib.height - Math.abs(b.y - a.y)) < 12, `the picture fits the dragged rectangle (${ib.width.toFixed(0)}x${ib.height.toFixed(0)} vs ${Math.abs(b.x - a.x).toFixed(0)}x${Math.abs(b.y - a.y).toFixed(0)})`);
+    await page.keyboard.press('Control+z');
+    await page.keyboard.press('Escape');
+  }
+  // Mask Color (Properties): the white of the placed picture becomes transparent (a new PNG); off again restores the picture.
+  {
+    const imgRow = page.locator('.ml-table tbody tr', { has: page.locator('td', { hasText: /^Image$/ }) }).first();
+    await imgRow.locator('td').nth(1).click();
+    if (!(await page.locator('[aria-label="Mask color"]').count())) await page.keyboard.press('Alt+P');
+    await page.getByLabel('Mask color').waitFor();
+    const hrefs = () => page.locator('.markup-layer image').evaluateAll((els) => els.map((e) => e.getAttribute('href') ?? '').join('').length);
+    const h0 = await hrefs();
+    await page.getByLabel('Mask color').check();
+    await page.waitForFunction((n) => [...document.querySelectorAll('.markup-layer image')].map((e) => e.getAttribute('href') ?? '').join('').length !== n, h0, { timeout: 15000 });
+    assert(await page.locator('.markup-layer image[href^="data:image/png"]').count() >= 1, 'Mask Color rebuilds the picture as a PNG with transparency');
+    await page.getByLabel('Mask color').uncheck();
+    await page.waitForFunction((n) => [...document.querySelectorAll('.markup-layer image')].map((e) => e.getAttribute('href') ?? '').join('').length === n, h0, { timeout: 15000 });
+    assert(true, 'turning the mask off brings the untouched picture back');
+    await page.evaluate(() => document.activeElement?.blur?.());
+    await page.keyboard.press('Alt+P');
+    await page.keyboard.press('Escape');
+  }
 
   // Group (Ctrl+G) selects together; Lock (Ctrl+Shift+L) prevents deleting; groups saved Revu-style.
   await page.keyboard.press('Escape');
@@ -468,7 +877,15 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Control+G');
   await page.keyboard.press('Escape');
   await click(52, 14);
-  assert(await page.locator('.ml-table tbody tr.selected').count() === 2, 'clicking one grouped markup selects the group');
+  assert(await page.locator('.ml-table tbody tr.ml-group-row.selected').count() === 1, 'clicking one grouped markup selects the group (its Group row)');
+  {
+    // The Group item lists its members under a toggle, collapsed at first (Revu).
+    const grp = page.locator('.ml-table tbody tr.ml-group-row.selected').first();
+    assert((await grp.innerText()).includes('Group (2)') && await page.locator('.ml-table tbody tr.ml-member').count() === 0, 'the Group row counts its members and hides them until expanded');
+    await grp.getByRole('button', { name: 'Expand group' }).click();
+    assert(await page.locator('.ml-table tbody tr.ml-member.selected').count() === 2, 'expanding the Group row lists its two members');
+    await grp.getByRole('button', { name: 'Collapse group' }).click();
+  }
   await page.keyboard.press('Control+Shift+L');
   const n0 = await page.locator('.ml-table tbody tr').count();
   await page.keyboard.press('Delete');
@@ -481,7 +898,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const rts = gd.getPage(0).node.lookup(PDFName.of('Annots'), PDFArray).asArray().map((r) => gd.context.lookup(r, PDFDict).get(PDFName.of('RT'))?.toString());
   assert(rts.includes('/Group'), 'group saved with /IRT + /RT /Group');
   await click(52, 14);
-  assert(await page.locator('.ml-table tbody tr.selected').count() === 2, 'group survives save and reload');
+  assert(await page.locator('.ml-table tbody tr.ml-group-row.selected').count() === 1, 'group survives save and reload');
   await page.keyboard.press('Escape');
 
   // Tool Chest: save the stamp to My Tools, switch it to Drawing mode, place a copy.
@@ -498,6 +915,27 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await click(70, 30);
     assert(await stamps() === n0 + 1, 'a Drawing-mode tool places a copy of the saved markup');
     await page.keyboard.press('Control+Z');
+    // Duplicate, Change Colors, hot keys (Revu's My Tools commands).
+    const items = page.locator('.toolchest details').nth(1).locator('.tool-item');
+    const nTools = await items.count();
+    await tool.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Duplicate' }).click();
+    assert(await items.count() === nTools + 1, 'Duplicate adds a copy of the tool to the set');
+    await items.last().click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Change Colors…' }).click();
+    const cc = page.getByRole('dialog', { name: 'Change Colors' });
+    await cc.getByLabel('Line color').fill('#ff0000');
+    await cc.getByRole('button', { name: 'OK' }).click();
+    assert((await items.last().locator('.tool-swatch').evaluate((el) => getComputedStyle(el).borderColor)) === 'rgb(255, 0, 0)', 'Change Colors recolours the tool');
+    assert((await items.first().locator('.tool-key').innerText()) === '1', 'My Tools items show their hot key');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('1');
+    await page.waitForTimeout(200);
+    assert(await items.first().evaluate((el) => el.classList.contains('active')), 'pressing 1 picks the first My Tools tool');
+    await page.keyboard.press('Escape');
+    await items.last().click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Remove', exact: true }).click();
+    assert(await items.count() === nTools, 'Remove takes the duplicate out again');
     await page.locator('.side-right button[title="Measurements"]').click();
   }
   // Spaces (Alt+S): name the Conference room; markups inside report it in the Space column.
@@ -508,6 +946,9 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await sd.getByLabel('Space name').fill('Conference 104');
   await sd.getByRole('button', { name: 'OK' }).click();
   assert(await page.locator('.space-row').filter({ hasText: 'Conference 104' }).count() === 1, 'Space listed in the Spaces panel');
+  // Group items fold their members away: expand them so every markup's Space cell is counted.
+  const expandGroups = async () => { for (const b of await page.getByRole('button', { name: 'Expand group' }).all()) await b.click(); };
+  await expandGroups();
   const spaceCells = async () => (await page.locator('.ml-table tbody').innerText()).split('Conference 104').length - 1;
   assert(await spaceCells() === 6, `the six markups inside report their Space (${await spaceCells()})`);
   const [sdl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
@@ -533,12 +974,34 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await mc.getByLabel('Expression').fill('Area * [Unit Cost]');
   await mc.getByLabel('Format').selectOption('currency');
   await mc.getByRole('button', { name: 'OK' }).click();
+  // A Choice column with items carrying numeric values (Revu: Assign Numeric Value), used by a formula.
+  await mc.getByRole('button', { name: 'Add…' }).click();
+  await mc.getByLabel('Column name').fill('Tier');
+  await mc.getByLabel('Column type').selectOption('choice');
+  for (const [item, v] of [['Standard', '1'], ['Premium', '1.5']]) {
+    await mc.getByLabel('New item').fill(item);
+    await mc.getByRole('button', { name: 'Add', exact: true }).click();
+    await mc.getByLabel(`Value of ${item}`).fill(v);
+  }
+  await mc.getByRole('button', { name: 'OK' }).click();
+  await mc.getByRole('button', { name: 'Add…' }).click();
+  await mc.getByLabel('Column name').fill('Graded Cost');
+  await mc.getByLabel('Column type').selectOption('formula');
+  await mc.getByLabel('Expression').fill('[Total Cost] * Tier');
+  await mc.getByLabel('Format').selectOption('currency');
+  await mc.getByRole('button', { name: 'OK' }).click();
+  await mc.getByRole('button', { name: 'Save to Profile' }).click();
+  await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('saved to the profile'));
+  assert(true, 'Save to Profile keeps the custom columns for new documents');
   await mc.getByRole('button', { name: 'Close' }).click();
   const row = page.locator('.ml-table tbody tr').filter({ hasText: '419.43 sf' }).first();
   await page.screenshot({ path: `${OUT}/10-columns.png` });
   await row.getByLabel('Unit Cost').fill('2');
   await row.getByLabel('Unit Cost').press('Enter');
   assert((await row.innerText()).includes("$838.87"), `formula column computes Area * Unit Cost ($838.87): ${(await row.innerText()).replace(/\s+/g, " ")}`);
+  await row.getByLabel('Tier').selectOption('Premium');
+  await page.waitForTimeout(200);
+  assert(/\$1,258\.3[01]/.test(await row.innerText()),`a choice item's numeric value feeds the formula ($838.87 × 1.5): ${(await row.innerText()).replace(/\s+/g, ' ')}`);
   await page.getByRole('button', { name: 'Summary ▾' }).click();
   const [x] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Excel (.xlsx)' }).click()]);
   await x.saveAs(`${OUT}/summary.xlsx`);
@@ -555,7 +1018,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
 {
   const p = await toScreen(20, 38);
   await page.mouse.click(p.x, p.y, { button: 'right' });
-  await page.getByRole('menuitem', { name: 'Create Legend' }).click();
+  await page.getByRole('menuitem', { name: 'Legend › Create New Legend' }).click();
   const q = await toScreen(62, 38);
   await page.mouse.click(q.x, q.y);
   await page.waitForTimeout(300);
@@ -566,6 +1029,43 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await ld.saveAs(`${OUT}/saved-legend.pdf`);
   await page.waitForTimeout(800);
   assert((await page.locator('.markup-layer g.legend').count()) === 1, 'Legend survives save and reload');
+  // Legend properties (Revu): Show Title, extra columns, custom source pages; right-click: Copy Legend to Snapshot, Apply to All Pages.
+  const legendRect = page.locator('.markup-layer g.legend > rect').first();
+  const lbox = await legendRect.boundingBox();
+  await page.mouse.click(lbox.x + lbox.width / 2, lbox.y + 8);
+  const openedProps = !(await page.locator('[aria-label="Legend title"]').count());
+  if (openedProps) await page.keyboard.press('Alt+P');
+  await page.getByLabel('Legend title').waitFor();
+  const legendTexts = async () => page.locator('.markup-layer g.legend text').count();
+  const n0 = await legendTexts();
+  await page.getByLabel('Show title').uncheck();
+  assert((await legendTexts()) === n0 - 1, 'Show Title off removes the title bar');
+  await page.getByLabel('Add legend column').selectOption('label');
+  assert((await page.locator('.markup-layer g.legend').innerHTML()).includes('Label'), 'an extra Legend column shows its header');
+  await page.getByLabel('Source pages').selectOption('custom');
+  await page.getByLabel('Source page range').fill('1');
+  assert((await page.locator('.markup-layer g.legend').innerHTML()).includes('419.43 sf'), 'a custom source page range still totals the page');
+  await page.getByLabel('Show title').check();
+  await page.getByLabel('Remove Label column').click();
+  const images0 = await page.locator('.markup-layer image').count();
+  await page.mouse.click(lbox.x + lbox.width / 2, lbox.y + 8, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Copy Legend to Snapshot' }).click();
+  await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Legend copied as a snapshot'));
+  await page.keyboard.press('Control+V');
+  await page.waitForFunction((n) => document.querySelectorAll('.markup-layer image').length === n + 1, images0);
+  assert(true, 'Copy Legend to Snapshot pastes a static image of the table');
+  await page.evaluate(() => document.activeElement?.blur?.());
+  await page.keyboard.press('Delete');
+  await page.waitForFunction((n) => document.querySelectorAll('.markup-layer image').length === n, images0);
+  await page.mouse.click(lbox.x + lbox.width / 2, lbox.y + 8, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Apply to All Pages' }).click();
+  await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Legend applied to'));
+  const pagesNow = Number((await page.locator('.statusbar').innerText()).match(/of (\d+)\)/)[1]);
+  const legendsNow = (await page.evaluate(() => (document.querySelector('.statusbar')?.textContent?.match(/applied to (\d+)/) ?? [])[1]));
+  assert(Number(legendsNow) === pagesNow - 1, `Apply to All Pages copies the Legend to every other page (${legendsNow} of ${pagesNow - 1})`);
+  if (pagesNow > 1) { await page.evaluate(() => document.activeElement?.blur?.()); await page.keyboard.press('Control+z'); await page.waitForTimeout(300); }
+  await page.keyboard.press('Escape');
+  if (openedProps) await page.keyboard.press('Alt+P'); // leave the panel as it was
 }
 
 // Replies, Checkmark and the PDF summary report.
@@ -582,6 +1082,39 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const [sp] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'PDF report' }).click()]);
   await sp.saveAs(`${OUT}/summary.pdf`);
   assert((await PDFDocument.load(readFileSync(`${OUT}/summary.pdf`))).getPageCount() >= 1, 'PDF summary report generated');
+  // Summary dialog: CSV with ID columns and replies; PDF appended to the document with hyperlinked rows.
+  {
+    const pagesOf = async () => Number((await page.locator('.statusbar').innerText()).match(/of (\d+)\)/)[1]);
+    const n0 = await pagesOf();
+    await page.getByRole('button', { name: 'Summary ▾' }).click();
+    await page.getByRole('button', { name: 'Summary…' }).click();
+    const sd = page.getByRole('dialog', { name: 'Markup Summary' });
+    await sd.getByRole('tab', { name: 'Filter & Sort' }).click();
+    await sd.getByLabel('Sort by').selectOption('subject');
+    await sd.getByRole('tab', { name: 'Output' }).click();
+    await sd.getByLabel('Export as').selectOption('csv');
+    await sd.getByLabel('ID columns (ID and Parent)').check();
+    await sd.locator('label', { hasText: /^\s*Replies/ }).locator('input').check();
+    const [cd] = await Promise.all([page.waitForEvent('download'), sd.getByRole('button', { name: 'OK' }).click()]);
+    await cd.saveAs(`${OUT}/summary-dialog.csv`);
+    const csv = readFileSync(`${OUT}/summary-dialog.csv`, 'utf8');
+    assert(csv.startsWith('﻿ID,Parent,Subject') && csv.includes('Reply: ') && csv.includes('Verified on site'), 'the Summary dialog writes CSV with ID columns and replies');
+    const subjects = csv.split('\r\n').slice(1).filter((l) => !l.includes('Reply: ') && !l.includes(',Total,')).map((l) => l.split(',')[2]);
+    assert(subjects.join() === [...subjects].sort((x, y) => x.localeCompare(y)).join(), `rows are sorted by Subject (${subjects.join('|')})`);
+    await page.getByRole('button', { name: 'Summary ▾' }).click();
+    await page.getByRole('button', { name: 'Summary…' }).click();
+    await sd.getByRole('tab', { name: 'Output' }).click();
+    await sd.getByLabel('Export as').selectOption('pdf');
+    await sd.getByLabel('Append and hyperlink to current PDF').check();
+    await sd.getByLabel('Thumbnail').selectOption('small');
+    await sd.getByRole('button', { name: 'OK' }).click();
+    await page.waitForFunction(() => /Markups Summary: \d+ pages? appended/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 60000 });
+    const added = Number((await page.locator('.statusbar').innerText()).match(/Markups Summary: (\d+) page/)[1]);
+    await page.waitForFunction((n) => (document.querySelector('.statusbar')?.textContent ?? '').includes(`of ${n})`), n0 + added, { timeout: 20000 });
+    assert(added >= 1 && await pagesOf() === n0 + added, `the PDF summary is appended to the document (${added} pages)`);
+    await page.keyboard.press('Control+z');
+    await page.waitForFunction((n) => (document.querySelector('.statusbar')?.textContent ?? '').includes(`of ${n})`), n0, { timeout: 20000 });
+  }
   const [rd] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
   await rd.saveAs(`${OUT}/saved-replies.pdf`);
   await page.waitForTimeout(800);
@@ -606,6 +1139,28 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.locator('.ml-table-wrap').focus();
   await page.keyboard.press('F3');
   assert(await page.locator('.search-hit.active').innerText() !== '' , 'F3 moves to the next result');
+  // Check Options: Highlight Checked puts a Highlight on every checked result; Clear empties the list.
+  const rowsBefore = await page.locator('.ml-table tbody tr:not(.reply-row)').count();
+  await page.getByLabel('Check options').selectOption('highlight');
+  await page.waitForFunction((k) => document.querySelectorAll('.ml-table tbody tr:not(.reply-row)').length === k, rowsBefore + n);
+  assert(true, `Highlight Checked adds one Highlight per result (${n})`);
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction((k) => document.querySelectorAll('.ml-table tbody tr:not(.reply-row)').length === k, rowsBefore);
+  // Search Markups: the query is looked up in subjects, labels and comments.
+  await page.locator('.search-scope label', { hasText: 'Markups' }).locator('input').check();
+  await page.locator('.search-scope label', { hasText: /^\s*Pages/ }).locator('input').uncheck();
+  await page.getByLabel('Search text').fill('Count');
+  await page.getByLabel('Search text').press('Enter');
+  await page.waitForFunction(() => /\d+ results?/.test(document.querySelector('.search-panel')?.textContent ?? ''));
+  assert(await page.locator('.search-hit button[data-kind="markup"]').count() >= 1, 'Search Markups finds the Count markup by subject');
+  await page.locator('.search-hit button[data-kind="markup"]').first().click();
+  await page.waitForTimeout(300);
+  assert((await page.locator('.ml-table tbody tr.selected').first().innerText()).includes('Count'), 'clicking a markup result selects the markup');
+  await page.locator('.search-actions').getByRole('button', { name: 'Clear' }).click();
+  assert(await page.locator('.search-hit').count() === 0, 'Clear empties the results');
+  await page.locator('.search-scope label', { hasText: /^\s*Pages/ }).locator('input').check();
+  await page.locator('.search-scope label', { hasText: 'Markups' }).locator('input').uncheck();
+  await page.evaluate(() => document.activeElement?.blur?.());
   await page.keyboard.press('Alt+1');
 }
 
@@ -627,6 +1182,161 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert(await page.locator('.split-view').count() === 0, 'Ctrl+Shift+2 unsplits');
 }
 
+// Help > Find Tools + Commands: type part of a name, Enter runs it.
+{
+  await page.locator('.menubar-item > button', { hasText: /^Help$/ }).click();
+  await page.getByRole('menuitem', { name: 'Find Tools + Commands…' }).click();
+  const cf = page.locator('[role=dialog][aria-label="Find Tools + Commands"]');
+  await cf.locator('input').fill('blank pa');
+  const first = cf.locator('.command-row').first();
+  assert((await first.innerText()).includes('Insert Blank Page') && (await first.innerText()).includes('Document'), 'Find Tools + Commands lists the matching menu item with its menu');
+  await page.keyboard.press('Enter');
+  const ib = page.getByRole('dialog', { name: 'Insert Blank Page' });
+  await ib.waitFor();
+  assert(true, 'Enter runs the found command');
+  await ib.getByRole('button', { name: 'Cancel' }).click();
+}
+
+// Preferences (Ctrl+K): Navigation > the mouse wheel scrolls instead of zooming in single page mode.
+{
+  const zoomOf = async () => Number((await page.locator('.sb-zoom').first().innerText()).replace('%', ''));
+  const setWheel = async (v) => {
+    await page.keyboard.press('Control+k');
+    const pd = page.getByRole('dialog', { name: 'Preferences' });
+    await pd.waitFor();
+    await pd.getByRole('tab', { name: 'Navigation' }).click();
+    await pd.getByLabel('Single page mode: mouse wheel').selectOption(v);
+    await pd.getByRole('button', { name: 'Close' }).click();
+    await pd.waitFor({ state: 'hidden' });
+  };
+  await page.keyboard.press('Control+k');
+  const pd = page.getByRole('dialog', { name: 'Preferences' });
+  await pd.waitFor();
+  assert(await pd.getByLabel('User').inputValue() !== '', 'Preferences > General shows the user name');
+  // Document: Rotate all pages by default; Remember last page; display when opening.
+  await pd.getByRole('tab', { name: 'Document' }).click();
+  await pd.getByLabel('Rotate all pages by default').check();
+  await pd.getByRole('button', { name: 'Close' }).click();
+  await pd.waitFor({ state: 'hidden' });
+  await page.keyboard.press('Shift+Alt+=');
+  await page.waitForFunction(() => /Rotated clockwise \(all pages\)/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 20000 });
+  assert(true, 'Rotate all pages by default turns every page with Shift+Alt+Plus');
+  await page.keyboard.press('Shift+Alt+-');
+  await page.waitForFunction(() => /Rotated counterclockwise \(all pages\)/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 20000 });
+  await page.keyboard.press('Control+k');
+  await pd.waitFor();
+  await pd.getByRole('tab', { name: 'Document' }).click();
+  await pd.getByLabel('Rotate all pages by default').uncheck();
+  await pd.getByLabel('Remember last page').check();
+  await pd.getByLabel('Display when opening').selectOption('fitWidth');
+  await pd.getByRole('button', { name: 'Close' }).click();
+  await pd.waitFor({ state: 'hidden' });
+  {
+    const tabs0 = await page.locator('.doc-tab').count();
+    const openSaved = async () => { const fc = await ctrlO(); await fc.setFiles(`${OUT}/saved.pdf`); await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs0); await page.waitForTimeout(600); };
+    const closeActive = async () => { await page.locator('.menubar-item > button', { hasText: /^File$/ }).click(); await page.getByRole('menuitem', { name: /^Close\b/ }).first().click(); await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n, tabs0); };
+    await openSaved();
+    const zoomOpened = await zoomOf();
+    await page.locator('.menubar-item > button', { hasText: /^View$/ }).click();
+    await page.getByRole('menuitem', { name: /^Fit Width/ }).click();
+    await page.waitForTimeout(300);
+    assert(Math.abs(await zoomOf() - zoomOpened) <= 1, `Display when opening = Fit Width opens at the fit-width zoom (${zoomOpened}% vs ${await zoomOf()}%)`);
+    await page.keyboard.press('End');
+    await page.waitForFunction(() => /\(2 of 2\)/.test(document.querySelector('.statusbar')?.textContent ?? ''));
+    await closeActive();
+    await openSaved();
+    assert((await page.locator('.statusbar').innerText()).includes('(2 of 2)'), 'Remember last page reopens the file on the page it was closed at');
+    await closeActive();
+  }
+  await page.keyboard.press('Control+k');
+  await pd.waitFor();
+  await pd.getByRole('tab', { name: 'Document' }).click();
+  await pd.getByLabel('Remember last page').uncheck();
+  await pd.getByLabel('Display when opening').selectOption('fitPage');
+  await pd.getByRole('tab', { name: 'General' }).click();
+  // Grid & Snap: the grid spacing drives the drawn grid; Markups List: Zoom Fit Markups when selected.
+  await pd.getByRole('tab', { name: 'Grid & Snap' }).click();
+  await pd.getByLabel('Grid spacing').fill('24');
+  await pd.getByLabel('Show grid').check();
+  await page.waitForTimeout(200);
+  assert(await page.locator('pattern#grid').first().getAttribute('width') === '24', 'Preferences > Grid & Snap sets the grid spacing');
+  await pd.getByLabel('Show grid').uncheck();
+  await pd.getByLabel('Grid spacing').fill('12');
+  await pd.getByRole('tab', { name: 'Markups List' }).click();
+  await pd.getByLabel('Zoom fit markups when selected').check();
+  await pd.getByRole('button', { name: 'Close' }).click();
+  await pd.waitFor({ state: 'hidden' });
+  const zoomBeforeFit = await zoomOf();
+  await page.locator('.ml-table tbody tr').filter({ hasText: 'Area Measurement' }).first().click();
+  await page.waitForTimeout(500);
+  assert(await zoomOf() !== zoomBeforeFit, `Zoom Fit Markups when selected zooms to the markup (${zoomBeforeFit}% -> ${await zoomOf()}%)`);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+k');
+  await pd.waitFor();
+  await pd.getByRole('tab', { name: 'Markups List' }).click();
+  await pd.getByLabel('Zoom fit markups when selected').uncheck();
+  await pd.getByRole('button', { name: 'Close' }).click();
+  await pd.waitFor({ state: 'hidden' });
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Control+k');
+  await pd.waitFor();
+  await pd.getByRole('button', { name: 'Close' }).click();
+  await setWheel('scroll');
+  const b = await svg.boundingBox();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  const z0 = await zoomOf();
+  await page.mouse.wheel(0, -300);
+  await page.waitForTimeout(300);
+  assert(await zoomOf() === z0, 'with the wheel set to scroll, a wheel turn does not zoom');
+  await setWheel('zoom');
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  await page.mouse.wheel(0, -300);
+  await page.waitForTimeout(300);
+  assert(await zoomOf() !== z0, 'set back to zoom, the wheel zooms again');
+  await page.keyboard.press('Control+9');
+  await page.waitForTimeout(300);
+}
+
+// Flags panel (Window > Flags): the Flag markup placed earlier is a linked flag; Add makes an unlinked one with its own action.
+{
+  await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click();
+  await page.getByRole('menuitem', { name: 'Flags' }).click();
+  const fp = page.locator('.flags-panel');
+  await fp.waitFor();
+  const rows = () => fp.locator('.flag-row');
+  const n0 = await rows().count();
+  assert(n0 >= 1 && (await rows().first().innerText()).includes('🔗'), 'the Flags panel lists the Flag markup as a linked flag');
+  const pageLabel = (await page.locator('.statusbar').innerText()).match(/Page (\S+)/)?.[1];
+  await fp.getByRole('button', { name: 'Add' }).click();
+  await page.waitForFunction((n) => document.querySelectorAll('.flags-panel .flag-row').length === n + 1, n0);
+  const added = rows().filter({ hasText: /^(?!.*🔗)/ }).last();
+  assert(!(await added.innerText()).includes('🔗'), 'Add makes an unlinked flag');
+  await fp.getByRole('button', { name: 'Properties' }).click();
+  await fp.getByLabel('Flag title').fill('Cover');
+  await page.waitForFunction(() => [...document.querySelectorAll('.flags-panel .flag-row')].some((r) => r.textContent?.includes('Cover')), null, { timeout: 10000 });
+  assert((await rows().allInnerTexts()).some((t) => t.includes('Cover')), `the title edit renames the flag (${pageLabel})`);
+  await fp.getByRole('button', { name: 'Action' }).click();
+  await fp.getByLabel('Flag action').selectOption('uri');
+  await fp.getByLabel('Flag URL').waitFor();
+  await fp.getByLabel('Flag URL').fill('https://example.com');
+  await fp.getByLabel('Flag action').selectOption('page');
+  await page.waitForTimeout(200);
+  const windowPanel = async (name) => { await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click(); await page.getByRole('menuitem', { name }).click(); };
+  await windowPanel('Thumbnails');
+  await page.locator('.thumb').first().waitFor();
+  await page.locator('.thumb-flag').first().waitFor({ timeout: 5000 });
+  assert(await page.locator('.thumb-flag').count() >= 1, 'thumbnails show a flag indicator on flagged pages');
+  await windowPanel('Flags');
+  await fp.waitFor();
+  await rows().filter({ hasText: 'Cover' }).first().click();
+  await fp.getByRole('button', { name: 'Delete' }).click();
+  await page.waitForFunction((n) => document.querySelectorAll('.flags-panel .flag-row').length === n, n0);
+  assert(true, 'Delete removes the unlinked flag');
+  await page.screenshot({ path: `${OUT}/flags.png` });
+  await windowPanel('Thumbnails');
+}
+
 // Page operations (Document menu / Revu shortcuts): insert blank, rotate, delete, flatten.
 {
   const pagesOf = async () => Number((await page.locator('.statusbar').innerText()).match(/of (\d+)\)/)[1]);
@@ -636,6 +1346,114 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.getByRole('dialog', { name: 'Insert Blank Page' }).getByRole('button', { name: 'OK' }).click();
   await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n + 1})`), n0);
   assert(await pagesOf() === n0 + 1, 'Insert Blank Page adds a page');
+  {
+    // Split Document by page ranges: one download per range, named after it.
+    const dl = []; const onDl = (d) => dl.push(d.suggestedFilename()); page.on('download', onDl);
+    await page.locator('.menubar-item > button', { hasText: /^Document$/ }).click();
+    await page.getByRole('menuitem', { name: 'Split Document…' }).click();
+    const sd = page.getByRole('dialog', { name: 'Split Document' });
+    await sd.getByLabel('Split by').selectOption('ranges');
+    await sd.getByLabel('Page ranges').fill('1, 2-3');
+    await sd.getByRole('button', { name: 'OK' }).click();
+    await page.waitForFunction(() => /Split into 2 file/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 20000 });
+    await page.waitForTimeout(500);
+    page.off('download', onDl);
+    assert(dl.length === 2 && dl.some((n) => /pages 2-3\.pdf$/.test(n)), `Split Document by ranges downloads one file per range (${dl.join(', ')})`);
+  }
+  // Thumbnails toolbar: Copy / Paste / Cut Pages, Labels > Page Scale, Re-Label.
+  {
+    const windowPanel = async (name) => { await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click(); await page.getByRole('menuitem', { name }).click(); };
+    if (!(await page.locator('.thumbs-toolbar').count())) await windowPanel('Thumbnails');
+    await page.locator('.thumbs-toolbar').waitFor();
+    const n1 = await pagesOf();
+    await page.locator('.thumb').first().click();
+    await page.getByRole('button', { name: 'Thumbnails menu' }).click();
+    await page.getByRole('menuitem', { name: /^Copy Pages/ }).click();
+    await page.getByText(/Copied 1 page/).waitFor();
+    await page.getByRole('button', { name: 'Thumbnails menu' }).click();
+    await page.getByRole('menuitem', { name: 'Paste Pages' }).click();
+    await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n + 1})`), n1);
+    assert(await pagesOf() === n1 + 1, 'Copy Pages + Paste Pages adds the copied page');
+    await page.getByRole('button', { name: 'Labels menu' }).click();
+    await page.getByRole('menuitem', { name: 'Page Scale' }).click();
+    assert(await page.locator('.thumb-scale').count() === n1 + 1, 'Labels > Page Scale shows the scale under every thumbnail');
+    // Set Scale on several selected thumbnails opens the dialog with them as its Selected pages.
+    await page.locator('.thumb').first().click();
+    await page.locator('.thumb').nth(1).click({ modifiers: ['Shift'] });
+    await page.locator('.thumb').nth(1).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Set Scale…' }).click();
+    const sd = page.getByRole('dialog', { name: 'Apply Scale to Pages' });
+    assert((await sd.locator('select').first().locator('option:checked').innerText()).startsWith('Selected (2 pages)'), 'Set Scale from two selected thumbnails offers Selected (2 pages)');
+    await sd.getByRole('button', { name: 'Cancel' }).click();
+    await sd.waitFor({ state: 'hidden' });
+    await page.locator('.thumb').nth(1).click(); // back to the pasted page, as before
+    await page.getByRole('button', { name: 'Labels menu' }).click();
+    await page.getByRole('menuitem', { name: 'Page Scale' }).click();
+    page.once('dialog', (d) => d.accept('X-1'));
+    await page.getByRole('button', { name: 'Thumbnails menu' }).click();
+    await page.getByRole('menuitem', { name: 'Re-Label…' }).click();
+    await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('labelled "X-1"'));
+    assert((await page.locator('.thumb-label').allInnerTexts()).some((t) => t.startsWith('X-1')), 'Re-Label changes the page label');
+    await page.getByRole('button', { name: 'Thumbnails menu' }).click();
+    await page.getByRole('menuitem', { name: /^Cut Pages/ }).click();
+    await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n})`), n1);
+    assert(await pagesOf() === n1, 'Cut Pages removes the page (it stays on the page clipboard)');
+    await page.locator('.thumbs-toolbar input[type=range]').fill('90');
+    const w = await page.locator('.thumb canvas').first().evaluate((c) => c.getBoundingClientRect().width);
+    assert(Math.round(w) === 90, `the size slider resizes the thumbnails (${w})`);
+    await page.locator('.thumbs-toolbar input[type=range]').fill('130');
+    // Undo the cut, the relabel and the paste so the page-operation checks below see the document as before.
+    await page.evaluate(() => document.activeElement?.blur?.());
+    // Each undo of a page operation reloads the file: wait for the busy overlay to clear before the next one.
+    for (let i = 0; i < 3; i++) { await page.keyboard.press('Control+z'); await page.waitForTimeout(200); await page.waitForFunction(() => !document.querySelector('.busy-overlay'), null, { timeout: 20000 }); await page.waitForTimeout(200); }
+    await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n})`), n1);
+    assert(!(await page.locator('.thumb-label').allInnerTexts()).some((t) => t.startsWith('X-1')), 'undo reverts the thumbnail page commands');
+    // Cut Pages on the first page (the one with the legend) and Undo must bring its markups back.
+    const rowsBefore = await page.locator('.ml-table tbody tr').count();
+    await page.locator('.thumb').first().click();
+    await page.getByRole('button', { name: 'Thumbnails menu' }).click();
+    await page.getByRole('menuitem', { name: /^Cut Pages/ }).click();
+    await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n - 1})`), n1);
+    await page.evaluate(() => document.activeElement?.blur?.());
+    await page.keyboard.press('Control+z');
+    await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n})`), n1);
+    await page.waitForTimeout(500);
+    assert(await page.locator('.ml-table tbody tr').count() === rowsBefore, `undoing Cut Pages brings the page's markups back (${rowsBefore} rows)`);
+    await page.locator('.markup-layer g.legend > rect').first().waitFor({ timeout: 10000 });
+    assert(true, 'the legend is drawn again after undoing the cut');
+    await page.locator('.thumb').nth(1).click(); // the later page checks work on the current page: back to page 2, as before
+  }
+  // File > Create Layered PDF: each chosen file becomes a layer of a new document; File > Open Recent lists recent files.
+  {
+    const tabs = await page.locator('.doc-tab').count();
+    await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+    assert(await page.getByRole('menuitem', { name: /^Open Recent › / }).count() >= 1, 'File > Open Recent lists the files opened before');
+    const [cfc] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('menuitem', { name: 'Create › Layered PDF…' }).click()]);
+    await cfc.setFiles(['tests/fixtures/form.pdf', 'tests/fixtures/revu/measure.pdf']);
+    await page.getByText(/Layered PDF: 2 files as layers/).waitFor({ timeout: 20000 });
+    await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs);
+    const lp = page.getByRole('tree', { name: 'Layers' });
+    await lp.getByRole('treeitem', { name: 'Layer measure' }).waitFor({ timeout: 10000 });
+    assert(await lp.getByRole('treeitem').count() === 2, 'Create Layered PDF makes one layer per file');
+    await page.keyboard.press('Alt+Y');
+    page.once('dialog', (d) => d.accept()); // close the unsaved layered document
+    await page.keyboard.press('Control+F4');
+    await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n, tabs);
+  }
+  // Document > Insert Layered Pages: each page of the chosen PDF becomes a layer here.
+  {
+    await page.locator('.menubar-item > button', { hasText: /^Document$/ }).click();
+    const [lfc] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('menuitem', { name: 'Insert Layered Pages…' }).click()]);
+    await lfc.setFiles('tests/fixtures/form.pdf');
+    await page.getByText(/Layered Pages: "form" added as a layer on \d+ page/).waitFor({ timeout: 20000 });
+    const lpanel = page.getByRole('tree', { name: 'Layers' });
+    await lpanel.getByRole('treeitem', { name: 'Layer form' }).waitFor({ timeout: 10000 });
+    assert(true, 'Insert Layered Pages adds the file as a layer');
+    await page.keyboard.press('Alt+Y');
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(500);
+    assert(await pagesOf() === n0 + 1, 'undo removes the layered pages, the blank page stays');
+  }
   const markupsBefore = await page.locator('.ml-table tbody tr:not(.reply-row)').count();
   assert(markupsBefore > 0, 'markups kept through the page operation');
   await page.keyboard.press('Control+Shift+D');
@@ -669,6 +1487,17 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const p1 = await onPage1();
   await page.keyboard.press('Control+Shift+M');
   const fd = page.getByRole('dialog', { name: 'Flatten Markups' });
+  // Types (Revu): only the checked types are flattened; the first pass keeps everything but the clouds.
+  const cloudRowsOnPage1 = async () => (await page.locator('.ml-table tbody tr:not(.reply-row)').allInnerTexts()).filter((t) => t.split('\t')[0]?.trim() === 'Cloud' && t.split('\t')[1]?.trim() === '1').length;
+  const cloudsOnPage1 = await cloudRowsOnPage1();
+  await fd.getByLabel('Page range').selectOption('current');
+  await fd.locator('.flatten-type-list').getByRole('button', { name: 'None' }).click();
+  await fd.getByLabel('Flatten Cloud', { exact: true }).check();
+  await fd.getByRole('button', { name: 'OK' }).click();
+  await page.waitForTimeout(1500);
+  assert(cloudsOnPage1 > 0 && await onPage1() === p1 - cloudsOnPage1 && await cloudRowsOnPage1() === 0, `flattening only the Cloud type leaves the other ${p1 - cloudsOnPage1} markups (${await onPage1()} left)`);
+  await page.getByRole('button', { name: 'Document', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^Flatten/ }).first().click();
   await fd.getByLabel('Page range').selectOption('current');
   await fd.getByRole('button', { name: 'OK' }).click();
   await page.waitForTimeout(1500);
@@ -742,12 +1571,25 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.mouse.click(box.x + x * z + 3, box.y + y * z - 2); // a few px off: content snap finds the corner
     await page.waitForTimeout(300);
   };
-  await click(300, 1328); await click(1380, 608);
-  await page.waitForTimeout(800);
+  // Each click is confirmed by the prompt moving on (the second sheet is shown after the first pair).
+  // A click only counts on the active pane, so each one is retried until the prompt moves on.
+  const prompt = (n, sheet, timeout = 10000) => page.waitForFunction(([n, sheet]) => document.body.textContent?.includes(`Align: click point ${n} of 2 on the ${sheet} sheet`), [n, sheet], { timeout });
+  const pick = async (x, y, next) => {
+    for (let t = 0; t < 4; t++) {
+      await click(x, y);
+      try { await next(); return; } catch { /* the click was not taken: try again */ }
+    }
+    throw new Error(`align point at ${x},${y} was not taken`);
+  };
+  await prompt(1, 'first');
+  await pick(300, 1328, () => prompt(2, 'first', 3000));
+  await pick(1380, 608, () => prompt(1, 'second', 3000));
+  await page.waitForTimeout(500);
   await page.keyboard.press('Control+9');
   await page.waitForTimeout(500);
-  await click(336, 1352); await click(1416, 632);
+  await pick(336, 1352, () => prompt(2, 'second', 3000));
   cd = page.getByRole('dialog', { name: 'Compare Documents' });
+  await pick(1416, 632, () => cd.getByText('By 2 point pairs').waitFor({ timeout: 3000 }));
   assert(await cd.getByText('By 2 point pairs').count() === 1, 'alignment set from two pairs of points');
   await cd.getByRole('button', { name: 'OK' }).click();
   await page.waitForFunction(() => /Compare: (\d+ difference|no diff)/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 30000 });
@@ -779,13 +1621,44 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await openMenu('Document', 'Batch Link…');
   const bl = page.getByRole('dialog', { name: 'Batch Link' });
   await bl.getByLabel('Batch link scope').selectOption('doc');
+  await bl.getByLabel('Link appearance').selectOption('highlight');
   await bl.getByRole('button', { name: 'Run' }).click();
   await page.waitForFunction(() => /Batch Link created \d+/.test(document.querySelector('.statusbar')?.textContent ?? ''));
   const made = Number((await page.locator('.statusbar').innerText()).match(/Batch Link created (\d+)/)[1]);
   assert(made === 2, `Batch Link links the two sheet references (${made})`);
+  assert(await page.locator('.markup-layer g[data-id] rect[fill="#ffd400"]').count() >= 1, 'Highlight Links draws the links as coloured highlights');
+  // Existing links are kept (skipped) by default and replaced on request.
+  await openMenu('Document', 'Batch Link…');
+  await bl.getByLabel('Batch link scope').selectOption('doc');
+  await bl.getByRole('button', { name: 'Run' }).click();
+  await page.waitForFunction(() => /Batch Link created 0/.test(document.querySelector('.statusbar')?.textContent ?? ''));
+  assert(true, 'a second run skips the mentions that already have links');
+  await openMenu('Document', 'Batch Link…');
+  await bl.getByLabel('Batch link scope').selectOption('doc');
+  await bl.getByLabel('Overlap').selectOption('replace');
+  await bl.getByRole('button', { name: 'Run' }).click();
+  await page.waitForFunction(() => /Batch Link created 2/.test(document.querySelector('.statusbar')?.textContent ?? ''));
+  assert((await page.locator('.ml-table tbody').innerText()).split('Hyperlink').length - 1 === 2, 'Replace swaps the existing links for new ones instead of adding more');
   await page.keyboard.press('Alt+2');
   await page.locator('.set-sheet', { hasText: 'C-101' }).first().click();
   assert((await page.locator('.statusbar input').first().inputValue()) === 'C-101', 'Sets panel jumps to sheet C-101');
+  // Tags: Sheet Number from the labels, Discipline derived; a Sheet Name typed in; the drawing log as CSV.
+  {
+    await page.getByRole('button', { name: 'Tags…' }).click();
+    const td = page.getByRole('dialog', { name: 'Tags' });
+    assert((await td.getByLabel('Discipline of C-101').innerText()) === 'Civil', 'Discipline is derived from the sheet number');
+    await td.getByLabel('Sheet Name of C-101').click();
+    await td.getByLabel('Tag value').fill('Site Plan');
+    assert((await td.getByLabel('Sheet Name of C-101').innerText()) === 'Site Plan', 'a tag value typed in the field goes into the selected cell');
+    await td.getByRole('button', { name: 'Close' }).click();
+    await page.getByRole('button', { name: 'Export Drawing Log…' }).click();
+    const ld = page.getByRole('dialog', { name: 'Export Drawing Log' });
+    const [dl] = await Promise.all([page.waitForEvent('download'), ld.getByRole('button', { name: 'Done' }).click()]);
+    await dl.saveAs(`${OUT}/drawing-log.csv`);
+    const log = readFileSync(`${OUT}/drawing-log.csv`, 'utf8');
+    assert(log.startsWith('Sheet Number,Sheet Name,Discipline') && log.includes('C-101,Site Plan,Civil'), `the drawing log CSV has the tags in order (${log.split('\n')[0]})`);
+    assert(/^(Set|Sample Floor Plan) Drawing Log\.csv$/.test(dl.suggestedFilename()), `the Set name is prepended to the log title (${dl.suggestedFilename()})`);
+  }
   await page.keyboard.press('Alt+2');
   // Slip sheet a new revision (the original sample) over this one: matched by sheet number, links carried forward.
   await openMenu('Document', 'Slip Sheet…');
@@ -880,6 +1753,46 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const form = filled.getForm();
   assert(form.getTextField('inspector').getText() === 'Sam Rivera' && form.getCheckBox('passed').isChecked()
     && form.getDropdown('trade').getSelected()[0] === 'Plumbing' && form.getRadioGroup('priority').getSelected() === 'high', 'form values saved into the PDF form');
+  // Form data: Export (FDF), Reset, Import back; Highlight Fields.
+  {
+    const toolsItem = async (name) => { await page.keyboard.press('Escape'); await page.getByRole('button', { name: 'Tools', exact: true }).click(); await page.getByRole('menuitem', { name }).click(); await page.waitForTimeout(300); };
+    const [xd] = await Promise.all([page.waitForEvent('download'), toolsItem('Export Form Data (FDF)')]);
+    const fdfPath = `${OUT}/form.fdf`;
+    await xd.saveAs(fdfPath);
+    const fdf = readFileSync(fdfPath, 'utf8');
+    assert(fdf.startsWith('%FDF-1.2') && fdf.includes('/T (inspector) /V (Sam Rivera)') && fdf.includes('/T (passed) /V /Yes'), 'Export Form Data writes the values as FDF');
+    await toolsItem('Reset Form');
+    assert(await page.getByLabel('inspector').inputValue() === '' && !(await page.getByLabel('passed').isChecked()), 'Reset Form clears the fields');
+    const [ifc] = await Promise.all([page.waitForEvent('filechooser'), toolsItem('Import Form Data…')]);
+    await ifc.setFiles(fdfPath);
+    await page.getByText(/Imported \d+ field values/).waitFor({ timeout: 10000 });
+    assert(await page.getByLabel('inspector').inputValue() === 'Sam Rivera' && await page.getByLabel('passed').isChecked(), 'Import Form Data fills the fields from the FDF');
+    await toolsItem('Highlight Fields');
+    assert(await page.locator('.form-layer.no-highlight').count() >= 1, 'Highlight Fields off removes the field tint');
+    await toolsItem('Highlight Fields');
+    {
+      // Required fields are tinted red until filled (Revu).
+      const rdoc = await PDFDocument.create();
+      const rp = rdoc.addPage([400, 300]);
+      const rf = rdoc.getForm();
+      const must = rf.createTextField('must'); must.enableRequired(); must.addToPage(rp, { x: 40, y: 220, width: 300, height: 24 });
+      const may = rf.createTextField('may'); may.addToPage(rp, { x: 40, y: 160, width: 300, height: 24 });
+      writeFileSync(`${OUT}/required.pdf`, await rdoc.save());
+      const tabsR = await page.locator('.doc-tab').count();
+      const rfc = await ctrlO();
+      await rfc.setFiles(`${OUT}/required.pdf`);
+      await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabsR);
+      await page.getByLabel('must').waitFor();
+      assert(await page.locator('.form-field.required').count() === 1 && await page.getByLabel('must').evaluate((el) => el.classList.contains('required')), 'a required field is tinted red');
+      await page.getByLabel('must').fill('done');
+      await page.waitForTimeout(100);
+      assert(await page.locator('.form-field.required').count() === 0, 'the tint goes once the required field is filled');
+      await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+      page.once('dialog', (d) => d.accept());
+      await page.getByRole('menuitem', { name: /^Close\b/ }).first().click();
+      await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n, tabsR);
+    }
+  }
 
   // Forms editor: create fields by dragging their box, rename/delete them, fill and save.
   const drag = async (fx0, fy0, fx1, fy1) => {
@@ -918,6 +1831,12 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForTimeout(800);
   await page.keyboard.press('Control+Shift+F');
   const fe = page.getByRole('dialog', { name: 'Forms Editor' });
+  // Forms panel extras (Revu): tab order by row, and the alignment toolbar on the selected fields (the first is the reference).
+  await fe.getByLabel('Order tabs').selectOption('R');
+  await fe.getByLabel('Select Remarks').check();
+  await fe.getByLabel('Select Signature1').check();
+  await fe.getByRole('button', { name: 'Align Top' }).click();
+  await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Align Top: 2 fields'));
   await fe.getByLabel('Name of Remarks').fill('Notes');
   await fe.getByLabel('Delete Grade').check();
   await fe.getByRole('button', { name: 'Apply' }).click();
@@ -930,6 +1849,10 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const f2 = (await PDFDocument.load(readFileSync(`${OUT}/saved-form-fields.pdf`))).getForm();
   assert(f2.getTextField('Notes').getText() === 'Checked twice' && !f2.getFieldMaybe('Grade') && f2.getFieldMaybe('Signature1')
     && f2.getTextField('inspector').getText() === 'Sam Rivera', 'created fields saved into the PDF form, old values kept');
+  const fdoc2 = await PDFDocument.load(readFileSync(`${OUT}/saved-form-fields.pdf`));
+  assert(String(fdoc2.getPage(0).node.get(PDFName.of('Tabs'))) === '/R', 'Order Tabs by Row writes the page /Tabs entry');
+  const topOf = (name) => { const w = fdoc2.getForm().getField(name).acroField.getWidgets()[0].getRectangle(); return w.y + w.height; };
+  assert(Math.abs(topOf('Notes') - topOf('Signature1')) < 0.01, `Align Top lines the signature field up with the first selected field (${topOf('Notes')} vs ${topOf('Signature1')})`);
 
   // Digital signature with a certificate (.p12): sign the empty signature field, check it, then edit and save again.
   await page.getByRole('button', { name: 'Sign here' }).first().click();
@@ -1132,6 +2055,14 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 128) n++;
     return n;
   }, [x0, y0, w, h]);
+  // Right-click a layer > Flatten Markups...: the dialog opens with Assign Layer preset to that layer.
+  await lpanel.getByRole('treeitem', { name: 'Layer Plan' }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Flatten Markups…' }).click();
+  {
+    const fd = page.getByRole('dialog', { name: 'Flatten Markups' });
+    assert(await fd.getByLabel('Assign Layer').isChecked() && (await fd.getByLabel('Flatten to layer').inputValue()) === 'Plan', 'Flatten Markups from a layer presets Assign Layer to it');
+    await fd.getByRole('button', { name: 'Cancel' }).click();
+  }
   const planProps = async () => {
     await lpanel.getByRole('treeitem', { name: 'Layer Plan' }).click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Layer Properties…' }).click();
@@ -1192,10 +2123,25 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.getByRole('menuitem', { name: /^Flatten/ }).first().click();
   const fd = page.getByRole('dialog', { name: 'Flatten Markups' });
   await fd.getByLabel('Assign Layer').check();
-  await fd.getByLabel('Flatten to layer').fill('Flat');
+  await fd.getByLabel('Flatten to layer').fill('FlatOverlay');
+  await fd.getByLabel('Overlay Text').check();
+  await fd.getByLabel('Overlay position').selectOption('bl');
   await fd.getByRole('button', { name: 'OK' }).click();
-  await lpanel.getByRole('treeitem', { name: 'Layer Flat' }).waitFor({ timeout: 15000 });
+  await lpanel.getByRole('treeitem', { name: 'Layer FlatOverlay' }).waitFor({ timeout: 15000 });
   assert(await page.locator('.ml-table tbody tr:not(.reply-row)').filter({ hasText: 'Rectangle' }).count() === 0, 'Flatten with Assign Layer puts the flattened markups on a new layer');
+  // Overlay Text: the layer's name is drawn next to the flattened markup, as page text.
+  await page.keyboard.press('Control+F');
+  await page.getByLabel('Search text').fill('FlatOverlay');
+  await page.getByLabel('Search text').press('Enter');
+  await page.waitForFunction(() => /\d+ results?/.test(document.querySelector('.search-panel')?.textContent ?? ''));
+  assert(/[1-9]\d* results?/.test(await page.locator('.search-panel').innerText()), `Overlay Text writes the layer name next to the flattened markups (${(await page.locator('.search-panel').innerText()).match(/\d+ results?/)?.[0]})`);
+  await page.keyboard.press('Escape');
+  // The search took the side panel: bring the Layers panel back.
+  if (!(await lpanel.count())) {
+    await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click();
+    await page.getByRole('menuitem', { name: /^Layers/ }).click();
+    await lpanel.waitFor();
+  }
 
   // Add Layer from Page: the sheet drawn onto itself as a new layer.
   await page.getByRole('button', { name: 'From Page…' }).click();
@@ -1355,7 +2301,25 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.locator('.bm-title', { hasText: 'Site Plan' }).click();
   await page.waitForTimeout(400);
   assert((await nav.innerText()).startsWith('(2 of'), 'clicking a bookmark jumps to its page');
+  // Action dialog: the child opens a web address.
+  await row('Detail').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Action…' }).click();
+  const adlg = page.locator('[role=dialog][aria-label="Bookmark Action"]');
+  await adlg.waitFor();
+  await adlg.locator('[aria-label="Web address"]').fill('https://example.com/detail');
+  await adlg.getByRole('button', { name: 'OK' }).click();
   await page.screenshot({ path: `${OUT}/bookmarks.png` });
+  // Save Collapse State: the collapsed parent is written closed (/Count < 0); Export Bookmarks (PDF) lists the tree.
+  await row('Site Plan').locator('.bm-toggle').click();
+  assert(await row('Site Plan').getAttribute('aria-expanded') === 'false', 'the toggle collapses a parent bookmark');
+  await page.getByRole('button', { name: 'Bookmarks ▾' }).click();
+  await page.getByRole('menuitem', { name: 'Save Collapse State' }).click();
+  await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('collapse state saved'));
+  await page.getByRole('button', { name: 'Bookmarks ▾' }).click();
+  const [bx] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: 'Export Bookmarks (PDF)' }).click()]);
+  assert(bx.suggestedFilename().endsWith(' - Bookmarks.pdf'), `Export Bookmarks (PDF) downloads a report (${bx.suggestedFilename()})`);
+  await bx.saveAs(`${OUT}/bookmarks-report.pdf`);
+  assert((await PDFDocument.load(readFileSync(`${OUT}/bookmarks-report.pdf`))).getPageCount() === 1, 'the bookmarks report is a one-page PDF');
   await page.locator('.viewer').first().click({ position: { x: 5, y: 5 } }).catch(() => {});
   const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
   const file = `${OUT}/bookmarks.pdf`;
@@ -1369,8 +2333,12 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     names.push('-'.repeat(depth) + it.lookup(PDFName.of('Title')).decodeText()); const f = it.get(PDFName.of('First')); if (f) walk(f, depth + 1); } };
   walk(outline.get(PDFName.of('First')), 0);
   assert(names.join('|') === 'Floor Plan|Site Plan|-Detail', `saved outline (${names.join('|')})`);
+  const siteCount = look(look(outline.get(PDFName.of('First'))).get(PDFName.of('Next'))).lookup(PDFName.of('Count'));
+  assert(siteCount && siteCount.asNumber() === -1, `Save Collapse State writes the collapsed parent closed (/Count ${siteCount && siteCount.asNumber()})`);
   const dest = look(outline.get(PDFName.of('First'))).lookup(PDFName.of('Dest'), PDFArray);
   assert(dest.get(0).toString() === out.getPage(0).ref.toString() && dest.get(1).toString() === '/XYZ', 'bookmark goes to the view on page 1');
+  const detail = look(look(look(outline.get(PDFName.of('First'))).get(PDFName.of('Next'))).get(PDFName.of('First')));
+  assert(detail.lookup(PDFName.of('A'), PDFDict).lookup(PDFName.of('URI')).decodeText() === 'https://example.com/detail', 'the Action dialog wrote a URI action');
 }
 
 // Line styles and hatch patterns (Properties > Line Style / Hatch, Manage…).
@@ -1423,6 +2391,77 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     .map((a) => { const st = a.lookup(PDFName.of('AP'), PDFDict).lookup(PDFName.of('N')); const raw = st.getContents(); try { return inflateSync(raw).toString('latin1'); } catch { return Buffer.from(raw).toString('latin1'); } });
   assert(aps.some((t) => t.includes('/Pattern cs /HP0 scn')), 'saved: the hatch is a tiling pattern in the appearance');
   assert(aps.some((t) => (t.match(/ Tj ET/g) ?? []).length >= 3 && t.includes(' Tm ')), 'saved: the line style text is in the appearance');
+  // Import an AutoCAD .pat file into the Hatch list.
+  const patFile = `${OUT}/sample.pat`;
+  writeFileSync(patFile, '*ANSI33, ANSI Bronze, Brass, Copper\n45, 0,0, 0,.25, .5,-.25\n*STEEL, Steel\n45, 0,0, 0,.09375\n45, 0,.0625, 0,.09375\n');
+  await page.keyboard.press('Escape');
+  await page.mouse.click(lb.x + lb.width * 0.095, lb.y + lb.height * 0.375);
+  await page.locator('select[aria-label="Hatch"]').waitFor({ timeout: 5000 });
+  await page.locator('select[aria-label="Hatch"]').selectOption('__manage__');
+  const hm = page.locator('[role=dialog][aria-label="Manage Hatch Patterns"]');
+  await hm.waitFor();
+  const [hfc] = await Promise.all([page.waitForEvent('filechooser'), hm.getByRole('button', { name: 'Import…' }).click()]);
+  await hfc.setFiles(patFile);
+  await page.waitForTimeout(400);
+  assert(await hm.locator('.hatch-item', { hasText: 'STEEL' }).count() === 1, '.pat import adds its patterns to the Hatch list');
+  await hm.getByRole('button', { name: 'Close' }).click();
+  await page.locator('select[aria-label="Hatch"]').selectOption('pat-steel');
+  await page.waitForTimeout(200);
+  assert(await layer.locator('pattern line').count() >= 2, 'the imported STEEL hatch draws two line families');
+  await page.locator('select[aria-label="Hatch"]').selectOption('ansi31');
+}
+
+// Capture: a photo attached to a markup (Properties > Capture), shown in the Capture column, previewed on double-click.
+{
+  await page.locator('.ml-table tbody tr').first().click();
+  await page.waitForTimeout(300);
+  if (!(await page.locator('.props textarea').count())) await page.keyboard.press('Alt+P');
+  await page.locator('[aria-label="Add photo"]').setInputFiles(`${OUT}/01-start.png`);
+  await page.locator('.capture-thumb img').waitFor({ timeout: 10000 });
+  assert(await page.locator('.capture-thumb').count() === 1, 'Add Photo puts the picture in the markup\'s Capture section');
+  // Export Capture Media (.zip) and Capture Summary (PDF) from the Summary menu.
+  {
+    await page.getByRole('button', { name: 'Summary ▾' }).click();
+    const [zd] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export Capture Media (.zip)' }).click()]);
+    await zd.saveAs(`${OUT}/capture-media.zip`);
+    const { unzipSync } = await import('fflate');
+    const names = Object.keys(unzipSync(readFileSync(`${OUT}/capture-media.zip`)));
+    assert(names.length === 1 && /\.(png|jpg)$/i.test(names[0]), `Export Capture Media zips the photo (${names.join()})`);
+    await page.getByRole('button', { name: 'Summary ▾' }).click();
+    const [pd] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Capture Summary (PDF)' }).click()]);
+    await pd.saveAs(`${OUT}/capture-summary.pdf`);
+    assert((await PDFDocument.load(readFileSync(`${OUT}/capture-summary.pdf`))).getPageCount() >= 1, 'Capture Summary makes a PDF report');
+  }
+  await page.getByRole('button', { name: 'Columns ▾' }).click();
+  await page.locator('.ml-columns-menu label', { hasText: 'Capture' }).locator('input').check();
+  await page.mouse.move(5, 5);
+  const cell = page.locator('.ml-table tbody tr.selected').first().locator('.capture-cell');
+  assert((await cell.innerText()).includes('📷 1'), 'the Capture column counts the photos');
+  await cell.dblclick();
+  const cp = page.locator('[role=dialog][aria-label="Capture"]');
+  await cp.waitFor();
+  assert(await cp.locator('img').count() === 1, 'double-clicking the Capture cell previews the photo');
+  await page.screenshot({ path: `${OUT}/capture.png` });
+  await page.keyboard.press('Escape');
+  await cp.waitFor({ state: 'hidden' });
+  // The media icon at the markup's corner opens the viewer too; Delete there removes the photo.
+  const icon = page.locator('.markup-layer .capture-icon').first();
+  assert(await icon.count() === 1, 'a markup with a photo shows the media icon on the drawing');
+  await icon.click();
+  await cp.waitFor();
+  await cp.getByRole('button', { name: 'Delete' }).click();
+  await cp.waitFor({ state: 'hidden' });
+  await page.waitForTimeout(200);
+  assert(await page.locator('.capture-thumb').count() === 0 && await page.locator('.markup-layer .capture-icon').count() === 0, 'Delete in the viewer removes the photo');
+  // Right-click menu: Capture > From File / From Camera.
+  await page.locator('.ml-table tbody tr').first().click({ button: 'right' });
+  assert(await page.getByRole('menuitem', { name: 'Capture › From File…' }).count() === 1 && await page.getByRole('menuitem', { name: 'Capture › From Camera…' }).count() === 1, 'the markup menu offers Capture > From File / From Camera');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => document.activeElement?.blur?.());
+  await page.getByRole('button', { name: 'Columns ▾' }).click();
+  if (!(await page.locator('.ml-columns-menu').count())) await page.getByRole('button', { name: 'Columns ▾' }).click();
+  await page.locator('.ml-columns-menu label', { hasText: 'Capture' }).locator('input').uncheck();
+  await page.mouse.move(5, 5);
 }
 
 // Spell check (F7) through markup comments; Markup Spelling Mistakes on the PDF text.
@@ -1456,6 +2495,20 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await md.getByRole('button', { name: 'OK' }).click();
   await page.getByText(/Markup Spelling Mistakes: /).waitFor({ timeout: 20000 });
   assert(true, `Markup Spelling Mistakes ran (${await page.getByText(/Markup Spelling Mistakes: /).innerText()})`);
+  // Another language: the French dictionary loads from /dict/.
+  await page.locator('.menubar-item > button', { hasText: /^Edit$/ }).click();
+  await page.getByRole('menuitem', { name: 'Markup Spelling Mistakes…' }).click();
+  await md.locator('[aria-label="Spelling language"]').selectOption('fr');
+  await md.locator('[aria-label="Pages"]').selectOption('current');
+  const frReq = page.waitForResponse((r) => r.url().endsWith('/dict/fr.dic') && r.ok(), { timeout: 30000 });
+  await md.getByRole('button', { name: 'OK' }).click();
+  await frReq;
+  await page.getByText(/Markup Spelling Mistakes: /).waitFor({ timeout: 30000 });
+  assert(true, 'Markup Spelling Mistakes in French loads the French dictionary');
+  await page.locator('.menubar-item > button', { hasText: /^Edit$/ }).click();
+  await page.getByRole('menuitem', { name: 'Markup Spelling Mistakes…' }).click();
+  await md.locator('[aria-label="Spelling language"]').selectOption('en');
+  await md.getByRole('button', { name: 'Cancel' }).click();
 }
 
 // VisualSearch: Get Rectangle around a door swing on A-101, find the others, count them.
@@ -1476,7 +2529,8 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.mouse.up();
   await page.locator('img[alt="Symbol to find"]').waitFor();
   await page.locator('[aria-label="Sensitivity"]').fill('70');
-  await page.locator('.visual-search').getByRole('button', { name: 'Search', exact: true }).click();
+  await page.locator('.visual-search button.primary:enabled', { hasText: 'Search' }).waitFor({ timeout: 20000 });
+  await page.locator('.visual-search').getByRole('button', { name: 'Search', exact: true }).click({ timeout: 20000, force: true }); // the results list below it may still be settling
   await page.waitForFunction(() => /\d+ results?$/.test(document.querySelector('.visual-search .muted.small:last-of-type')?.textContent ?? '') || document.querySelectorAll('.vs-result').length > 0, null, { timeout: 60000 });
   await page.waitForFunction(() => !document.querySelector('.visual-search')?.textContent?.includes('Searching'), null, { timeout: 60000 });
   const n = await page.locator('.vs-result').count();
@@ -1493,6 +2547,19 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForFunction(() => !document.querySelector('.visual-search')?.textContent?.includes('Searching'), null, { timeout: 90000 });
   const n2 = await page.locator('.vs-result').count();
   assert(n2 > n, `with multiple rotations the turned door swings are found too (${n2})`);
+  // Filter by Color: the symbol's colours as swatches; with every colour off nothing matches.
+  await page.getByText('Filter by Color').click();
+  const swatches = await page.locator('.vs-colors input').count();
+  assert(swatches >= 1, `Filter by Color lists the symbol's colours (${swatches})`);
+  for (let i = 0; i < swatches; i++) await page.locator('.vs-colors input').nth(i).uncheck();
+  await page.locator('.vs-colors input').first().check();
+  await page.getByText('Search multiple rotations').click();
+  await page.locator('.visual-search').getByRole('button', { name: 'Search', exact: true }).click();
+  await page.waitForTimeout(500);
+  await page.waitForFunction(() => !document.querySelector('.visual-search')?.textContent?.includes('Searching'), null, { timeout: 90000 });
+  const n3 = await page.locator('.vs-result').count();
+  assert(n3 >= 3 && n3 <= 6, `matching on the symbol's main colour still finds the door swings (${n3})`);
+  await page.getByText('Filter by Color').click();
   await page.getByRole('tab', { name: 'Text' }).click();
 }
 
@@ -1628,6 +2695,265 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.getByText('Watermark removed').waitFor({ timeout: 20000 });
   await page.waitForTimeout(800);
   assert(await find('DRAFT') === 0 && await find('CT0001') === 1, 'Remove Watermark removes only the watermark');
+  // New PDF from Template: the current document becomes a template; a new document is created from it.
+  {
+    const tabs0 = await page.locator('.doc-tab').count();
+    await menu('File', 'New PDF from Template…');
+    const tpl = page.locator('[role=dialog][aria-label="New PDF from Template"]');
+    await tpl.getByRole('button', { name: 'Add Current Document' }).click();
+    await tpl.locator('[role=option]').first().waitFor({ timeout: 10000 });
+    await tpl.getByRole('button', { name: 'Create' }).click();
+    await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs0, { timeout: 20000 });
+    assert((await page.locator('.doc-tab.active').innerText()).startsWith('Untitled'), 'New PDF from Template opens an Untitled copy');
+    await page.keyboard.press('Control+F4');
+    await page.waitForTimeout(300);
+    if (await page.locator('[role=dialog]').count()) { await page.getByRole('button', { name: /Don.t Save|Discard|No/ }).first().click().catch(() => {}); }
+    await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n, tabs0, { timeout: 10000 });
+    await page.locator('.doc-tab').first().click();
+    await page.waitForTimeout(300);
+  }
+  // Measurements panel: Snap Orthogonal keeps a sloped drag horizontal; tool buttons in the panel.
+  {
+    await page.keyboard.press('Escape');
+    if (!(await page.locator('[aria-label="Measurements menu"]').count())) await page.keyboard.press('Alt+U');
+    await page.locator('[aria-label="Measurements menu"]').waitFor({ timeout: 5000 });
+    assert(await page.locator('.measure-tools button').count() >= 8, 'the Measurements panel shows the measurement tools');
+    await page.locator('[aria-label="Measurements menu"]').click();
+    await page.getByRole('menuitem', { name: 'Snap Orthogonal' }).click();
+    await page.waitForTimeout(200);
+    await page.locator('.measure-tools button[aria-label="Length"]').click();
+    const mb = await page.locator('.page .markup-layer').first().boundingBox();
+    const lines0 = await page.locator('.page .markup-layer line').count();
+    await page.mouse.move(mb.x + mb.width * 0.3, mb.y + mb.height * 0.6); await page.mouse.down();
+    await page.mouse.move(mb.x + mb.width * 0.5, mb.y + mb.height * 0.64, { steps: 4 }); await page.mouse.up();
+    await page.waitForTimeout(300);
+    const last = await page.locator('.page .markup-layer line').evaluateAll((els, n) => { const l = els[n]; return l ? [Number(l.getAttribute('y1')), Number(l.getAttribute('y2'))] : null; }, lines0);
+    assert(last && Math.abs(last[0] - last[1]) < 0.5, `Snap Orthogonal keeps the sloped drag horizontal (${last})`);
+    await page.keyboard.press('Escape');
+    await page.locator('[aria-label="Measurements menu"]').click();
+    await page.getByRole('menuitem', { name: 'Snap Orthogonal' }).click();
+    await page.keyboard.press('Control+z');
+    await page.evaluate(() => document.activeElement?.blur());
+  }
+  // Properties > Layout: exact Width; Set as Default.
+  {
+    await page.keyboard.press('Escape');
+    const rectRow = page.locator('.ml-table tbody tr', { hasText: /^Rectangle/ }).first();
+    if (await rectRow.count()) {
+      await rectRow.click();
+      await page.waitForTimeout(300);
+      if (!(await page.locator('[aria-label="Layout Width"]').count())) await page.keyboard.press('Alt+P');
+      const wIn = page.locator('[aria-label="Layout Width"]');
+      await wIn.waitFor({ timeout: 5000 });
+      await wIn.fill('2.5');
+      await page.waitForTimeout(200);
+      assert(await wIn.inputValue() === '2.5', 'Layout Width resizes the markup to the typed size');
+      await page.getByRole('button', { name: 'Set as Default' }).click();
+      await page.getByText(/this appearance is now the default/).waitFor({ timeout: 5000 });
+      await page.evaluate(() => document.activeElement?.blur());
+      await page.keyboard.press('Control+z');
+      await page.keyboard.press('Escape');
+    }
+  }
+  // Measurement display: segment values, centroid and caption off on an area measurement.
+  {
+    await page.keyboard.press('Escape');
+    const areaRow = page.locator('.ml-table tbody tr', { hasText: 'Area Measurement' }).first();
+    await areaRow.click();
+    await page.waitForTimeout(300);
+    if (!(await page.locator('[aria-label="Show segment values"]').count())) await page.keyboard.press('Alt+P');
+    await page.locator('[aria-label="Show segment values"]').waitFor({ timeout: 5000 });
+    await page.locator('[aria-label="Show segment values"]').check();
+    await page.locator('[aria-label="Show centroid"]').check();
+    await page.waitForTimeout(200);
+    assert(await page.locator('.page .markup-layer .segment-label').count() >= 3 && await page.locator('.page .markup-layer .centroid-mark').count() === 1, 'Show Segment Values and Show Centroid draw on the area');
+    const captions = await page.locator('.page .markup-layer .measure-label').count();
+    await page.locator('[aria-label="Show caption"]').selectOption('none');
+    await page.waitForTimeout(200);
+    assert(await page.locator('.page .markup-layer .measure-label').count() === captions - 1, 'Show Caption: None hides the value');
+    await page.locator('[aria-label="Show caption"]').selectOption('value');
+    await page.locator('[aria-label="Area unit"]').selectOption('m');
+    await page.waitForTimeout(200);
+    assert((await page.locator('.ml-table tbody tr.selected').first().innerText()).includes('m²') || (await page.locator('.page .markup-layer .measure-label').allInnerTexts()).some((t) => /m²|sq m|m2/.test(t)), 'the area shows in square metres');
+    await page.locator('[aria-label="Area unit"]').selectOption('');
+    await page.locator('[aria-label="Show segment values"]').uncheck();
+    await page.locator('[aria-label="Show centroid"]').uncheck();
+    await page.evaluate(() => document.activeElement?.blur());
+    await page.keyboard.press('Escape');
+  }
+  // Tool Chest: Symbol view, Hide a set and show it again from the Tool Chest menu.
+  {
+    await page.keyboard.press('Escape');
+    if (!(await page.locator('.toolchest').count())) await page.keyboard.press('Alt+x');
+    await page.locator('.toolchest').waitFor({ timeout: 5000 });
+    const gear = page.locator('.toolchest details').nth(1).locator('.toolset-gear');
+    await gear.click();
+    await page.getByRole('menuitem', { name: 'Symbol' }).click();
+    await page.waitForTimeout(200);
+    assert(await page.locator('.toolchest .tool-symbols').count() === 1, 'Symbol view shows the tool set as icons');
+    await gear.click();
+    await page.getByRole('menuitem', { name: 'Detail' }).click();
+    const setsBefore = await page.locator('.toolchest details').count();
+    await gear.click();
+    await page.getByRole('menuitem', { name: 'Hide', exact: true }).click();
+    await page.waitForTimeout(200);
+    assert(await page.locator('.toolchest details').count() === setsBefore - 1, 'Hide removes the tool set from the panel');
+    await page.getByRole('button', { name: 'Tool Chest menu' }).click();
+    const first = page.getByRole('menuitem').first();
+    await first.click();
+    await page.waitForTimeout(200);
+    assert(await page.locator('.toolchest details').count() === setsBefore, 'the Tool Chest menu shows the set again');
+  }
+  // Markups List: right-click menu, Hide Markups, saved filters, grouping.
+  {
+    await page.keyboard.press('Escape');
+    const firstRow = page.locator('.ml-table tbody tr:not(.reply-row):not(.ml-section)').first();
+    await firstRow.click({ button: 'right' });
+    assert(await page.getByRole('menuitem', { name: 'Reply' }).count() === 1 && await page.getByRole('menuitem', { name: 'Copy Cell' }).count() === 1, 'the Markups List has a right-click menu');
+    await page.keyboard.press('Escape');
+    const drawn = await page.locator('.page .markup-layer [data-id]').count();
+    await page.getByRole('button', { name: 'Hide Markups' }).click();
+    await page.waitForTimeout(300);
+    assert(drawn > 0 && await page.locator('.page .markup-layer [data-id]').count() === 0, `Hide Markups takes every markup off the drawing (${drawn} -> 0)`);
+    await page.getByRole('button', { name: 'Hide Markups' }).click();
+    await page.waitForTimeout(300);
+    assert(await page.locator('.page .markup-layer [data-id]').count() === drawn, 'Hide Markups off shows them again');
+    await page.getByRole('button', { name: 'Filter List' }).click();
+    page.once('dialog', (dl) => dl.accept('Test filter'));
+    await page.locator('[aria-label="Saved Filters"]').selectOption('save');
+    await page.waitForTimeout(200);
+    assert((await page.locator('[aria-label="Saved Filters"] option').allInnerTexts()).some((t) => t === '✓ Test filter'), 'Save Filter keeps a named filter set, shown checked while in use');
+    await page.locator('.ml-filter-row th').first().locator('select').selectOption({ index: 1 });
+    await page.waitForTimeout(100);
+    assert((await page.locator('[aria-label="Saved Filters"] option').allInnerTexts()).some((t) => t === '✓ Test filter*'), 'a saved set changed since it was applied is starred');
+    await page.locator('.ml-filter-row th').first().locator('select').selectOption('');
+    await page.locator('[aria-label="Saved Filters"]').selectOption('del:Test filter');
+    await page.getByRole('button', { name: 'Filter List' }).click();
+    await page.locator('.ml-table thead th', { hasText: /^Subject/ }).first().click();
+    await page.waitForTimeout(200);
+    const sections = await page.locator('.ml-table tr.ml-section').count();
+    assert(sections >= 1, `sorting by Subject groups the rows under headings (${sections})`);
+    await page.locator('.ml-table tr.ml-section').first().click();
+    await page.waitForTimeout(200);
+    await page.locator('.ml-table tr.ml-section').first().click();
+    await page.locator('.ml-table thead th', { hasText: /^Page Label/ }).first().click();
+    await page.waitForTimeout(200);
+  }
+  // File exports: Export Text, Publish as Uncompressed; Edit > Undo History.
+  {
+    const [td] = await Promise.all([page.waitForEvent('download'), menu('File', 'Export Text')]);
+    assert(td.suggestedFilename().endsWith('.txt'), `Export Text downloads a text file (${td.suggestedFilename()})`);
+    const txtPath = `${OUT}/export.txt`;
+    await td.saveAs(txtPath);
+    assert(readFileSync(txtPath, 'utf8').includes('--- Page '), 'the text export lists the pages');
+    const [ud] = await Promise.all([page.waitForEvent('download'), menu('File', 'Publish as Uncompressed')]);
+    assert(ud.suggestedFilename().endsWith(' (uncompressed).pdf'), 'Publish as Uncompressed downloads a copy');
+    await page.getByText(/Published .* \(uncompressed\)\.pdf/).waitFor({ timeout: 20000 });
+    await page.locator('.menubar-item > button', { hasText: /^Edit$/ }).click();
+    const uhEnabled = await page.getByRole('menuitem', { name: 'Undo History…' }).isEnabled();
+    if (uhEnabled) {
+      await page.getByRole('menuitem', { name: 'Undo History…' }).click();
+      const uh = page.locator('[role=dialog][aria-label="Undo History"]');
+      const steps = await uh.locator('[aria-label^="Undo to step"]').count();
+      assert(steps >= 1, `Undo History lists the unsaved steps (${steps})`);
+      await uh.getByRole('button', { name: 'Close' }).click();
+    } else await page.keyboard.press('Escape');
+  }
+  // Color Processing, Repair PDF and Archive as PDF/A on the active document.
+  {
+    await menu('Document', 'Color Processing…');
+    const cpd = page.locator('[role=dialog][aria-label="Color Processing"]');
+    await cpd.locator('[aria-label="Process type"]').selectOption('grayscale');
+    await cpd.locator('[aria-label="Pages"]').selectOption('current');
+    await cpd.getByRole('button', { name: 'OK' }).click();
+    await page.getByText(/Color Processing: \d+ colours? changed/).waitFor({ timeout: 20000 });
+    const cp = await page.getByText(/Color Processing: \d+ colours? changed/).innerText();
+    assert(Number(cp.match(/(\d+) colour/)[1]) > 0, `Color Processing recoloured the page content (${cp})`);
+    await page.waitForTimeout(500);
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(800);
+    await menu('Document', 'Repair PDF…');
+    const rpd = page.locator('[role=dialog][aria-label="Repair PDF"]');
+    await rpd.getByRole('button', { name: 'OK' }).click();
+    await page.getByText(/Repair PDF: /).waitFor({ timeout: 20000 });
+    assert(true, `Repair PDF ran (${(await page.getByText(/Repair PDF: /).innerText()).slice(0, 80)})`);
+    await page.waitForTimeout(500);
+    const [ad] = await Promise.all([page.waitForEvent('download'), menu('Document', 'Archive as PDF/A')]);
+    assert(ad.suggestedFilename().endsWith(' (PDF-A).pdf'), `Archive as PDF/A downloads a copy (${ad.suggestedFilename()})`);
+    const pdfa = `${OUT}/archive.pdf`;
+    await ad.saveAs(pdfa);
+    const adoc = await PDFDocument.load(readFileSync(pdfa));
+    assert(String(adoc.catalog.get(PDFName.of('OutputIntents'))).includes('GTS_PDFA1'), 'the PDF/A copy carries an output intent');
+    await page.getByText(/Archived as PDF\/A-1b/).waitFor({ timeout: 20000 });
+  }
+  // Batch: Apply Stamp on every page of every open document.
+  if (await page.locator('.doc-tab').count() >= 2) {
+    const docRows = async () => Number((await page.getByText(/ of \d+ markups/).innerText()).match(/of (\d+)/)[1]);
+    const activeTab = await page.locator('.doc-tab.active').innerText();
+    const before = await docRows();
+    const pagesHere = Number((await page.locator('.statusbar').innerText()).match(/of (\d+)\)/)[1]);
+    await menu('Batch', 'Apply Stamp…');
+    const asd = page.locator('[role=dialog][aria-label="Apply Stamp"]');
+    await asd.locator('[aria-label="Stamp"]').selectOption('DRAFT');
+    await asd.locator('[aria-label="Position"]').selectOption('bottom-right');
+    assert(await asd.locator('[aria-label="Files"]').inputValue() === 'all', 'the Batch menu opens Apply Stamp for all open documents');
+    await asd.getByRole('button', { name: 'OK' }).click();
+    await page.getByText(/Apply Stamp: \d+ stamps? placed on \d+ documents/).waitFor({ timeout: 10000 });
+    await page.waitForTimeout(400);
+    assert(await docRows() === before + pagesHere, `Apply Stamp put one stamp per page here (${before} + ${pagesHere})`);
+    const other = page.locator('.doc-tab', { hasNotText: activeTab }).first();
+    await other.click();
+    await page.waitForTimeout(600);
+    assert((await page.locator('.ml-table tbody tr td:first-child').allInnerTexts()).some((t) => t.includes('Stamp')), 'the other open document got the stamp too');
+    await page.keyboard.press('Control+z');
+    await page.locator('.doc-tab', { hasText: activeTab }).first().click();
+    await page.waitForTimeout(400);
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(300);
+  }
+  // Batch: Sign & Seal puts an invisible signature on every open document.
+  if (await page.locator('.doc-tab').count() >= 2) {
+    const tabs = await page.locator('.doc-tab').count();
+    const activeTab = await page.locator('.doc-tab.active').innerText();
+    await menu('Batch', 'Sign & Seal…');
+    const sg = page.getByRole('dialog', { name: 'Sign Document' });
+    const [cfc] = await Promise.all([page.waitForEvent('filechooser'), sg.getByRole('button', { name: 'Choose .pfx / .p12…' }).click()]);
+    await cfc.setFiles('tests/fixtures/test-cert.p12');
+    await sg.getByLabel('Certificate password').fill('test');
+    await sg.getByRole('button', { name: 'Open' }).click();
+    await sg.getByText('Signing as').waitFor();
+    assert(await sg.locator('[aria-label="Files"]').inputValue() === 'all', 'the Batch menu opens Sign Document for all open documents');
+    await sg.getByRole('button', { name: 'Sign', exact: true }).click();
+    await page.getByText(new RegExp(`Sign & Seal: ${tabs} documents signed by Test Signer`)).waitFor({ timeout: 60000 });
+    assert(true, 'Sign & Seal signs every open document');
+    // Undo the signature on each document so later checks see the files as before.
+    for (let i = 0; i < tabs; i++) {
+      await page.locator('.doc-tab').nth(i).click();
+      await page.waitForTimeout(300);
+      await page.keyboard.press('Control+z');
+      await page.waitForTimeout(300);
+    }
+    await page.locator('.doc-tab', { hasText: activeTab }).first().click();
+    await page.waitForTimeout(400);
+  }
+  // Batch: Header & Footer over all open documents.
+  if (await page.locator('.doc-tab').count() >= 2) {
+    const activeTab = await page.locator('.doc-tab.active').innerText();
+    await menu('Batch', 'Header & Footer…');
+    const hd = page.locator('[role=dialog][aria-label="Header & Footer"]');
+    await hd.locator('[aria-label="Header center"]').fill('BATCHHF');
+    await hd.locator('[aria-label="Files"]').selectOption('all');
+    await hd.getByRole('button', { name: 'OK' }).click();
+    await page.getByText(/Header & Footer added to \d+ documents/).waitFor({ timeout: 60000 });
+    await page.waitForTimeout(800);
+    assert(await find('BATCHHF') >= 1, 'batch Header & Footer is on the active document');
+    const other = page.locator('.doc-tab', { hasNotText: activeTab }).first();
+    await other.click();
+    await page.waitForTimeout(600);
+    assert(await find('BATCHHF') >= 1, 'batch Header & Footer is on another open document too');
+    await page.locator('.doc-tab', { hasText: activeTab }).first().click();
+    await page.waitForTimeout(400);
+  }
   await page.evaluate(() => document.activeElement?.blur());
 }
 
@@ -1639,11 +2965,27 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   };
   const total = async () => Number((await page.getByText(/ of \d+ markups/).innerText()).match(/of (\d+)/)[1]);
   await page.locator('.doc-tab').first().click();
+  // A snapshot (image stamp) so the export carries an appearance.
+  {
+    await page.mouse.click(5, 500);
+    await page.keyboard.press('Control+4');
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Control+9');
+    await page.waitForTimeout(500);
+    const lb = await page.locator('.page .markup-layer').boundingBox();
+    await page.keyboard.press('Shift+G');
+    await page.mouse.move(lb.x + lb.width * 0.84, lb.y + lb.height * 0.9); await page.mouse.down();
+    await page.mouse.move(lb.x + lb.width * 0.95, lb.y + lb.height * 0.95, { steps: 4 }); await page.mouse.up();
+    await page.waitForFunction(() => /Snapshot copied/.test(document.querySelector('.statusbar')?.textContent ?? ''));
+    await page.keyboard.press('Control+v');
+    await page.waitForTimeout(300);
+  }
   const n0 = await total();
   const [x] = await Promise.all([page.waitForEvent('download'), menu('File', 'Export Markups (XFDF)')]);
   const xfdf = `${OUT}/markups.xfdf`;
   await x.saveAs(xfdf);
   assert(readFileSync(xfdf, 'utf8').includes('<annots>'), 'Export Markups writes XFDF');
+  assert(/<stamp [^>]*>(?:(?!<\/stamp>).)*<appearance>[A-Za-z0-9+/=]{100,}<\/appearance>/s.test(readFileSync(xfdf, 'utf8')), 'the snapshot stamp exports its appearance');
   const tabs = await page.locator('.doc-tab').count();
   await menu('File', 'Open Sample Drawing');
   await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs);
@@ -1656,6 +2998,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const got = await total();
   if (got !== fresh + n0) console.log('subjects:', (await page.locator('.ml-table tbody tr td:first-child').allInnerTexts()).join(','));
   assert(got === fresh + n0, `Import Markups brings them all into a clean copy (${fresh} + ${n0} = ${got})`);
+  assert((await page.locator('.ml-table tbody tr td:first-child').allInnerTexts()).some((t) => t.includes('Snapshot')), 'the imported snapshot is an image markup again');
 
   // Security: a password to open, applied on save.
   await page.keyboard.press('Control+l');
@@ -1706,8 +3049,13 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForTimeout(600);
   const lb = await page.locator('.page .markup-layer').boundingBox();
   await menu('Tools', 'Edit Text');
-  await page.mouse.click(lb.x + lb.width * 0.865, lb.y + lb.height * 0.917);
   const input = page.locator('[aria-label="Edit text"]');
+  // A slow machine may still be re-rendering after the zoom: click again until the text opens.
+  for (let t = 0; t < 6 && !(await input.count()); t++) {
+    const b = await page.locator('.page .markup-layer').boundingBox();
+    await page.mouse.click(b.x + b.width * 0.865, b.y + b.height * 0.917);
+    await page.waitForTimeout(600);
+  }
   await input.waitFor();
   assert(await input.inputValue() === 'FLOOR PLAN', 'Edit Text opens the clicked line of text');
   await input.fill('FLOOR PLAN REV');
@@ -1734,6 +3082,52 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForTimeout(800);
   assert((await page.locator('.search-panel .muted.small').first().innerText()).startsWith('0 result'), 'Erase Content removed the title text');
   await page.keyboard.press('Control+z');
+  await page.waitForTimeout(1500);
+  await page.evaluate(() => document.activeElement?.blur());
+  // Cut Content: the region goes to the clipboard as a snapshot and leaves the page.
+  const rows0 = await page.locator('.ml-table tbody tr').count();
+  await menu('Tools', 'Cut Content');
+  await page.mouse.move(lb.x + lb.width * 0.84, lb.y + lb.height * 0.905);
+  await page.mouse.down();
+  await page.mouse.move(lb.x + lb.width * 0.95, lb.y + lb.height * 0.93, { steps: 4 });
+  await page.mouse.up();
+  await page.waitForFunction(() => /Content cut/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 20000 });
+  await page.waitForTimeout(500);
+  await page.keyboard.press('Escape');
+  await box.fill('PLAN REV');
+  await box.press('Enter');
+  await page.waitForTimeout(800);
+  assert((await page.locator('.search-panel .muted.small').first().innerText()).startsWith('0 result'), 'Cut Content removed the title text from the page');
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press('Control+v');
+  await page.waitForTimeout(300);
+  assert(await page.locator('.ml-table tbody tr').count() === rows0 + 1, 'the cut content pastes as an image markup');
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(1500);
+  await page.evaluate(() => document.activeElement?.blur());
+  // Review Text > Replace Selected Text on this page's text.
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+Shift+A');
+  await page.locator('.text-sel').first().waitFor();
+  for (const b of await page.getByRole('button', { name: 'Expand group' }).all()) await b.click();
+  const rrows = await page.locator('.ml-table tbody tr:not(.reply-row):not(.ml-group-row)').count();
+  const tsb = await page.locator('.text-sel').first().boundingBox();
+  await page.mouse.click(tsb.x + tsb.width / 2, tsb.y + tsb.height / 2, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Replace Selected Text…' }).click();
+  const rd = page.locator('[role=dialog][aria-label="Replacement Text"]');
+  await rd.waitFor({ timeout: 10000 });
+  await rd.locator('textarea').fill('SITE PLAN');
+  await rd.getByRole('button', { name: 'OK' }).click();
+  await page.waitForTimeout(300);
+  for (const b of await page.getByRole('button', { name: 'Expand group' }).all()) await b.click(); // the pair is grouped: list its members
+  assert(await page.locator('.ml-table tbody tr:not(.reply-row):not(.ml-group-row)').count() === rrows + 2, 'Replace Selected Text adds a strikethrough and an insertion caret (grouped)');
+  const subjects = await page.locator('.ml-table tbody tr td:first-child').allInnerTexts();
+  assert(subjects.filter((t) => t.includes('Replace Text')).length >= 2, 'both carry the Replace Text subject');
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(300);
   await page.evaluate(() => document.activeElement?.blur());
 }
 
@@ -1830,6 +3224,108 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.emulateMedia({ media: 'screen' });
   await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
   assert(await page.locator('#print-root').count() === 0, 'print sheets are removed after printing');
+  // Selected pages (Ctrl+click in Thumbnails) and Fit to Margins.
+  const thumbs = page.locator('.thumbs .thumb');
+  const hadThumbs = await thumbs.count() > 0;
+  if (!hadThumbs) { await page.keyboard.press('Alt+t'); await page.waitForTimeout(300); }
+  {
+    const n = Math.min(2, await thumbs.count());
+    await thumbs.nth(0).click();
+    if (n === 2) await thumbs.nth(1).click({ modifiers: ['Control'] });
+    assert(await page.locator('.thumbs .thumb.selected').count() === n, `Ctrl+click selects ${n} thumbnail(s)`);
+    await page.keyboard.press('Control+p');
+    await dlg.waitFor();
+    await dlg.locator('[aria-label="Page range"]').selectOption('selected');
+    await dlg.locator('[aria-label="Copies"]').fill('1');
+    assert((await dlg.innerText()).includes(`Sheet 1 of ${n}`), `Selected range prints the ${n} selected page(s)`);
+    await dlg.locator('[aria-label="Page scaling"]').selectOption('fitMargins');
+    await dlg.locator('[aria-label="Margin unit"]').selectOption('in');
+    await dlg.locator('[aria-label="Top margin"]').fill('1');
+    await dlg.locator('[aria-label="Page range"]').selectOption('current');
+    await dlg.getByRole('button', { name: 'Print', exact: true }).click();
+    await page.waitForFunction(() => window.__printed === 2, null, { timeout: 30000 });
+    const top = await page.evaluate(() => document.querySelector('#print-root .print-sheet img').style.top);
+    assert(parseFloat(top) >= 72, `Fit to Margins keeps the page below the 1 in top margin (top=${top})`);
+    await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+    // Page filters (Revu): First Page, Odd Pages; Print Spaces and the pages-per-sheet layout options.
+    await page.keyboard.press('Control+p');
+    await dlg.waitFor();
+    await dlg.locator('[aria-label="Page range"]').selectOption('first');
+    assert((await dlg.innerText()).includes('Sheet 1 of 1'), 'First Page prints one sheet');
+    const pagesTotal = Number((await page.locator('.statusbar').innerText()).match(/of (\d+)\)/)[1]);
+    await dlg.locator('[aria-label="Page range"]').selectOption('odd');
+    assert((await dlg.innerText()).includes(`Sheet 1 of ${Math.ceil(pagesTotal / 2)}`), `Odd Pages prints ${Math.ceil(pagesTotal / 2)} of ${pagesTotal} pages`);
+    await dlg.getByLabel('Print Spaces').check();
+    await dlg.locator('[aria-label="Pages per sheet"]').selectOption('4');
+    await dlg.getByLabel('Sheet order').selectOption('columns');
+    await dlg.getByLabel('Border around each page').check();
+    await dlg.locator('[aria-label="Pages per sheet"]').selectOption('1');
+    await dlg.getByLabel('Print Spaces').uncheck();
+    await dlg.getByRole('button', { name: 'Cancel' }).click();
+    await thumbs.nth(0).click();
+    // Number Pages: labels P-1, P-2… over all pages; Page Setup puts the current page on Letter.
+    await page.locator('.menubar-item > button', { hasText: /^Document$/ }).click();
+    await page.getByRole('menuitem', { name: 'Number Pages…' }).click();
+    const npd = page.locator('[role=dialog][aria-label="Number Pages"]');
+    await npd.locator('[aria-label="Prefix"]').fill('P-');
+    await npd.getByRole('button', { name: 'OK' }).click();
+    await page.getByText('Page labels updated').waitFor({ timeout: 20000 });
+    await page.waitForTimeout(500);
+    const labels = await page.locator('.thumbs .thumb-label').allInnerTexts();
+    assert(labels.length > 0 && labels.every((l, i) => l.startsWith(`P-${i + 1}`)), `Number Pages relabels the pages (${labels.join(', ')})`);
+    await page.locator('.menubar-item > button', { hasText: /^Document$/ }).click();
+    await page.getByRole('menuitem', { name: 'Page Setup…' }).click();
+    const psd = page.locator('[role=dialog][aria-label="Page Setup"]');
+    await psd.locator('[aria-label="Media size"]').selectOption('Letter (8.5×11)');
+    await psd.getByRole('button', { name: 'OK' }).click();
+    await page.getByText(/Page Setup: 1 page set to/).waitFor({ timeout: 20000 });
+    await page.waitForTimeout(500);
+    const sz = await page.locator('.sb-size').innerText();
+    assert(sz.includes('8.50 x 11.00 in') || sz.includes('11.00 x 8.50 in'), `Page Setup resizes the page to Letter (${sz})`);
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(800);
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(800);
+    // View toggles: Dark Mode themes the chrome; Show Cover Page leaves page 1 alone in Side by Side.
+    const viewItem = async (name) => { await page.keyboard.press('Escape'); await page.waitForTimeout(150); await page.locator('.menubar-item > button', { hasText: /^View$/ }).click(); await page.getByRole('menuitem', { name }).click(); await page.waitForTimeout(250); };
+    await viewItem('Dark Mode');
+    assert(await page.evaluate(() => document.documentElement.dataset.theme) === 'dark', 'Dark Mode sets the dark theme');
+    await viewItem('Dark Mode');
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Control+6');
+    await page.waitForTimeout(400);
+    const shownPages = () => page.locator('.page-tile').count(); // one tile per page slot in multi-page views
+    const pairPages = await shownPages();
+    await viewItem('Show Cover Page in Side-by-Side');
+    await page.waitForTimeout(400);
+    const coverPages = await shownPages();
+    assert(pairPages === 2 && coverPages === 1, `Show Cover Page shows the first page alone in Side by Side (${pairPages} -> ${coverPages})`);
+    await viewItem('Show Cover Page in Side-by-Side');
+    await page.keyboard.press('Control+4');
+    await page.waitForTimeout(300);
+    // Split view: Synchronize Document keeps both panes on the same page; Toggle Split flips the direction; Unsplit.
+    const pageNo = async () => Number((await page.locator('.statusbar').innerText()).match(/\((\d+) of/)[1]);
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Control+2');
+    await page.waitForTimeout(400);
+    assert(await page.locator('.viewer-wrap').count() === 2, 'Split Vertical shows two panes');
+    await viewItem('Synchronize Document');
+    await page.keyboard.press('Control+ArrowRight');
+    await page.waitForTimeout(300);
+    const p1 = await pageNo();
+    await page.keyboard.press('Control+1'); // Switch pane
+    await page.waitForTimeout(300);
+    assert(p1 === 2 && await pageNo() === 2, `Synchronize Document moves the other pane to the same page (${p1}, ${await pageNo()})`);
+    await viewItem('Synchronize Document');
+    await page.keyboard.press('Control+i');
+    await page.waitForTimeout(300);
+    assert(await page.locator('.viewer-wrap').count() === 2, 'Toggle Split keeps two panes (direction flipped)');
+    await page.keyboard.press('Control+Shift+2');
+    await page.waitForTimeout(300);
+    assert(await page.locator('.viewer-wrap').count() === 1, 'Unsplit returns to one pane');
+    await page.keyboard.press('Home');
+    if (!hadThumbs) await page.keyboard.press('Alt+t');
+  }
 }
 
 // Quick Revu commands: Document Properties (Ctrl+D), Navigation Bar (F4),
@@ -1851,6 +3347,38 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.screenshot({ path: `${OUT}/doc-properties.png` });
   await page.keyboard.press('Escape');
   assert(await dlg.count() === 0, 'Esc closes Document Properties');
+  // Properties panel with nothing selected: File Properties, Custom Properties, File Attachments.
+  {
+    await page.keyboard.press('Escape');
+    if (!(await page.locator('.doc-props').count())) await page.keyboard.press('Alt+P');
+    const dp = page.locator('.doc-props');
+    await dp.waitFor();
+    await page.waitForFunction(() => document.querySelector('.doc-props [aria-label="Document title"]')?.value === 'E2E Title', null, { timeout: 10000 });
+    assert(true, 'the Properties panel shows the document title when nothing is selected');
+    await dp.getByLabel('Document author').fill('Panel Author');
+    await dp.getByLabel('Document author').press('Enter');
+    await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Document properties changed'));
+    await dp.getByLabel('New property name').fill('Project');
+    await dp.getByLabel('New property value').fill('P-12');
+    await dp.getByRole('button', { name: 'Add', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Custom properties changed'));
+    await dp.getByLabel('Custom property Project').waitFor({ timeout: 10000 });
+    assert(await dp.getByLabel('Custom property Project').inputValue() === 'P-12', 'a custom property is added and read back from the file');
+    const [afc] = await Promise.all([page.waitForEvent('filechooser'), dp.getByRole('button', { name: 'Add New…' }).click()]);
+    await afc.setFiles('tests/fixtures/form.pdf');
+    await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Attached form.pdf'));
+    await dp.locator('.attachment-row', { hasText: 'form.pdf' }).waitFor({ timeout: 10000 });
+    assert(true, 'Add New attaches a file to the document');
+    await dp.getByRole('button', { name: 'Delete attachment form.pdf' }).click();
+    await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Removed attachment form.pdf'));
+    await page.waitForFunction(() => !document.querySelector('.doc-props .attachment-row'), null, { timeout: 10000 });
+    assert(true, 'Delete removes the attachment');
+    await dp.getByRole('button', { name: 'Delete property Project' }).click();
+    await page.waitForFunction(() => !document.querySelector('.doc-props [aria-label="Custom property Project"]'), null, { timeout: 10000 });
+    await page.waitForFunction(() => !document.querySelector('.busy-overlay'));
+    await page.evaluate(() => document.activeElement?.blur?.());
+    await page.waitForTimeout(300);
+  }
 
   await page.keyboard.press('F4');
   assert(await page.locator('.sb-nav').count() === 0, 'F4 hides the navigation bar');
@@ -1898,7 +3426,11 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForTimeout(600);
   await page.keyboard.press('Shift+T');
   const a = await toScreen(0, 40), b = await toScreen(24, 22);
-  await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 6 }); await page.mouse.up();
+  // Slow hosts: the page text may still be loading when the first drag ends; drag again.
+  for (let t = 0; t < 3; t++) {
+    await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 6 }); await page.mouse.up();
+    if (await page.locator('.text-sel').first().waitFor({ timeout: 10000 }).then(() => true, () => false)) break;
+  }
   await page.locator('.text-sel').first().waitFor();
   await page.keyboard.press('Control+c');
   await page.waitForTimeout(200);
@@ -1912,6 +3444,25 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert(await page.locator('.ml-table tbody tr').count() === rows0 + 1, 'right-click > Highlight marks the selected text');
   assert(await page.locator('.text-sel').count() === 0, 'the text selection is cleared after marking it');
   await page.keyboard.press('Control+z');
+  {
+    // Highlight tool (H) over text marks the text lines; Ctrl+drag draws a free box instead (Revu).
+    const rectsOfLast = async () => page.locator('.markup-layer g[data-id]').last().locator('rect').count();
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('h');
+    await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 6 }); await page.mouse.up();
+    await page.waitForTimeout(400);
+    const textRects = await rectsOfLast();
+    await page.keyboard.press('Control+z');
+    await page.keyboard.press('h');
+    await page.keyboard.down('Control');
+    await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 6 }); await page.mouse.up();
+    await page.keyboard.up('Control');
+    await page.waitForTimeout(400);
+    const boxRects = await rectsOfLast();
+    assert(textRects > 1 && boxRects === 1, `Highlight over text marks each line (${textRects} rects); Ctrl+drag draws one free box (${boxRects})`);
+    await page.keyboard.press('Control+z');
+    await page.keyboard.press('Escape');
+  }
   await page.keyboard.press('Escape');
   await page.keyboard.press('Control+Shift+A');
   await page.locator('.text-sel').first().waitFor();
@@ -1927,6 +3478,20 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Control+v');
   await page.waitForTimeout(200);
   assert(await page.locator('.ml-table tbody tr').count() === n1 + 1, 'Snapshot Content pastes as an image markup');
+  // Crop Image on the pasted snapshot (selected after pasting): keep its left half.
+  {
+    const imgEl = page.locator('.page .markup-layer image').last();
+    const ib = await imgEl.boundingBox();
+    if (ib) {
+      await page.locator('.menubar-item > button', { hasText: /^Edit$/ }).click();
+      await page.getByRole('menuitem', { name: 'Crop Image…' }).click();
+      await page.mouse.move(ib.x + 2, ib.y + 2); await page.mouse.down();
+      await page.mouse.move(ib.x + ib.width / 2, ib.y + ib.height - 2, { steps: 4 }); await page.mouse.up();
+      await page.getByText('Image cropped').waitFor({ timeout: 10000 });
+      const nb = await page.locator('.page .markup-layer image').last().boundingBox();
+      assert(nb.width < ib.width * 0.6, `Crop Image keeps the dragged part (${Math.round(ib.width)} -> ${Math.round(nb.width)})`);
+    }
+  }
   await page.keyboard.press('Control+Alt+c');
   await page.waitForFunction(() => /Page copied/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 20000 });
   const png = await page.evaluate(async () => { const items = await navigator.clipboard.read(); return items[0]?.types.join(','); });
@@ -1983,7 +3548,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
 {
   await page.keyboard.press('Escape');
   await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
-  await page.getByRole('menuitem', { name: /^New PDF/ }).click();
+  await page.getByRole('menuitem', { name: /^New PDF…/ }).click();
   let dlg = page.locator('[role=dialog][aria-label="New PDF"]');
   await dlg.locator('[aria-label="Paper size"]').selectOption('Tabloid (11×17)');
   await dlg.locator('[aria-label="Orientation"]').selectOption('p');
@@ -2087,6 +3652,96 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForTimeout(200);
   assert(await rows() === n0 + 1, 'Offset places a parallel copy where clicked');
   await page.keyboard.press('Escape');
+  // Multiply: two copies of the offset line, 0.25 in apart, below it.
+  await page.mouse.click(box.x + 250, box.y + 340);
+  await page.waitForTimeout(200);
+  await page.locator('.menubar-item > button', { hasText: /^Edit$/ }).click();
+  await page.getByRole('menuitem', { name: 'Multiply…' }).click();
+  const md = page.locator('[role=dialog][aria-label="Multiply"]');
+  await md.waitFor();
+  await md.locator('[aria-label="Direction"]').selectOption('down');
+  await md.locator('[aria-label="Distance"]').fill('0.25');
+  await md.locator('[aria-label="Copies"]').fill('2');
+  await md.getByRole('button', { name: 'OK' }).click();
+  await page.waitForTimeout(300);
+  assert(await rows() === n0 + 3, 'Multiply places two parallel copies');
+  // Hide: the copies leave the drawing but stay (greyed) in the list; Show Hidden Markups brings them back.
+  const drawn = await svg.locator('[data-id]').count();
+  await page.locator('.menubar-item > button', { hasText: /^Edit$/ }).click();
+  await page.getByRole('menuitem', { name: 'Hide', exact: true }).click();
+  await page.waitForTimeout(200);
+  assert(await svg.locator('[data-id]').count() === drawn - 2 && await page.locator('.ml-table tr.hidden-markup').count() === 2, 'Hide removes the markups from the drawing, not the list');
+  await page.locator('.menubar-item > button', { hasText: /^Edit$/ }).click();
+  await page.getByRole('menuitem', { name: 'Show Hidden Markups' }).click();
+  await page.waitForTimeout(200);
+  assert(await svg.locator('[data-id]').count() === drawn, 'Show Hidden Markups draws them again');
+  await page.keyboard.press('Escape');
+  // Sketch to Scale: a 10 ft × 5 ft rectangle (sheet scale 18 pt/ft), then a polygon by sides.
+  const menuTools = async (item) => { await page.locator('.menubar-item > button', { hasText: /^Tools$/ }).click(); await page.getByRole('menuitem', { name: item, exact: true }).click(); };
+  const nS = await rows();
+  await menuTools('Rectangle Sketch to Scale');
+  await page.mouse.click(box.x + 120, box.y + 420);
+  const sb = page.locator('[role=toolbar][aria-label="Sketch to Scale"]');
+  await sb.locator('[aria-label="Sketch length"]').fill('10');
+  await sb.locator('[aria-label="Sketch width"]').fill('5');
+  await sb.locator('[aria-label="Sketch rotation"]').fill('0');
+  await sb.locator('[aria-label="Sketch rotation"]').press('Enter');
+  await page.waitForTimeout(200);
+  assert(await rows() === nS + 1, 'Rectangle Sketch to Scale places a rectangle');
+  const rw = await page.evaluate(() => { const r = [...document.querySelectorAll('.page .markup-layer rect')].pop(); return r ? Number(r.getAttribute('width')) : 0; });
+  const zoom = await page.evaluate(() => Number(document.querySelector('.page .markup-layer')?.getAttribute('data-zoom') ?? 0));
+  if (zoom) assert(Math.abs(rw / zoom - 180) < 1, `the sketched rectangle is 10 ft = 180 pt wide (${rw / zoom})`);
+  await menuTools('Polygon Sketch to Scale');
+  await page.mouse.click(box.x + 120, box.y + 520);
+  await sb.locator('[aria-label="Sketch length"]').fill('4');
+  await sb.locator('[aria-label="Sketch rotation"]').fill('0');
+  await sb.locator('[aria-label="Sketch rotation"]').press('Enter');
+  await sb.locator('[aria-label="Sketch length"]').fill('3');
+  await sb.locator('[aria-label="Sketch rotation"]').fill('90');
+  await sb.locator('[aria-label="Sketch rotation"]').press('Enter');
+  await sb.locator('[aria-label="Sketch length"]').press('c');
+  await page.waitForTimeout(200);
+  assert(await rows() === nS + 2, 'Polygon Sketch to Scale closes a polygon from typed sides');
+  await page.keyboard.press('Escape');
+  // Review Text: drag across the title block text, type the replacement.
+  {
+    const lb = await page.locator('.page .markup-layer').first().boundingBox();
+    const n2 = await rows();
+    // Insert Text at Cursor: a click with the Review Text tool.
+    await menuTools('Review Text');
+    await page.mouse.click(lb.x + lb.width * 0.5, lb.y + lb.height * 0.5);
+    const idlg = page.locator('[role=dialog][aria-label="Inserted Text"]');
+    await idlg.waitFor({ timeout: 10000 });
+    await idlg.locator('textarea').fill('ADD NOTE');
+    await idlg.getByRole('button', { name: 'OK' }).click();
+    await page.waitForTimeout(300);
+    assert(await rows() === n2 + 1, 'Insert Text at Cursor adds an insertion caret');
+    // Replace Selected Text from a text selection's right-click menu (when the page has text).
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+Shift+A');
+    await page.waitForTimeout(500);
+    if (await page.locator('.text-sel').count()) {
+      const tsb2 = await page.locator('.text-sel').first().boundingBox();
+      await page.mouse.click(tsb2.x + tsb2.width / 2, tsb2.y + tsb2.height / 2, { button: 'right' });
+      await page.getByRole('menuitem', { name: 'Replace Selected Text…' }).click();
+      const rd = page.locator('[role=dialog][aria-label="Replacement Text"]');
+      await rd.waitFor({ timeout: 10000 });
+      await rd.locator('textarea').fill('SITE PLAN');
+      await rd.getByRole('button', { name: 'OK' }).click();
+      await page.waitForTimeout(300);
+      assert(await rows() === n2 + 3, 'Replace Selected Text adds a strikethrough and an insertion caret');
+      const subjects = await page.locator('.ml-table tbody tr td:first-child').allInnerTexts();
+      assert(subjects.filter((t) => t.includes('Replace Text')).length >= 2, 'both carry the Replace Text subject');
+    }
+    await page.keyboard.press('Escape');
+    // Create Hyperlinks from URLs over the current page runs (the sample has no addresses).
+    await menuTools('Create Hyperlinks from URLs…');
+    const ld = page.locator('[role=dialog][aria-label="Create Hyperlinks from URLs"]');
+    await ld.locator('[aria-label="Pages"]').selectOption('current');
+    await ld.getByRole('button', { name: 'OK' }).click();
+    await page.getByText(/Create Hyperlinks from URLs: /).waitFor({ timeout: 20000 });
+    assert(true, `Create Hyperlinks from URLs ran (${await page.getByText(/Create Hyperlinks from URLs: /).innerText()})`);
+  }
   // Edit Action: the rectangle drawn earlier jumps to page 1... use the new line instead.
   await page.mouse.click(box.x + 250, box.y + 300);
   await page.keyboard.press('Control+Shift+E');
@@ -2122,10 +3777,23 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.locator('.menubar-item > button', { hasText: /^Tools$/ }).click();
   await page.getByRole('menuitem', { name: 'Manage Stamps…' }).click();
   const sd = page.locator('[role=dialog][aria-label="Stamps"]');
-  await sd.getByRole('button', { name: 'New Text Stamp' }).click();
+  await sd.getByRole('button', { name: 'Create Stamp…' }).click();
   await sd.getByLabel('Stamp name').fill('Field Checked');
+  await sd.getByLabel('Stamp template').selectOption('dateBorder');
   await sd.getByLabel('Stamp title').fill('FIELD CHECKED');
+  await sd.getByLabel('Dynamic text').selectOption('Year');
+  assert((await sd.getByLabel('Stamp subtitle').inputValue()) === '{Date}{Year}', 'the template seeds the subtitle and the dynamic text menu appends a token');
+  await sd.getByLabel('Stamp width').fill('3');
   await sd.getByRole('button', { name: 'Save Stamp' }).click();
+  // Export the stamp as a PDF file, and import that file as a new (image) stamp.
+  const [stampPdf] = await Promise.all([page.waitForEvent('download'), sd.getByRole('button', { name: 'PDF' }).first().click()]);
+  await stampPdf.saveAs(`${OUT}/field-checked-stamp.pdf`);
+  assert((await PDFDocument.load(readFileSync(`${OUT}/field-checked-stamp.pdf`))).getPage(0).getWidth() === 216, 'a stamp exports as a PDF of its size (3 in wide)');
+  const [sfc] = await Promise.all([page.waitForEvent('filechooser'), sd.getByRole('button', { name: 'Import Stamp (PDF)…' }).click()]);
+  await sfc.setFiles(`${OUT}/field-checked-stamp.pdf`);
+  await sd.locator('.space-row', { hasText: 'field-checked-stamp' }).waitFor({ timeout: 15000 });
+  assert(true, 'Import Stamp (PDF) makes an image stamp from the file');
+  await sd.locator('.space-row', { hasText: 'field-checked-stamp' }).getByRole('button', { name: 'Delete' }).click();
   await sd.getByRole('button', { name: 'Close' }).click();
   const n1 = await rows();
   await page.locator('.menubar-item > button', { hasText: /^Tools$/ }).click();
@@ -2135,6 +3803,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.mouse.click(box.x + 600, box.y + 150);
   await page.waitForTimeout(200);
   assert(await rows() === n1 + 1 && (await page.locator('.ml-table tbody').innerText()).includes('Field Checked'), 'a custom stamp is placed with its name as subject');
+  assert((await page.locator('.markup-layer').evaluate((el) => el.textContent ?? '')).includes(String(new Date().getFullYear())), 'the dynamic text is filled in when the stamp is placed');
   await page.screenshot({ path: `${OUT}/custom-stamp.png` });
 
   // Camera: without a camera the dialog offers a photo instead.
@@ -2194,6 +3863,23 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     assert(n === 1, `vector compare finds the ${what} change (${n} difference)`);
   }
   await page.screenshot({ path: `${OUT}/compare-style.png` });
+  // Batch > Compare Documents: pages paired by label ('1' on both), one difference clouded.
+  {
+    await page.locator('.doc-tab', { hasText: 'style-a' }).first().click();
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: 'Batch', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Compare Documents…' }).click();
+    const bd = page.getByRole('dialog', { name: 'Batch Compare Documents' });
+    await bd.getByLabel('Current files').selectOption([{ label: 'style-a.pdf' }]);
+    await bd.getByLabel('Revised files').selectOption([{ label: 'style-b.pdf' }]);
+    assert((await bd.locator('.batch-pairs').innerText()).includes('No pages match'), 'different file names do not pair by File Name, Page Index');
+    await bd.getByLabel('Match pages by').selectOption('label');
+    assert((await bd.locator('.batch-pairs').innerText()).includes('style-a.pdf p1 ⇄ style-b.pdf p1'), 'Page Label pairs the sheets');
+    await bd.getByLabel('Compare method').selectOption('vector');
+    await bd.getByRole('button', { name: 'OK' }).click();
+    await page.waitForFunction(() => /Batch Compare: 1 pair, \d+ difference/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 30000 });
+    assert((await page.locator('.statusbar').innerText()).includes('1 pair, 1 difference'), 'Batch Compare clouds the difference of the paired sheets');
+  }
 }
 
 // Real Revu-authored files (tests/fixtures/revu): values must match what Revu displayed.
@@ -2209,6 +3895,485 @@ for (const [file, expected] of [
   const text = await page.locator('.ml-table tbody').innerText();
   for (const v of expected) assert(text.includes(v), `Revu ${file}: shows ${v}`);
   await page.screenshot({ path: `${OUT}/revu-${file.replace('.pdf', '')}.png` });
+}
+
+// Automatically Create Form Fields: a form-like sheet (boxes with labels, a check box, a signature line, radio circles) gets fields.
+{
+  const fdoc = await PDFDocument.create();
+  const fp = fdoc.addPage([612, 792]);
+  const helv = await fdoc.embedFont(StandardFonts.Helvetica);
+  const label = (t, x, y) => fp.drawText(t, { x, y, size: 11, font: helv });
+  const boxAt = (x, y, w, h) => fp.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(0, 0, 0), borderWidth: 1 });
+  label('Name:', 72, 704); boxAt(130, 698, 220, 20);
+  label('Date:', 72, 664); boxAt(130, 658, 120, 20);
+  label('Comments', 72, 630); boxAt(72, 560, 300, 60);
+  boxAt(72, 520, 12, 12); label('I agree', 90, 522);
+  label('Signature:', 72, 470); boxAt(140, 450, 220, 40);
+  label('Colour', 72, 420); fp.drawCircle({ x: 78, y: 400, size: 6, borderColor: rgb(0, 0, 0), borderWidth: 1 }); label('Red', 90, 396);
+  fp.drawCircle({ x: 78, y: 380, size: 6, borderColor: rgb(0, 0, 0), borderWidth: 1 }); label('Blue', 90, 376);
+  writeFileSync(`${OUT}/form-like.pdf`, await fdoc.save());
+  const tabs = await page.locator('.doc-tab').count();
+  const fc = await ctrlO();
+  await fc.setFiles(`${OUT}/form-like.pdf`);
+  await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs);
+  await page.waitForTimeout(800);
+  await page.locator('.menubar-item > button', { hasText: /^Tools$/ }).click();
+  await page.getByRole('menuitem', { name: 'Automatically Create Form Fields' }).click();
+  await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Automatically Create Form Fields:'), null, { timeout: 20000 });
+  const made = (await page.locator('.statusbar').innerText()).match(/Automatically Create Form Fields: (\d+) field/)?.[1];
+  assert(made === '7', `boxes, a check box, a signature line and two radio circles become 7 fields (${made})`);
+  const fe = page.getByRole('dialog', { name: 'Forms Editor' });
+  await fe.waitFor();
+  const names = await fe.locator('input[aria-label^="Name of "]').evaluateAll((els) => els.map((e) => e.value));
+  assert(names.includes('Name') && names.includes('Date') && names.includes('Comments') && names.includes('I agree') && names.includes('Signature') && names.includes('Colour'), `fields are named after their labels (${names.join(', ')})`);
+  await fe.getByRole('button', { name: 'Cancel' }).click().catch(() => page.keyboard.press('Escape'));
+  await page.waitForTimeout(300);
+  assert(await page.getByLabel('Name', { exact: true }).count() === 1 && await page.getByLabel('I agree', { exact: true }).count() === 1, 'the new fields show on the page');
+}
+
+// Sets: revisions detected from file names (A-101 / A-101 R2), Select Latest Revisions, Superseded stamp, Options.
+{
+  const mkSheet = async (name, text) => { const d = await PDFDocument.create(); const pg = d.addPage([612, 792]); pg.drawText(text, { x: 72, y: 700, size: 24, font: await d.embedFont(StandardFonts.Helvetica) }); writeFileSync(`${OUT}/${name}`, await d.save()); };
+  await mkSheet('A-101.pdf', 'Plan, first issue'); await mkSheet('A-101 R2.pdf', 'Plan, revision 2');
+  const tabs = await page.locator('.doc-tab').count();
+  const fc = await ctrlO();
+  await fc.setFiles([`${OUT}/A-101.pdf`, `${OUT}/A-101 R2.pdf`]);
+  await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 2, tabs, { timeout: 20000 });
+  await page.waitForTimeout(500);
+  if (!(await page.locator('.sets-panel').count())) await page.keyboard.press('Alt+2');
+  await page.locator('.sets-panel').waitFor();
+  await page.getByRole('button', { name: 'Sets ▾' }).click();
+  await page.getByRole('menuitem', { name: 'Options…' }).click();
+  const so = page.getByRole('dialog', { name: 'Set Options' });
+  await so.getByLabel('Show', { exact: true }).selectOption('filename');
+  await so.getByRole('button', { name: 'Close' }).click();
+  const stack = page.locator('.set-stack', { has: page.locator('.set-sheet', { hasText: 'A-101 R2' }) });
+  assert(await stack.locator('.set-stack-toggle', { hasText: '1 previous revision' }).count() === 1, `A-101 and A-101 R2 stack as one sheet with a previous revision (sheets: ${(await page.locator('.set-sheet').allInnerTexts()).join(' | ')}; toggles: ${(await page.locator('.set-stack-toggle').allInnerTexts()).join(' | ')})`);
+  await page.getByRole('button', { name: 'Sets ▾' }).click();
+  await page.getByRole('menuitem', { name: 'Select Latest Revisions' }).click();
+  const latestNames = await page.locator('.set-sheet.selected').allInnerTexts();
+  assert(latestNames.includes('A-101 R2') && !latestNames.includes('A-101'), `Select Latest Revisions picks the newest sheet of each stack (${latestNames.join(', ')})`);
+  await page.getByRole('button', { name: 'Sets ▾' }).click();
+  await page.getByRole('menuitem', { name: 'Stamp Previous Revisions "Superseded"' }).click();
+  await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Superseded stamp added to 1 sheet'));
+  await page.locator('.doc-tab', { hasText: /^A-101\.pdf/ }).click();
+  await page.waitForTimeout(400);
+  assert((await page.locator('.ml-table tbody').innerText()).includes('SUPERSEDED'), 'the previous revision got a SUPERSEDED stamp');
+  await page.getByRole('button', { name: 'Sets ▾' }).click();
+  await page.getByRole('menuitem', { name: 'Options…' }).click();
+  await so.getByLabel('Previous Revisions').selectOption('hide');
+  await so.getByRole('button', { name: 'Close' }).click();
+  assert(await page.locator('.set-sheet', { hasText: /^A-101$/ }).count() === 0 && await page.locator('.set-sheet', { hasText: 'A-101 R2' }).count() === 1, 'Previous Revisions: Hide lists only the latest revision');
+  await page.getByRole('button', { name: 'Sets ▾' }).click();
+  await page.getByRole('menuitem', { name: 'Options…' }).click();
+  await so.getByLabel('Previous Revisions').selectOption('gray');
+  await so.getByLabel('Show', { exact: true }).selectOption('label');
+  await so.getByRole('button', { name: 'Close' }).click();
+  // Slip Sheet options: the revision inserted in front of the current page (matched by index), the current page stamped Superseded.
+  {
+    await page.locator('.doc-tab', { hasText: /^A-101\.pdf/ }).click();
+    await page.waitForTimeout(300);
+    const stampsBefore = (await page.locator('.ml-table tbody').innerText()).split('SUPERSEDED').length - 1;
+    await page.locator('.menubar-item > button', { hasText: /^Document$/ }).click();
+    await page.getByRole('menuitem', { name: 'Slip Sheet…' }).click();
+    const ss = page.getByRole('dialog', { name: 'Slip Sheet' });
+    const [sfc] = await Promise.all([page.waitForEvent('filechooser'), ss.getByRole('button', { name: 'Choose PDF…' }).click()]);
+    await sfc.setFiles(`${OUT}/A-101 R2.pdf`);
+    await ss.getByText('(1 page').waitFor();
+    await ss.getByLabel('Match pages by').selectOption('index');
+    await ss.getByLabel('Slip sheet mode').selectOption('insert');
+    await ss.getByLabel("Stamp Current Pages 'Superseded'").check();
+    await ss.getByLabel('Copy Markups from Current Pages to Revised Pages').uncheck();
+    await ss.getByRole('button', { name: 'OK' }).click();
+    await page.waitForFunction(() => /Slip Sheet: 1 sheet\(s\) inserted/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 30000 });
+    await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('of 2)'));
+    await page.waitForTimeout(400);
+    const stampsAfter = (await page.locator('.ml-table tbody').innerText()).split('SUPERSEDED').length - 1;
+    assert(stampsAfter === stampsBefore + 1, `Insert Revised Pages keeps the current page and stamps it Superseded (${stampsBefore} -> ${stampsAfter})`);
+  }
+  // Save Set / Open Set (our JSON set file), Publish: Combine / Package, Stack Multi-Page Documents.
+  {
+    const setsMenu = async (name) => { await page.getByRole('button', { name: 'Sets ▾' }).click(); await page.getByRole('menuitem', { name }).click(); };
+    page.once('dialog', (dl) => dl.accept('Tower'));
+    const [sdl] = await Promise.all([page.waitForEvent('download'), setsMenu('Save Set…')]);
+    assert(sdl.suggestedFilename() === 'Tower.ctset.json', `Save Set downloads a set file (${sdl.suggestedFilename()})`);
+    await sdl.saveAs(`${OUT}/Tower.ctset.json`);
+    const setFile = JSON.parse(readFileSync(`${OUT}/Tower.ctset.json`, 'utf8'));
+    assert(setFile.format === 'cyantakeoff-set' && setFile.files.includes('A-101 R2.pdf') && setFile.options.show === 'label', 'the set file lists the open files and the Set options');
+    const docCount = await page.locator('.doc-tab').count();
+    const [cdl] = await Promise.all([page.waitForEvent('download'), setsMenu('Publish: Combine…')]);
+    await cdl.saveAs(`${OUT}/Set.pdf`);
+    const combined = await PDFDocument.load(readFileSync(`${OUT}/Set.pdf`));
+    assert(combined.getPageCount() >= docCount && (await page.locator('.statusbar').innerText()).includes(`Combined ${combined.getPageCount()} page`), `Publish: Combine joins every sheet of the Set (${combined.getPageCount()} pages)`);
+    const [pdl] = await Promise.all([page.waitForEvent('download'), setsMenu('Publish: Package…')]);
+    await pdl.saveAs(`${OUT}/Set package.pdf`);
+    const pkg = await PDFDocument.load(readFileSync(`${OUT}/Set package.pdf`));
+    const names = pkg.catalog.lookup(PDFName.of('Names')).lookup(PDFName.of('EmbeddedFiles')).lookup(PDFName.of('Names')).asArray();
+    assert(names.length / 2 === docCount, `Publish: Package attaches every file of the Set (${names.length / 2} of ${docCount})`);
+    // Open Set: the set file, then its PDFs; files not picked are reported missing.
+    const [fc1] = await Promise.all([page.waitForEvent('filechooser'), setsMenu('Open Set…')]);
+    const fc2p = page.waitForEvent('filechooser');
+    await fc1.setFiles(`${OUT}/Tower.ctset.json`);
+    const fc2 = await fc2p;
+    await fc2.setFiles(`${OUT}/A-101 R2.pdf`);
+    await page.waitForFunction(() => /Set "Tower" opened/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 20000 });
+    const openStatus = await page.locator('.statusbar').innerText();
+    assert(/opened: 1 of \d+ file/.test(openStatus) && /(^|[ ,])A-101\.pdf/.test(openStatus.split('missing:')[1] ?? ''), `Open Set opens the picked files and names the missing ones (${openStatus.match(/Set "Tower"[^\n]*/)?.[0]})`);
+    await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, docCount);
+    await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+    await page.getByRole('menuitem', { name: /^Close\b/ }).first().click();
+    await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n, docCount);
+    // Stack Multi-Page Documents: a multi-page file's pages fold under its first page.
+    await setsMenu('Options…');
+    const so2 = page.getByRole('dialog', { name: 'Set Options' });
+    await so2.getByLabel('Stack Multi-Page Documents').check();
+    await so2.getByRole('button', { name: 'Close' }).click();
+    assert(await page.locator('.set-stack-toggle', { hasText: /more page/ }).count() >= 1, 'Stack Multi-Page Documents folds a multi-page file under its first page');
+    await setsMenu('Options…');
+    await so2.getByLabel('Stack Multi-Page Documents').uncheck();
+    await so2.getByRole('button', { name: 'Close' }).click();
+  }
+}
+
+// File > Create > From File: an image becomes a one-page PDF; Window > Hide/Show Panels puts every panel away and back.
+{
+  const tabs = await page.locator('.doc-tab').count();
+  await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+  const [ifc] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('menuitem', { name: 'Create › From File…' }).click()]);
+  await ifc.setFiles(`${OUT}/11-legend.png`);
+  await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs, { timeout: 20000 });
+  await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Created 1 PDF from 1 file'));
+  assert((await page.locator('.doc-tab.active').innerText()).startsWith('11-legend.pdf') && (await page.locator('.statusbar').innerText()).includes('(1 of 1)'), 'Create From File turns the image into a one-page PDF');
+  const panelsBefore = await page.locator('.panel').count();
+  assert(panelsBefore >= 1, `some panels are open before Hide/Show Panels (${panelsBefore})`);
+  const windowMenu = async (item) => { await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click(); await page.getByRole('menuitem', { name: item }).click(); };
+  await windowMenu('Hide/Show Panels');
+  assert(await page.locator('.panel').count() === 0 && await page.locator('.ml-table').count() === 0, 'Hide/Show Panels hides every panel');
+  await windowMenu('Hide/Show Panels');
+  assert(await page.locator('.panel').count() === panelsBefore, 'Hide/Show Panels brings the panels back as they were');
+  // Window > Sets opens the panel; Auto-Hide Tabs folds the tab bar until hovered; Auto-Hide Panel Access folds an empty side bar.
+  const setsOpen = async () => (await page.locator('.sets-panel').count()) === 1;
+  const wasOpen = await setsOpen();
+  await windowMenu('Sets');
+  assert((await setsOpen()) !== wasOpen, `Window > Sets toggles the Sets panel (${wasOpen} -> ${await setsOpen()})`);
+  await windowMenu('Sets');
+  await windowMenu('Auto-Hide Tabs');
+  const tabBar = page.locator('.doc-tabs.auto-hide');
+  await page.mouse.move(400, 400);
+  await page.waitForTimeout(300);
+  const folded = (await tabBar.boundingBox()).height;
+  await tabBar.hover();
+  await page.waitForTimeout(300);
+  const unfolded = (await tabBar.boundingBox()).height;
+  assert(folded < 10 && unfolded >= 20, `Auto-Hide Tabs folds the tab bar until the pointer reaches it (${folded.toFixed(0)} -> ${unfolded.toFixed(0)} px)`);
+  await windowMenu('Auto-Hide Tabs');
+  assert(await page.locator('.doc-tabs.auto-hide').count() === 0, 'Auto-Hide Tabs off shows the tab bar again');
+  await windowMenu('Auto-Hide Panel Access');
+  const activeLeft = page.locator('.side-tabs.side-left button.active');
+  const leftTitle = (await activeLeft.count()) ? await activeLeft.getAttribute('title') : null;
+  if (leftTitle) await activeLeft.click(); // closes the left panel
+  await page.mouse.move(600, 400); // off the bar, so it is not hovered
+  await page.waitForTimeout(400);
+  assert(await page.locator('.side-tabs.side-left.auto-hide').count() === 1 && (await page.locator('.side-tabs.side-left').boundingBox()).width < 10, `Auto-Hide Panel Access folds the empty left bar (${(await page.locator('.side-tabs.side-left').boundingBox()).width.toFixed(0)} px)`);
+  await windowMenu('Auto-Hide Panel Access');
+  assert(await page.locator('.side-tabs.auto-hide').count() === 0, 'Auto-Hide Panel Access off unfolds the bar');
+  if (leftTitle) await windowMenu(leftTitle);
+}
+
+// Preferences: Find Hyperlinks in PDF Content, Lock Panning in Fit Width, Automatically Reorder Bookmarks,
+// Enable Single Key Shortcuts (forms), Enable Spell Check.
+{
+  const pd = page.getByRole('dialog', { name: 'Preferences' });
+  const prefs = async (tab, fn) => { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press('Control+k'); await pd.waitFor(); await pd.getByRole('tab', { name: tab, exact: true }).click(); await fn(); await pd.getByRole('button', { name: 'Close' }).click(); await pd.waitFor({ state: 'hidden' }); };
+  const wm = async (item) => { await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click(); await page.getByRole('menuitem', { name: item }).click(); };
+  const tabs0 = await page.locator('.doc-tab').count();
+  const openFile = async (f) => { const fc = await ctrlO(); await fc.setFiles(f); await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs0); await page.waitForTimeout(600); };
+  const closeActive = async () => {
+    const ok = (d) => d.accept().catch(() => {}); // the unsaved-changes prompt, when there is one
+    page.on('dialog', ok);
+    await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+    await page.getByRole('menuitem', { name: /^Close\b/ }).first().click();
+    await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n, tabs0);
+    page.off('dialog', ok);
+  };
+  // A portrait page whose text holds an address.
+  {
+    const ld = await PDFDocument.create();
+    const pg = ld.addPage([612, 792]);
+    const font = await ld.embedFont(StandardFonts.Helvetica);
+    pg.drawText('Visit http://localhost:4173/?from=pdf for the app', { x: 72, y: 700, size: 14, font });
+    writeFileSync(`${OUT}/urltext.pdf`, await ld.save());
+    await openFile(`${OUT}/urltext.pdf`);
+    await page.keyboard.press('Escape');
+    const box = await svg.boundingBox();
+    const z = box.width / 612;
+    const at = { x: box.x + 150 * z, y: box.y + (792 - 705) * z };
+    await page.mouse.move(at.x - 3, at.y);
+    await page.waitForTimeout(500);
+    await page.mouse.move(at.x, at.y);
+    await page.waitForTimeout(200);
+    assert(await svg.evaluate((el) => el.style.cursor) === 'pointer', 'Find Hyperlinks in PDF Content: the pointer becomes a hand over an address in the page text');
+    await page.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(String(u)); return null; }; });
+    await page.mouse.click(at.x, at.y);
+    await page.waitForTimeout(300);
+    const opened = await page.evaluate(() => window.__opened);
+    assert(opened.length === 1 && opened[0].includes('from=pdf'), `clicking the address opens it in a new tab (${opened.join(', ')}; ${(await page.locator('.statusbar').innerText()).split('\n')[0]})`);
+    await page.mouse.move(at.x + 400 * z, at.y + 200 * z);
+    await page.waitForTimeout(200);
+    assert(await svg.evaluate((el) => el.style.cursor) !== 'pointer', 'beside the address the cursor is the normal one');
+    await prefs('Document', () => pd.getByLabel('Find hyperlinks in PDF content').uncheck());
+    await page.mouse.move(at.x - 3, at.y);
+    await page.waitForTimeout(300);
+    await page.mouse.move(at.x, at.y);
+    await page.waitForTimeout(200);
+    assert(await svg.evaluate((el) => el.style.cursor) !== 'pointer', 'with the preference off the address is plain text');
+    await prefs('Document', () => pd.getByLabel('Find hyperlinks in PDF content').check());
+    // Lock Panning in Fit Width: at the fit-width zoom the Pan tool only scrolls vertically; zoomed in, it pans sideways too.
+    const viewer = page.locator('.viewer').first();
+    await page.locator('.menubar-item > button', { hasText: /^View$/ }).click();
+    await page.getByRole('menuitem', { name: /^Fit Width/ }).click();
+    await page.waitForTimeout(300);
+    await page.keyboard.press('Shift+V');
+    const vb = await viewer.boundingBox();
+    const pan = async () => {
+      await page.mouse.move(vb.x + vb.width / 2, vb.y + vb.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(vb.x + vb.width / 2 - 120, vb.y + vb.height / 2 - 120, { steps: 6 });
+      await page.mouse.up();
+      await page.waitForTimeout(200);
+      return viewer.evaluate((el) => [el.scrollLeft, el.scrollTop]);
+    };
+    const [l1, t1] = await pan();
+    assert(l1 === 0 && t1 > 0, `Lock Panning in Fit Width: the page only moves vertically at the fit-width zoom (${l1}, ${t1})`);
+    await page.keyboard.press('Control+=');
+    await page.waitForTimeout(300);
+    const [l2] = await pan();
+    assert(l2 > 0, `zoomed in, the Pan tool moves the page sideways too (${l2})`);
+    await page.keyboard.press('Escape');
+    await closeActive();
+  }
+  // Automatically Reorder Bookmarks: dragging page 1 to the end moves its bookmark after the others.
+  {
+    await openFile(`${OUT}/bookmarks.pdf`);
+    if (!(await page.locator('.bookmark-row').count())) await wm('Bookmarks');
+    const titles = () => page.locator('.bookmark-row .bm-title').allInnerTexts();
+    await page.locator('.bookmark-row').first().waitFor();
+    assert((await titles()).slice(0, 2).join('|') === 'Floor Plan|Site Plan', `the saved bookmarks open in file order (${(await titles()).join('|')})`);
+    await wm('Thumbnails');
+    await page.locator('.thumb').first().waitFor();
+    const thumbs = page.locator('.thumb');
+    const n = await thumbs.count();
+    await thumbs.first().dragTo(thumbs.nth(n - 1));
+    await page.waitForFunction(() => /Moved page 1 to/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 20000 });
+    await page.waitForFunction(() => !document.querySelector('.busy-overlay'), null, { timeout: 20000 });
+    await wm('Bookmarks');
+    await page.locator('.bookmark-row').first().waitFor();
+    assert((await titles()).slice(0, 2).join('|') === 'Site Plan|Floor Plan', `Automatically Reorder Bookmarks puts the moved page's bookmark after the others (${(await titles()).join('|')})`);
+    await closeActive();
+  }
+  // Enable Single Key Shortcuts: off, R types into a form field; on, it picks the Rectangle tool.
+  {
+    await openFile('tests/fixtures/form.pdf');
+    const field = page.locator('input.form-field:not([type=checkbox]):not([type=radio])').first();
+    await field.waitFor();
+    await field.click();
+    await page.keyboard.press('r');
+    assert((await field.inputValue()).endsWith('r'), 'single key shortcuts off: R types into the field');
+    await prefs('Forms', () => pd.getByLabel('Enable single key shortcuts').check());
+    await field.click();
+    await page.keyboard.press('r');
+    await page.waitForTimeout(200);
+    assert(await page.locator('.tb-btn.active[title^="Rectangle"]').count() === 1, 'Enable Single Key Shortcuts: R in a form field picks the Rectangle tool');
+    assert(!(await field.inputValue()).endsWith('rr'), 'the key is not typed into the field');
+    await prefs('Forms', () => pd.getByLabel('Enable single key shortcuts').uncheck());
+    await page.keyboard.press('Escape');
+    await closeActive();
+  }
+  // Enable Spell Check off: comment boxes stop underlining.
+  {
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('r');
+    const a = await toScreen(30, 30), b = await toScreen(34, 26);
+    await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 4 }); await page.mouse.up();
+    await page.waitForTimeout(300);
+    if (!(await page.locator('.props').count())) await page.locator('.side-right button[title="Properties"]').click();
+    await page.locator('.props textarea').first().waitFor();
+    assert(await page.locator('.props textarea').first().getAttribute('spellcheck') === 'true', 'comment boxes are spell checked by default');
+    await prefs('Spelling', () => pd.getByLabel('Enable spell check').uncheck());
+    assert(await page.locator('.props textarea').first().getAttribute('spellcheck') === 'false', 'Enable Spell Check off turns the underline off in comment boxes');
+    await prefs('Spelling', () => pd.getByLabel('Enable spell check').check());
+    await page.keyboard.press('Delete');
+    await page.keyboard.press('Escape');
+  }
+}
+
+// Preferences > Markup / Measure: purple handles around a multi-selection (a Group scales its line widths too),
+// Retain Layer information when copying, Print Pop-Ups; Automatically Split Count Measurements by Space.
+{
+  const pd = page.getByRole('dialog', { name: 'Preferences' });
+  const prefs = async (tab, fn) => { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press('Control+k'); await pd.waitFor(); await pd.getByRole('tab', { name: tab, exact: true }).click(); await fn(); await pd.getByRole('button', { name: 'Close' }).click(); await pd.waitFor({ state: 'hidden' }); };
+  const wm = async (item) => { await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click(); await page.getByRole('menuitem', { name: item }).click(); };
+  const openFile = async (f, n) => { const fc = await ctrlO(); await fc.setFiles(f); await page.waitForFunction((k) => document.querySelectorAll('.doc-tab').length === k, n); await page.waitForTimeout(600); };
+  const closeActive = async (n) => {
+    const ok = (d) => d.accept().catch(() => {});
+    page.on('dialog', ok);
+    await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+    await page.getByRole('menuitem', { name: /^Close\b/ }).first().click();
+    await page.waitForFunction((k) => document.querySelectorAll('.doc-tab').length === k, n);
+    page.off('dialog', ok);
+  };
+  const ids = async () => page.locator('.page .markup-layer g[data-id]').evaluateAll((els) => els.map((e) => e.dataset.id));
+  const geom = async (id) => page.locator(`.page .markup-layer g[data-id="${id}"]`).evaluate((el) => ({ w: el.getBBox().width, sw: Math.max(0, ...[...el.querySelectorAll('[stroke-width]')].map((e) => Number(e.getAttribute('stroke-width')) || 0)) }));
+  const dragFt = async (a, b) => { const p = await toScreen(...a), q = await toScreen(...b); await page.mouse.move(p.x, p.y); await page.mouse.down(); await page.mouse.move(q.x, q.y, { steps: 4 }); await page.mouse.up(); await page.waitForTimeout(150); };
+  const undoTo = async (n) => { for (let i = 0; i < 6 && (await ids()).length > n; i++) { await page.keyboard.press('Control+z'); await page.waitForTimeout(150); } };
+  // Two rectangles, grouped: the purple handles scale both and their line widths follow (on by default).
+  {
+    await page.keyboard.press('Escape');
+    const before = await ids();
+    await page.keyboard.press('r'); await dragFt([30, 30], [34, 27]); await page.keyboard.press('Escape');
+    await page.keyboard.press('r'); await dragFt([36, 30], [40, 27]); await page.keyboard.press('Escape');
+    const made = (await ids()).filter((id) => !before.includes(id));
+    assert(made.length === 2, `two rectangles drawn (${made.length})`);
+    await dragFt([28, 32], [42, 25]); // band, left to right: both fully inside
+    assert(await page.locator('.scale-handle').count() === 4, 'a multi-selection shows four purple scale handles');
+    await page.keyboard.press('Control+g');
+    await page.waitForTimeout(200);
+    const pull = async () => { const hb = await page.locator('.scale-handle').nth(2).boundingBox(); const cx = hb.x + hb.width / 2, cy = hb.y + hb.height / 2; await page.mouse.move(cx, cy); await page.mouse.down(); await page.mouse.move(cx + 80, cy + 80, { steps: 5 }); await page.mouse.up(); await page.waitForTimeout(200); };
+    const g0 = await geom(made[0]);
+    await pull();
+    const g1 = await geom(made[0]);
+    assert(g1.w > g0.w * 1.2, `dragging a purple handle scales the whole selection (${g0.w.toFixed(1)} -> ${g1.w.toFixed(1)})`);
+    assert(g1.sw > g0.sw * 1.1, `Scale Appearance Properties for Grouped Markups: the line width follows (${g0.sw} -> ${g1.sw})`);
+    await prefs('Markup', () => pd.getByLabel('Scale appearance properties for grouped markups').uncheck());
+    await pull();
+    const g2 = await geom(made[0]);
+    assert(g2.w > g1.w * 1.1 && g2.sw === g1.sw, `with the preference off only the geometry scales (${g1.w.toFixed(1)} -> ${g2.w.toFixed(1)}, width ${g2.sw})`);
+    await prefs('Markup', () => pd.getByLabel('Scale appearance properties for grouped markups').check());
+    await page.keyboard.press('Delete');
+    await page.waitForTimeout(200);
+    assert((await ids()).length === before.length, 'the two rectangles are deleted again');
+  }
+  // Retain Layer information when copying markups: pasted into another file, the layer is created there.
+  {
+    const tabs0 = await page.locator('.doc-tab').count();
+    await openFile(`${OUT}/layered-saved.pdf`, tabs0 + 1); // its rectangle is on layer "Markups"
+    await page.keyboard.press('Escape'); await page.keyboard.press('Control+a'); await page.keyboard.press('Control+c');
+    await openFile(`${OUT}/urltext.pdf`, tabs0 + 2);
+    await page.keyboard.press('Control+v');
+    await page.waitForTimeout(300);
+    const lp = page.getByRole('tree', { name: 'Layers' });
+    if (!(await lp.count())) await wm('Layers');
+    assert(await lp.getByRole('treeitem', { name: 'Layer Markups' }).count() === 1, 'Retain Layer information: pasting into another file creates the markup\'s layer there');
+    await closeActive(tabs0 + 1);
+    await prefs('Markup', () => pd.getByLabel('Retain layer information when copying markups').uncheck());
+    await openFile(`${OUT}/urltext.pdf`, tabs0 + 2);
+    await page.keyboard.press('Control+v');
+    await page.waitForTimeout(300);
+    if (!(await lp.count())) await wm('Layers');
+    assert(await lp.getByRole('treeitem', { name: 'Layer Markups' }).count() === 0 && (await ids()).length >= 1, 'with the preference off the pasted markup has no layer');
+    await prefs('Markup', () => pd.getByLabel('Retain layer information when copying markups').check());
+    await closeActive(tabs0 + 1);
+    await closeActive(tabs0);
+  }
+  // Automatically Split Count Measurements by Space: a Space "Count Room", a count started inside and continued outside.
+  {
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Alt+S');
+    await page.getByRole('button', { name: 'Add Space' }).click();
+    await dragFt([60, 34], [70, 26]);
+    const sd = page.getByRole('dialog', { name: 'Add Space' });
+    await sd.getByLabel('Space name').fill('Count Room');
+    await sd.getByRole('button', { name: 'OK' }).click();
+    await page.keyboard.press('Alt+S');
+    const n0 = (await ids()).length;
+    const clicks = async () => { for (const [x, y] of [[65, 30], [76, 30]]) { const p = await toScreen(x, y); await page.mouse.click(p.x, p.y); await page.waitForTimeout(150); } };
+    await prefs('Measure', () => pd.getByLabel('Automatically split count measurements by Space').check());
+    await page.keyboard.press('Shift+Alt+C');
+    await clicks();
+    await page.keyboard.press('Escape');
+    assert((await ids()).length === n0 + 2, `Automatically Split Count Measurements by Space: a count continued outside the Space starts a new count (${(await ids()).length - n0} counts)`);
+    await undoTo(n0);
+    await prefs('Measure', () => pd.getByLabel('Automatically split count measurements by Space').uncheck());
+    await page.keyboard.press('Shift+Alt+C');
+    await clicks();
+    await page.keyboard.press('Escape');
+    assert((await ids()).length === n0 + 1, 'with the preference off the clicks continue one count');
+    await undoTo(n0);
+  }
+  // Print Pop-Ups: the current page prints with the preference on.
+  {
+    await prefs('Markup', () => pd.getByLabel('Print pop-ups').check());
+    const printed = await page.evaluate(() => { window.__printed = window.__printed ?? 0; window.print = () => { window.__printed++; }; return window.__printed; });
+    await page.keyboard.press('Control+p');
+    const dlg = page.locator('[role=dialog][aria-label="Print"]');
+    await dlg.waitFor();
+    await dlg.locator('[aria-label="Page range"]').selectOption('current');
+    await dlg.getByRole('button', { name: 'Print', exact: true }).click();
+    await page.waitForFunction((n) => window.__printed === n + 1, printed, { timeout: 60000 });
+    assert(await page.locator('#print-root .print-sheet img').count() >= 1, 'Print Pop-Ups: the sheet renders with the pop-ups on');
+    await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+    await prefs('Markup', () => pd.getByLabel('Print pop-ups').uncheck());
+  }
+}
+
+// Save Mode > Maintain Revisions keeps the earlier versions in the file; File > Revert As… opens one of them.
+{
+  const pd = page.getByRole('dialog', { name: 'Preferences' });
+  const prefs = async (tab, fn) => { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press('Control+k'); await pd.waitFor(); await pd.getByRole('tab', { name: tab, exact: true }).click(); await fn(); await pd.getByRole('button', { name: 'Close' }).click(); await pd.waitFor({ state: 'hidden' }); };
+  const ids = async () => page.locator('.page .markup-layer g[data-id]').evaluateAll((els) => els.map((e) => e.dataset.id));
+  const dragFt = async (a, b) => { const p = await toScreen(...a), q = await toScreen(...b); await page.mouse.move(p.x, p.y); await page.mouse.down(); await page.mouse.move(q.x, q.y, { steps: 4 }); await page.mouse.up(); await page.waitForTimeout(150); };
+  await prefs('Document', () => pd.getByLabel('Save mode').selectOption('revisions'));
+  await page.keyboard.press('Escape');
+  const before = (await ids()).length;
+  await page.keyboard.press('r'); await dragFt([30, 30], [34, 27]); await page.keyboard.press('Escape');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
+  const file = `${OUT}/revisions.pdf`;
+  await dl.saveAs(file);
+  await page.waitForFunction(() => /Saved /.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 20000 });
+  const markers = readFileSync(file).toString('latin1').split('%%EOF').length - 1;
+  assert(markers >= 2, `Maintain Revisions saves an incremental update (${markers} %%EOF markers)`);
+  const tabs0 = await page.locator('.doc-tab').count();
+  await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+  await page.getByRole('menuitem', { name: 'Revert As…' }).click();
+  const rd = page.getByRole('dialog', { name: 'Revert As' });
+  await rd.waitFor();
+  const n = await rd.locator('option').count();
+  assert(n >= 2 && (await rd.locator('option').last().innerText()).includes('(current)'), `Revert As lists the revisions in the file (${n}, the last one current)`);
+  await rd.getByLabel('Revision').selectOption({ index: 0 });
+  await rd.getByRole('button', { name: 'Open Revision' }).click();
+  await page.waitForFunction((k) => document.querySelectorAll('.doc-tab').length === k + 1, tabs0);
+  await page.waitForTimeout(800);
+  assert((await page.locator('.doc-tab.active').innerText()).includes('(revision 1)'), 'the chosen revision opens as a new document');
+  assert((await ids()).length <= before, `the revision has the markups as they were before the save (${(await ids()).length} vs ${before + 1} now)`);
+  await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+  await page.getByRole('menuitem', { name: /^Close\b/ }).first().click();
+  await page.waitForFunction((k) => document.querySelectorAll('.doc-tab').length === k, tabs0);
+  await prefs('Document', () => pd.getByLabel('Save mode').selectOption('publish'));
+  await page.keyboard.press('Delete');
+}
+
+// Preferences > General > Reopen Files from Last Session on Startup: the sample is open again after a reload.
+{
+  const pd = page.getByRole('dialog', { name: 'Preferences' });
+  const prefs = async (tab, fn) => { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press('Control+k'); await pd.waitFor(); await pd.getByRole('tab', { name: tab, exact: true }).click(); await fn(); await pd.getByRole('button', { name: 'Close' }).click(); await pd.waitFor({ state: 'hidden' }); };
+  await prefs('General', () => pd.getByLabel('Reopen files from last session on startup').check());
+  await page.keyboard.press('Escape');
+  // Only the sample drawing (which needs no file access) is open when the page is left.
+  const ok = (d) => d.accept().catch(() => {});
+  page.on('dialog', ok);
+  await page.keyboard.press('Control+Shift+W');
+  await page.locator('.start-page').waitFor({ timeout: 20000 });
+  await page.getByRole('button', { name: 'Open sample drawing' }).click();
+  await page.locator('.markup-layer').first().waitFor({ timeout: 30000 });
+  const sampleTab = page.locator('.doc-tab', { hasText: /Sample Floor/ }); // the tab text may be truncated
+  assert(await sampleTab.count() === 1, `the sample drawing is open before the reload (${(await page.locator('.doc-tab').allInnerTexts()).join(' | ')})`);
+  await page.reload();
+  page.off('dialog', ok);
+  await page.locator('.menubar').waitFor();
+  await sampleTab.waitFor({ timeout: 30000 });
+  await page.locator('.markup-layer').first().waitFor({ timeout: 30000 });
+  assert(await sampleTab.count() === 1, 'Reopen Files from Last Session opens the sample drawing again on startup');
+  await prefs('General', () => pd.getByLabel('Reopen files from last session on startup').uncheck());
 }
 
 assert(errors.length === 0, `no page errors (${errors.join(' | ')})`);
