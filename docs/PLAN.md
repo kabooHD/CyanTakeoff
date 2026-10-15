@@ -268,6 +268,8 @@ filling, image signatures, redaction and OCR.
   touching); Set Scale > Pages > Selected from Thumbnails; Length caption
   leader line (Show Caption Leader Line)
 - [x] Tools > Form > Automatically Create Form Fields (src/model/autoFields.ts)
+- [x] Forms Editor: Show All Pages, Order Tabs (Row/Column/Unspecified with
+  ▲▼), field alignment toolbar (src/model/fieldLayout.ts)
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

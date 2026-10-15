@@ -21,10 +21,7 @@ export async function autoCreateFormFields() {
     const pdfPage = await d.loaded.pdf.getPage(p + 1);
     const [g, texts] = await Promise.all([snapGeometry(pdfPage, vp), pageText(pdfPage, vp)]);
     // Areas already holding fields (page space) are left alone.
-    const skip: Box[] = d.loaded.fields.flatMap((f) => f.widgets.filter((w) => w.page === p).map((w) => {
-      const [ax, ay] = vp.convertToViewportPoint(w.rect[0], w.rect[1]), [bx, by] = vp.convertToViewportPoint(w.rect[2], w.rect[3]);
-      return { x0: Math.min(ax, bx), y0: Math.min(ay, by), x1: Math.max(ax, bx), y1: Math.max(ay, by) };
-    }));
+    const skip: Box[] = d.loaded.fields.flatMap((f) => f.widgets.filter((w) => w.page === p).map((w) => ({ x0: w.rect[0], y0: w.rect[1], x1: w.rect[2], y1: w.rect[3] })));
     const found = detectFields(findBoxes(g.segments), findCircles(g.curves), texts, skip);
     const pageNames = new Map<string, string>();
     for (const f of found) {

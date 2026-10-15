@@ -209,6 +209,15 @@ displayed value (in the markup's own unit when set), as Revu writes it.
   Box, Signature Field; Revu default shortcut X adds a signature field):
   drag the box, then name the field. Radio buttons sharing a name form one
   group. Forms Editor (Ctrl+Shift+F) renames, re-options and deletes fields.
+- Forms panel: lists the current page's fields (Show All Pages: every
+  page); Forms menu: Order Tabs by Row / by Column (automatic, locks manual
+  reordering) or Unspecified (drag to reorder, ours: ▲▼); the alignment
+  toolbar on two or more selected fields: Align Left/Top/Right/Bottom,
+  Center/Middle (to the first selected field), Align Width/Height/Size,
+  Center in Document, Distribute Horizontally/Vertically (three or more);
+  fields and markups cannot be aligned together. Ours: the Forms Editor
+  (Ctrl+Shift+F) holds these; automatic order is written as the page /Tabs
+  entry, the manual order as the widgets' order in /Annots.
 - Automatically Create Form Fields (Tools > Form): the content layer is
   scanned and form-like areas become fields named from nearby text: text
   boxes, check boxes (small squares), signature fields (a "Signature"

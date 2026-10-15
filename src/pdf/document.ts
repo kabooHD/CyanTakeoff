@@ -9,7 +9,7 @@ import { PDFDocument } from 'pdf-lib';
 import type { PDFDocumentProxy, PageViewport } from 'pdfjs-dist';
 import type { CustomColumn, Markup, Pt, Scale, Space, Viewport } from '../model/types';
 import { importAnnotations, readColumns, removeAnnots } from './importAnnots';
-import { readFields, type FormField } from './forms';
+import { pageTabs, readFields, type FormField } from './forms';
 import { layersOnPages, readLayers, type LayerSet } from './layers';
 import { readBookmarks, type Bookmark } from './bookmarks';
 
@@ -39,6 +39,8 @@ export interface LoadedDoc {
   columns: CustomColumn[];
   /** Form fields (AcroForm), widget rectangles in page space. */
   fields: FormField[];
+  /** Each page's automatic tab order (/Tabs): by Row, Column, Structure, or none. */
+  tabs: ('R' | 'C' | 'S' | null)[];
   /** refKeys of every annotation represented by a markup. */
   importedRefs: Set<string>;
   /** True when pdf-lib could not parse the file; markups cannot be saved into it. */
@@ -129,6 +131,7 @@ export async function openPdf(bytes: Uint8Array): Promise<LoadedDoc> {
     markups,
     spaces,
     columns: lib ? readColumns(lib) : [],
+    tabs: pages.map((_, i) => (lib ? pageTabs(lib, i) : null)),
     fields: lib ? readFields(lib).map((f) => ({
       ...f,
       widgets: f.widgets.filter((w) => pages[w.page]).map((w) => {

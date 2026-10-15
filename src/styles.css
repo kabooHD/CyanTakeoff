@@ -614,3 +614,6 @@ label.button, a.button { display: inline-block; padding: 2px 8px; border: 1px so
 .rotate-handle circle { pointer-events: none; }
 .rotate-readout { pointer-events: none; font-weight: bold; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
 .caption-leader { pointer-events: none; }
+.forms-tools { gap: 8px; align-items: center; }
+.forms-align { flex-wrap: wrap; gap: 4px; }
+.forms-align button { font-size: 11px; padding: 2px 6px; }

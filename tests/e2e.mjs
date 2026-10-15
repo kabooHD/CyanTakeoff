@@ -1431,6 +1431,12 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForTimeout(800);
   await page.keyboard.press('Control+Shift+F');
   const fe = page.getByRole('dialog', { name: 'Forms Editor' });
+  // Forms panel extras (Revu): tab order by row, and the alignment toolbar on the selected fields (the first is the reference).
+  await fe.getByLabel('Order tabs').selectOption('R');
+  await fe.getByLabel('Select Remarks').check();
+  await fe.getByLabel('Select Signature1').check();
+  await fe.getByRole('button', { name: 'Align Top' }).click();
+  await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Align Top: 2 fields'));
   await fe.getByLabel('Name of Remarks').fill('Notes');
   await fe.getByLabel('Delete Grade').check();
   await fe.getByRole('button', { name: 'Apply' }).click();
@@ -1443,6 +1449,10 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const f2 = (await PDFDocument.load(readFileSync(`${OUT}/saved-form-fields.pdf`))).getForm();
   assert(f2.getTextField('Notes').getText() === 'Checked twice' && !f2.getFieldMaybe('Grade') && f2.getFieldMaybe('Signature1')
     && f2.getTextField('inspector').getText() === 'Sam Rivera', 'created fields saved into the PDF form, old values kept');
+  const fdoc2 = await PDFDocument.load(readFileSync(`${OUT}/saved-form-fields.pdf`));
+  assert(String(fdoc2.getPage(0).node.get(PDFName.of('Tabs'))) === '/R', 'Order Tabs by Row writes the page /Tabs entry');
+  const topOf = (name) => { const w = fdoc2.getForm().getField(name).acroField.getWidgets()[0].getRectangle(); return w.y + w.height; };
+  assert(Math.abs(topOf('Notes') - topOf('Signature1')) < 0.01, `Align Top lines the signature field up with the first selected field (${topOf('Notes')} vs ${topOf('Signature1')})`);
 
   // Digital signature with a certificate (.p12): sign the empty signature field, check it, then edit and save again.
   await page.getByRole('button', { name: 'Sign here' }).first().click();
