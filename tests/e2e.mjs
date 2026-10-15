@@ -621,6 +621,23 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.keyboard.press('Alt+P');
     await page.keyboard.press('Escape');
   }
+  // Note icon (Properties > Icon): a note placed with N shows the Comment glyph; Star changes it (saved as /Name).
+  {
+    await page.keyboard.press('n');
+    const at = await toScreen(62, 4);
+    await page.mouse.click(at.x, at.y);
+    await page.locator('.markup-layer g.note-icon').first().waitFor();
+    if (!(await page.locator('[aria-label="Note icon"]').count())) await page.keyboard.press('Alt+P');
+    await page.getByLabel('Note icon').waitFor();
+    assert(await page.locator('.markup-layer g.note-icon[data-icon="Comment"]').count() === 1, 'a new note shows the Comment icon');
+    await page.getByLabel('Note icon').selectOption('Star');
+    await page.waitForTimeout(200);
+    assert(await page.locator('.markup-layer g.note-icon[data-icon="Star"] path').count() === 1, 'Properties > Icon changes the note glyph');
+    await page.evaluate(() => document.activeElement?.blur?.());
+    await page.keyboard.press('Alt+P');
+    await page.keyboard.press('Delete');
+    await page.waitForTimeout(200);
+  }
   // Rise/Drop on a length (Properties): 10 ft + 2 ft rise reads 12'-0"; then undone.
   await page.keyboard.press('Shift+Alt+L'); await click(44, 33); await click(54, 33);
   await page.locator('.side-right button[title="Properties"]').click();

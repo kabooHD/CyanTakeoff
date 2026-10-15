@@ -21,6 +21,7 @@ import { placeColumns } from '../model/listColumns';
 import { layoutOf, withLayout } from '../model/layoutProps';
 import { ROTATION_FIELD, withRotation } from '../model/rotate';
 import { BLEND_MODES, defaultBlend, type BlendMode } from '../model/blend';
+import { NOTE_ICONS, NOTE_ICON_LABELS, type NoteIcon } from '../model/noteIcons';
 import { addCapture, openCapturePreview } from './Capture';
 import { DEFAULT_LINE_HEIGHT, DEFAULT_MARGIN, TEXT_FONTS, textStyleOf } from '../model/textStyle';
 import { COUNT_SYMBOLS, symbolForType } from '../model/count';
@@ -526,6 +527,13 @@ function Properties() {
       <Row label="Author"><input value={m.author} readOnly /></Row>
       <Row label="Date"><input value={new Date(m.modified).toLocaleString()} readOnly /></Row>
       <StyleEditor style={m.style} type={m.type} onChange={(p) => { upd((x) => ({ style: { ...x.style, ...p } })); if (s.prefs.dynamicDefaults && s.toolDefaults[m.type]) s.setToolDefault(m.type, p); }} />
+      {m.type === 'note' && (
+        <Row label="Icon">
+          <select aria-label="Note icon" value={m.noteIcon ?? 'Comment'} onChange={(e) => upd(() => ({ noteIcon: e.target.value === 'Comment' ? undefined : e.target.value as NoteIcon }))}>
+            {NOTE_ICONS.map((i) => <option key={i} value={i}>{NOTE_ICON_LABELS[i]}</option>)}
+          </select>
+        </Row>
+      )}
       {m.type === 'legend' && m.legend && <LegendEditor def={m.legend} columns={doc?.columns ?? []} onChange={(p) => upd((x) => ({ legend: { ...x.legend!, ...p } }))} />}
       {meas && (
         <>

@@ -13,6 +13,7 @@ import { textWidth } from './quickCommands';
 import { useApp } from '../model/store';
 import { ROTATION_FIELD, drawnPoints, rotationCenter } from '../model/rotate';
 import { blendOf, cssBlend } from '../model/blend';
+import { noteGlyph } from '../model/noteIcons';
 import { cellAnchor, cellX, legendHeader, legendLayout, legendRows, type FontFlags } from '../model/legend';
 
 const pts = (p: Pt[]) => p.map((q) => `${q.x},${q.y}`).join(' ');
@@ -283,9 +284,11 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     }
     case 'note': {
       const p = P[0];
-      shape = <g>
-        <rect x={p.x} y={p.y} width={18} height={18} fill={st.fill ?? '#ffd400'} stroke="#000" strokeWidth={0.75} />
-        {[5, 9, 13].map((d) => <line key={d} x1={p.x + 4} x2={p.x + 14} y1={p.y + d} y2={p.y + d} stroke="#000" strokeWidth={0.75} />)}
+      const g = noteGlyph(m.noteIcon ?? 'Comment');
+      shape = <g className="note-icon" data-icon={m.noteIcon ?? 'Comment'} transform={`translate(${p.x} ${p.y})`}>
+        <rect width={18} height={18} fill={st.fill ?? '#ffd400'} stroke="#000" strokeWidth={0.75} />
+        {g.stroke.map((d, i) => <path key={`s${i}`} d={d} fill="none" stroke="#000" strokeWidth={1.1} strokeLinecap="round" strokeLinejoin="round" />)}
+        {g.fill.map((d, i) => <path key={`f${i}`} d={d} fill="#000" />)}
       </g>;
       break;
     }

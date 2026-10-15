@@ -22,6 +22,7 @@ import { DEFAULT_LINE_HEIGHT, alignOfQuadding, parseDS } from '../model/textStyl
 import { symbolOfCountStyle } from '../model/count';
 import { LINE_END_TYPES, defaultEnds, lineEndOfName } from '../model/lineEnds';
 import { blendOfName, defaultBlend } from '../model/blend';
+import { noteIconOf } from '../model/noteIcons';
 
 /** /LE (an array for lines, a name for callouts) as lineStart/lineEnd, only when they differ from the type's defaults. */
 function readLineEnds(doc: PDFDocument, dict: PDFDict, type: MarkupType): Pick<MarkupStyle, 'lineStart' | 'lineEnd'> {
@@ -229,6 +230,7 @@ function baseMarkup(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number, 
     legend: ct?.legend,
     checked: ct?.checked,
     rotation: ct?.rotation,
+    noteIcon: type === 'note' && getName(doc, dict, 'Name') && getName(doc, dict, 'Name') !== 'Comment' ? noteIconOf(getName(doc, dict, 'Name')) : undefined,
     seq: ct?.seq,
     display: ct?.display,
     capture: ct?.capture,

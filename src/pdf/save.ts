@@ -841,7 +841,7 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
       break;
     }
     case 'Text':
-      entries.Name = m.type === 'flag' ? 'Flag' : 'Comment';
+      entries.Name = m.type === 'flag' ? 'Flag' : m.noteIcon ?? 'Comment';
       entries.Rect = [P[0].x, P[0].y - 20, P[0].x + 18, P[0].y];
       break;
   }

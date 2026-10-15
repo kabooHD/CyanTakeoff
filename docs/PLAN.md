@@ -281,6 +281,7 @@ filling, image signatures, redaction and OCR.
 - [x] Purple scale handles (proportional scaling about the opposite corner,
   Shift free); Ctrl+drag a box corner keeps its proportions (src/model/scale.ts)
 - [x] Cloud Size and Invert, Highlight checkbox (Multiply), Length Flip Text
+- [x] Note icons (PDF /Name: Comment, Key, Note, Help, Star...) in Properties
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

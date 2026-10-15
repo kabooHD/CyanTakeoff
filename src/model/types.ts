@@ -201,6 +201,8 @@ export interface Markup {
   statusDate?: string;
   /** Text content for textbox/callout. */
   text?: string;
+  /** Note: its icon (PDF /Name; default Comment). */
+  noteIcon?: import('./noteIcons').NoteIcon;
   /** Scale captured from the page when the measurement was made. */
   scale?: Scale;
   /** Depth in scale units (ft or m): volume, or wall area for lengths. */
