@@ -744,7 +744,9 @@ optional border. Not yet: Dim Filtered Markups, Print Visible Hyperlinks.
 - Autosize Text Box (Alt+Z) fits a text box or callout box to its text.
 - Callout leaders: right-click inside the box > Add Leader puts another
   leader from the clicked point to the box; each leader's tip has a
-  handle; right-click a tip > Delete Leader. Leaders run straight to the
+  handle; right-click a tip > Delete Leader (the last one gone, the
+  callout is a text box again). A text box gets a leader the same way
+  (right-click > Add Leader) and then behaves as a callout. Leaders run straight to the
   nearest side (ours: no shared knee). Lines, arrows, polylines and
   callouts have Start / End line ends (None, Open Arrow, Closed Arrow,
   Circle, Square, Diamond, Slash, Butt, Reverse arrows) and a size,

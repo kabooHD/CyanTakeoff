@@ -193,6 +193,21 @@ assert(list.includes('Count Measurement') && /\t3\t/.test(list), 'count of 3');
 }
 
 assert(list.includes('Verify door hardware'), 'text box content in list');
+{
+  // Text Box > Add Leader gives it a leader line (a callout); deleting the last leader makes it a text box again (Revu).
+  const tb = page.locator('.markup-layer g[data-id]', { hasText: 'Verify door hardware' }).first();
+  const p = await toScreen(33, 8);
+  await page.mouse.click(p.x, p.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Add Leader' }).click();
+  await page.waitForTimeout(200);
+  assert(await tb.locator('line').count() === 1, 'Add Leader on a text box draws a leader line');
+  const lb = await tb.locator('line').first().boundingBox();
+  await page.mouse.click(lb.x + 1, lb.y + lb.height - 1, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Delete Leader' }).click();
+  await page.waitForTimeout(200);
+  assert(await tb.locator('line').count() === 0 && (await page.locator('.ml-table tbody').innerText()).includes('Verify door hardware'), 'deleting the only leader turns it back into a text box');
+  await page.keyboard.press('Escape');
+}
 await page.screenshot({ path: `${OUT}/03-takeoff.png` });
 
 // Right-click leaves a drawing tool.

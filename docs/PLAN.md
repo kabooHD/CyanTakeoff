@@ -302,6 +302,8 @@ filling, image signatures, redaction and OCR.
   use checked / starred when changed; Shift+click row ranges
 - [x] Layers panel right-click: Flatten Markups (Assign Layer preset),
   Unflatten Markups
+- [x] Text Box > Add Leader (callout behaviour); a callout's last leader
+  deleted makes it a text box
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

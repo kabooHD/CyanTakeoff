@@ -1481,11 +1481,21 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         items.push({ label: 'Flip Text', action: () => s.updateMarkups([hit.id], (x) => ({ display: { ...x.display, captionAngle: (((x.display?.captionAngle ?? 0) + 180) % 360) || undefined } })) });
         items.push({ sep: true });
       }
+      if (hit.type === 'textbox' && !hit.locked && hit.points.length >= 2) {
+        // Add Leader on a text box (Revu): it gets a leader like a callout, the tip just outside the box's lower left.
+        items.push({ label: 'Add Leader', action: () => s.updateMarkups([hit.id], (x) => {
+          const b = bounds([x.points[0], x.points[1]]);
+          return { type: 'callout', points: [{ x: b.minX - 40, y: b.maxY + 40 }, x.points[0], x.points[1]] };
+        }) });
+        items.push({ sep: true });
+      }
       if (hit.type === 'callout' && !hit.locked && hit.points.length > 2) {
         // Callout leaders (Revu): Add Leader at the clicked point; Delete Leader on a leader's tip.
         const tips = [hit.points[0], ...hit.points.slice(3)];
         const ti = tips.findIndex((q) => dist(q, raw) <= 8 / zoom);
         items.push({ label: 'Add Leader', action: () => s.updateMarkups([hit.id], (x) => ({ points: [...x.points, raw] })) });
+        // The last leader removed turns the callout back into a text box (Revu).
+        if (ti === 0 && tips.length === 1) items.push({ label: 'Delete Leader', action: () => s.updateMarkups([hit.id], (x) => ({ type: 'textbox', points: [x.points[1], x.points[2]] })) });
         if (ti >= 0 && tips.length > 1) {
           items.push({ label: 'Delete Leader', action: () => s.updateMarkups([hit.id], (x) => {
             const extra = x.points.slice(3);
