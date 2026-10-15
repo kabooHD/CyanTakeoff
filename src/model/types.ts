@@ -203,6 +203,10 @@ export interface Markup {
   text?: string;
   /** Note: its icon (PDF /Name; default Comment). */
   noteIcon?: import('./noteIcons').NoteIcon;
+  /** Image: the untouched picture when a mask or re-encoding changed `image`, the mask colour, and the stored encoding. */
+  imageSource?: string;
+  mask?: import('./imageMask').ImageMask;
+  imageEncoding?: 'zip' | 'jpeg';
   /** Scale captured from the page when the measurement was made. */
   scale?: Scale;
   /** Depth in scale units (ft or m): volume, or wall area for lengths. */

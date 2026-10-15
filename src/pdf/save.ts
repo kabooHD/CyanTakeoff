@@ -631,6 +631,7 @@ function ctData(m: Markup, P: Pt[]): CTData {
     legend: m.legend,
     checked: m.checked || undefined,
     rotation: m.rotation || undefined,
+    imageSource: m.imageSource, mask: m.mask, imageEncoding: m.imageEncoding,
     handles: hasCurves(m.handles) ? m.handles!.map((h) => (h ? [h.in.x, h.in.y, h.out.x, h.out.y] : null)) : undefined,
   };
 }

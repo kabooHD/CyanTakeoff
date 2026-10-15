@@ -74,7 +74,7 @@ preview server can die between turns: restart it if e2e cannot connect.
 Done: Revu-style workspace and official default shortcuts; markup tools
 (incl. Cloud+, Typewriter, Arc, Dimension, Stamp, Flag, Strikethrough/
 Underline/Squiggly and text Highlight, Image, Snapshot, Hyperlink, File
-Attachment, Eraser); Group/Ungroup, Arrange, Lock, Align, Flip, rotation (src/model/rotate.ts: handle with 15° steps, box shapes keep an angle), purple scale handles (src/model/scale.ts), cloud Size/Invert (cloudArcLength in measure.ts), Highlight = Multiply, Flip Text, note icons (src/model/noteIcons.ts), Blend Mode (src/model/blend.ts, /BM), band selection direction (src/model/select.ts), Length caption leader line, Format
+Attachment, Eraser); Group/Ungroup, Arrange, Lock, Align, Flip, rotation (src/model/rotate.ts: handle with 15° steps, box shapes keep an angle), purple scale handles (src/model/scale.ts), cloud Size/Invert (cloudArcLength in measure.ts), Highlight = Multiply, Flip Text, note icons (src/model/noteIcons.ts), image mask colour and encoding (src/model/imageMask.ts, src/ui/imageTools.ts), Blend Mode (src/model/blend.ts, /BM), band selection direction (src/model/select.ts), Length caption leader line, Format
 Painter, Lasso; Spaces (Revu /BSISpaces, panel, Space column); slope, rise/drop, wall area;
 custom columns incl. formulas; Summary to Excel (.xlsx), CSV or PDF report;
 Legends (src/model/legend.ts: extra columns, title/header options, custom source pages, symbol size; src/ui/legendCommands.ts: Apply to All Pages, Copy Legend to Snapshot); Markups List replies, Checkmark/Lock/Creation Date/position columns, right-click menu

@@ -68,6 +68,7 @@ export interface CTData {
   legend?: Markup['legend'];
   checked?: boolean;
   rotation?: number; // box shapes turned about their centre (degrees, counter-clockwise)
+  imageSource?: string; mask?: Markup['mask']; imageEncoding?: Markup['imageEncoding']; // image settings (the untouched picture when masked)
   groupId?: string; // Revu-style markup group
   seq?: Markup['seq']; // Sequence member
   display?: Markup['display']; // caption, segment values, centroid, units
@@ -230,6 +231,7 @@ function baseMarkup(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number, 
     legend: ct?.legend,
     checked: ct?.checked,
     rotation: ct?.rotation,
+    imageSource: ct?.imageSource, mask: ct?.mask, imageEncoding: ct?.imageEncoding,
     noteIcon: type === 'note' && getName(doc, dict, 'Name') && getName(doc, dict, 'Name') !== 'Comment' ? noteIconOf(getName(doc, dict, 'Name')) : undefined,
     seq: ct?.seq,
     display: ct?.display,

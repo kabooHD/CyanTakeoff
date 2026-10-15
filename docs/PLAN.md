@@ -282,6 +282,8 @@ filling, image signatures, redaction and OCR.
   Shift free); Ctrl+drag a box corner keeps its proportions (src/model/scale.ts)
 - [x] Cloud Size and Invert, Highlight checkbox (Multiply), Length Flip Text
 - [x] Note icons (PDF /Name: Comment, Key, Note, Help, Star...) in Properties
+- [x] Image Mask Color / Tolerance and Encoding (src/model/imageMask.ts,
+  src/ui/imageTools.ts)
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

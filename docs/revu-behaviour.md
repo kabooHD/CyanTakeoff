@@ -360,6 +360,10 @@ displayed value (in the markup's own unit when set), as Revu writes it.
   Highlight turns it into a Pen markup in Revu).
 - Length and dimension captions: right-click > Flip Text turns the caption
   180°.
+- Image: Mask Color with Mask Tolerance makes a chosen colour transparent
+  (ours: the picture is rebuilt as a PNG with transparency and the
+  untouched picture kept); Encoding ZIP (graphics) or JPEG (photos);
+  outline colour, width and line style.
 - Note: Properties > Icon picks the icon (Comment, Key, Note, Help, New
   Paragraph, Paragraph, Insert, Check, Circle, Cross, Star, arrows,
   crosshairs: the PDF text-annotation /Name), plus colour and opacity; the

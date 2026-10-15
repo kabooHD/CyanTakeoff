@@ -22,6 +22,7 @@ import { layoutOf, withLayout } from '../model/layoutProps';
 import { ROTATION_FIELD, withRotation } from '../model/rotate';
 import { BLEND_MODES, defaultBlend, type BlendMode } from '../model/blend';
 import { NOTE_ICONS, NOTE_ICON_LABELS, type NoteIcon } from '../model/noteIcons';
+import { setImageSettings } from './imageTools';
 import { addCapture, openCapturePreview } from './Capture';
 import { DEFAULT_LINE_HEIGHT, DEFAULT_MARGIN, TEXT_FONTS, textStyleOf } from '../model/textStyle';
 import { COUNT_SYMBOLS, symbolForType } from '../model/count';
@@ -527,6 +528,22 @@ function Properties() {
       <Row label="Author"><input value={m.author} readOnly /></Row>
       <Row label="Date"><input value={new Date(m.modified).toLocaleString()} readOnly /></Row>
       <StyleEditor style={m.style} type={m.type} onChange={(p) => { upd((x) => ({ style: { ...x.style, ...p } })); if (s.prefs.dynamicDefaults && s.toolDefaults[m.type]) s.setToolDefault(m.type, p); }} />
+      {m.type === 'image' && m.image && (
+        <>
+          <Row label="Mask Color">
+            <span className="inline">
+              <input type="checkbox" aria-label="Mask color" checked={!!m.mask} onChange={(e) => void setImageSettings(m.id, { mask: e.target.checked ? { color: m.mask?.color ?? '#ffffff', tolerance: m.mask?.tolerance ?? 10 } : null })} />
+              {m.mask && <input type="color" aria-label="Mask colour value" value={m.mask.color} onChange={(e) => void setImageSettings(m.id, { mask: { ...m.mask!, color: e.target.value } })} />}
+            </span>
+          </Row>
+          {m.mask && <Row label="Mask Tolerance"><span className="inline"><input aria-label="Mask tolerance" type="range" min={0} max={100} value={m.mask.tolerance} onChange={(e) => void setImageSettings(m.id, { mask: { ...m.mask!, tolerance: Number(e.target.value) } })} /> {m.mask.tolerance}</span></Row>}
+          <Row label="Encoding">
+            <select aria-label="Image encoding" value={m.imageEncoding ?? ((m.imageSource ?? m.image).startsWith('data:image/jpeg') ? 'jpeg' : 'zip')} onChange={(e) => void setImageSettings(m.id, { imageEncoding: e.target.value as 'zip' | 'jpeg' })}>
+              <option value="zip">ZIP (graphics, keeps transparency)</option><option value="jpeg">JPEG (photos)</option>
+            </select>
+          </Row>
+        </>
+      )}
       {m.type === 'note' && (
         <Row label="Icon">
           <select aria-label="Note icon" value={m.noteIcon ?? 'Comment'} onChange={(e) => upd(() => ({ noteIcon: e.target.value === 'Comment' ? undefined : e.target.value as NoteIcon }))}>

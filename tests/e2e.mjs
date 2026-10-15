@@ -704,6 +704,24 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await chooser.setFiles(`${OUT}/02-opened.png`);
   await page.waitForFunction(() => document.querySelector('.ml-table tbody')?.textContent?.includes('Image'));
   assert(await page.locator('.markup-layer image').count() >= 2, 'image markups are drawn');
+  // Mask Color (Properties): the white of the placed picture becomes transparent (a new PNG); off again restores the picture.
+  {
+    const imgRow = page.locator('.ml-table tbody tr', { has: page.locator('td', { hasText: /^Image$/ }) }).first();
+    await imgRow.locator('td').nth(1).click();
+    if (!(await page.locator('[aria-label="Mask color"]').count())) await page.keyboard.press('Alt+P');
+    await page.getByLabel('Mask color').waitFor();
+    const hrefs = () => page.locator('.markup-layer image').evaluateAll((els) => els.map((e) => e.getAttribute('href') ?? '').join('').length);
+    const h0 = await hrefs();
+    await page.getByLabel('Mask color').check();
+    await page.waitForFunction((n) => [...document.querySelectorAll('.markup-layer image')].map((e) => e.getAttribute('href') ?? '').join('').length !== n, h0, { timeout: 15000 });
+    assert(await page.locator('.markup-layer image[href^="data:image/png"]').count() >= 1, 'Mask Color rebuilds the picture as a PNG with transparency');
+    await page.getByLabel('Mask color').uncheck();
+    await page.waitForFunction((n) => [...document.querySelectorAll('.markup-layer image')].map((e) => e.getAttribute('href') ?? '').join('').length === n, h0, { timeout: 15000 });
+    assert(true, 'turning the mask off brings the untouched picture back');
+    await page.evaluate(() => document.activeElement?.blur?.());
+    await page.keyboard.press('Alt+P');
+    await page.keyboard.press('Escape');
+  }
 
   // Group (Ctrl+G) selects together; Lock (Ctrl+Shift+L) prevents deleting; groups saved Revu-style.
   await page.keyboard.press('Escape');
