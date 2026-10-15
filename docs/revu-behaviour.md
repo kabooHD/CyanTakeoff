@@ -355,7 +355,9 @@ displayed value (in the markup's own unit when set), as Revu writes it.
   the box left of a name shows/hides it. Right-click: Show Layer (with its
   children), Isolate (only it and its children), Show All, Markup Layer
   (new markups go on it), Add New Layer, Add Layer from Page, New Layer
-  Group (a label without a box), Rename (F2), Delete, Layer Properties.
+  Group (a label without a box), Rename (F2), Delete, Layer Properties,
+  Export Layer to Page, Flatten Markups (the Flatten dialog with Assign
+  Layer preset to this layer), Unflatten Markups.
 - Toolbar: Layers menu (Reset Layers to the configuration, Show Print
   Layers, Show All Layers, Show Layers on Page Only, Show Layers
   Alphabetically), Add New Layer (Before / After / Child), Add Layer from
@@ -956,6 +958,8 @@ folders, manual correlation and saved .bcx batches).
   the page (Preferences > Markups List > Dim filtered markups, 75 %).
 - Click a header to sort, again to reverse; Subject / page sorts tie-break
   on creation date.
+- Shift+click a row selects the range from the row clicked last; Ctrl+click
+  adds or removes one row.
 - Right-click a row: Copy Cell, Properties, Edit Action, Add to My Tools,
   Set Status, Layer, Copy, Delete, Reply, Check / Clear All Checkmarks,
   Create Legend, arrange commands. Hide Markups (toolbar) takes every

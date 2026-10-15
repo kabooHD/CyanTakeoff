@@ -24,8 +24,8 @@ import type { Markup, MarkupType } from '../model/types';
 import { toolById } from '../tools/tools';
 
 export type PagesOp = 'insert' | 'insert-blank' | 'delete' | 'extract' | 'rotate' | 'replace' | 'flatten' | 'split' | 'slip-sheet' | 'ocr';
-export const usePagesDialog = create<{ op: PagesOp | null }>(() => ({ op: null }));
-export const openPagesDialog = (op: PagesOp) => usePagesDialog.setState({ op });
+export const usePagesDialog = create<{ op: PagesOp | null; /** Flatten opened from a layer: Assign Layer preset to it. */ layer?: string }>(() => ({ op: null }));
+export const openPagesDialog = (op: PagesOp, layer?: string) => usePagesDialog.setState({ op, layer });
 
 const TITLES: Record<PagesOp, string> = {
   insert: 'Insert Pages', 'insert-blank': 'Insert Blank Page', delete: 'Delete Pages', extract: 'Extract Pages',
@@ -87,7 +87,8 @@ function PagesForm({ op }: { op: PagesOp }) {
   const [slipReport, setSlipReport] = useState(false);
   const [all, setAll] = useState(() => batchHint.take());
   // Flatten > Assign Layer (Revu): an existing layer's name, or a new one ("Markups" when the file has none).
-  const [assign, setAssign] = useState(false);
+  const presetLayer = usePagesDialog((x) => x.layer);
+  const [assign, setAssign] = useState(!!presetLayer);
   const [recover, setRecover] = useState(true);
   // Flatten Markups (Revu): which markup types, and all of them or only the selected ones.
   const typesPresent = [...new Set((doc?.markups ?? []).map((m) => m.type))].sort((a, b) => toolById(a).name.localeCompare(toolById(b).name));
@@ -101,9 +102,9 @@ function PagesForm({ op }: { op: PagesOp }) {
   const [flatCapture, setFlatCapture] = useState(false);
   const [captureTitle, setCaptureTitle] = useState(() => `${(doc?.name ?? '').replace(/\.pdf$/i, '')} - Capture Summary`);
   const listVisible = useApp((st) => st.listVisible);
-  const [layerName, setLayerName] = useState(() => (doc?.layers ? Object.values(doc.layers.layers)[0]?.name : undefined) ?? 'Markups');
+  const [layerName, setLayerName] = useState(() => presetLayer ?? (doc?.layers ? Object.values(doc.layers.layers)[0]?.name : undefined) ?? 'Markups');
   if (!doc) return null;
-  const close = () => usePagesDialog.setState({ op: null });
+  const close = () => usePagesDialog.setState({ op: null, layer: undefined });
   const pages = scope === 'current' ? [doc.page] : scope === 'all' ? doc.loaded.pages.map((p) => p.index) : parsePageRange(range, n);
   const pagesIn = (t: DocState) => (scope === 'current' ? [t.page] : scope === 'all' ? t.loaded.pages.map((p) => p.index) : parsePageRange(range, t.loaded.pages.length));
   const atIndex = Math.max(0, Math.min(n, (Number(at) || 1) - (where === 'before' ? 1 : 0)));

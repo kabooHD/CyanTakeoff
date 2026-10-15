@@ -299,7 +299,9 @@ filling, image signatures, redaction and OCR.
   dimming of markups filtered out of the list
 - [x] Highlight tool: Enable Text Highlighting preference, Ctrl+drag free box
 - [x] Markups List: Wall Area, Rise/Drop, Sequence columns; saved filter in
-  use checked / starred when changed
+  use checked / starred when changed; Shift+click row ranges
+- [x] Layers panel right-click: Flatten Markups (Assign Layer preset),
+  Unflatten Markups
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

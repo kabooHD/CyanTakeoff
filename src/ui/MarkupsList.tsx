@@ -1,5 +1,5 @@
 import { markupBounds } from './hit';
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { viewerApi } from './Viewer';
 import { anchorOf } from '../model/spaces';
 import { useApp, useActiveDoc } from '../model/store';
@@ -59,6 +59,8 @@ export function MarkupsList() {
   const [editing, setEditing] = useState<string | null>(null);
   /** The saved filter set applied last (Revu shows it checked, starred once changed). */
   const [engaged, setEngaged] = useState<string | null>(null);
+  /** Row clicked last: Shift+click selects the rows between it and the clicked one (Revu). */
+  const anchorRow = useRef<string | null>(null);
   const [saved, setSaved] = useState<SavedFilter[]>(loadSaved);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -281,7 +283,14 @@ export function MarkupsList() {
                 </tr>
               )}
               {!hiddenInGroup && <tr className={`${sel.has(m.id) ? 'selected' : ''} ${m.hidden ? 'hidden-markup' : ''}`} title={m.hidden ? 'Hidden (Edit > Show)' : undefined}
-                onClick={(e) => goTo(m, e.ctrlKey || e.metaKey)}
+                onClick={(e) => {
+                  if (e.shiftKey && anchorRow.current) {
+                    const i = rows.findIndex((r) => r.m.id === anchorRow.current), j = ri;
+                    if (i >= 0) { s.select(rows.slice(Math.min(i, j), Math.max(i, j) + 1).map((r) => r.m.id), false, true); return; }
+                  }
+                  anchorRow.current = m.id;
+                  goTo(m, e.ctrlKey || e.metaKey);
+                }}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   if (!doc) return;

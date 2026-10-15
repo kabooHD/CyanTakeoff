@@ -208,6 +208,13 @@ assert((await page.locator('.tb-btn.active').getAttribute('title')).startsWith('
   const selected = await page.locator('.ml-table tbody tr.selected').count();
   assert(selected >= 2, `right-drag multi-selects (${selected} selected)`);
   await page.keyboard.press('Escape');
+  // Shift+click in the Markups List selects the range of rows (Revu).
+  const rowsAll = page.locator('.ml-table tbody tr:not(.reply-row)');
+  await rowsAll.nth(0).locator('td').nth(1).click();
+  await rowsAll.nth(2).locator('td').nth(1).click({ modifiers: ['Shift'] });
+  await page.waitForTimeout(200);
+  assert(await page.locator('.ml-table tbody tr.selected').count() === 3, `Shift+click selects the rows in between (${await page.locator('.ml-table tbody tr.selected').count()} selected)`);
+  await page.keyboard.press('Escape');
 }
 
 // Markups List: hide a column, filter a column.
@@ -1828,6 +1835,14 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 128) n++;
     return n;
   }, [x0, y0, w, h]);
+  // Right-click a layer > Flatten Markups...: the dialog opens with Assign Layer preset to that layer.
+  await lpanel.getByRole('treeitem', { name: 'Layer Plan' }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Flatten Markups…' }).click();
+  {
+    const fd = page.getByRole('dialog', { name: 'Flatten Markups' });
+    assert(await fd.getByLabel('Assign Layer').isChecked() && (await fd.getByLabel('Flatten to layer').inputValue()) === 'Plan', 'Flatten Markups from a layer presets Assign Layer to it');
+    await fd.getByRole('button', { name: 'Cancel' }).click();
+  }
   const planProps = async () => {
     await lpanel.getByRole('treeitem', { name: 'Layer Plan' }).click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Layer Properties…' }).click();
