@@ -923,6 +923,16 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
             s.updateMarkups([m.id], (x) => ({ handles: cleanHandles(toggleCurve(x.points, x.handles, i, closedType(x.type))) }));
             return;
           }
+          if (i >= 0 && m.type === 'callout' && e.shiftKey && m.points.length > 2 && (i === 0 || i >= 3)) {
+            // Shift+click a leader's tip removes that leader (Revu); the last one gone leaves a text box.
+            s.updateMarkups([m.id], (x) => {
+              const extra = x.points.slice(3);
+              if (x.points.length === 3) return { type: 'textbox', points: [x.points[1], x.points[2]] };
+              if (i === 0) return { points: [extra[0], x.points[1], x.points[2], ...extra.slice(1)] };
+              return { points: [x.points[0], x.points[1], x.points[2], ...extra.filter((_, k) => k !== i - 3)] };
+            });
+            return;
+          }
           if (i >= 0 && curvable && e.shiftKey) {
             // Shift+click a control point removes it.
             if (m.points.length > (closedType(m.type) ? 3 : 2)) {
@@ -1207,7 +1217,14 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       } else if (drag.kind === 'move') {
         const dx = raw.x - drag.start.x, dy = raw.y - drag.start.y;
         const orig = new Map(drag.snapshot.map((m) => [m.id, m]));
-        s.updateMarkups(drag.ids, (m) => translated(orig.get(m.id)!, dx, dy), { history: false });
+        s.updateMarkups(drag.ids, (m) => {
+          const o = orig.get(m.id)!;
+          // Dragging a callout moves only its box; the leader tips stay put (Revu). Alt+drag moves the whole markup.
+          if (o.type === 'callout' && drag.ids.length === 1 && !e.altKey && o.points.length > 2) {
+            return { points: o.points.map((p, i) => (i === 1 || i === 2 ? { x: p.x + dx, y: p.y + dy } : p)) };
+          }
+          return translated(o, dx, dy);
+        }, { history: false });
         if (!drag.moved) setDrag({ ...drag, moved: true });
       } else if (drag.kind === 'leader') {
         // Signed distance of the pointer from the measured line, along the page-space normal (see leaderLine).
@@ -1505,6 +1522,28 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
           const b = bounds([x.points[0], x.points[1]]);
           return { type: 'callout', points: [{ x: b.minX - 40, y: b.maxY + 40 }, x.points[0], x.points[1]] };
         }) });
+        items.push({ sep: true });
+      }
+      if ((hit.type === 'polylength' || hit.type === 'perimeter' || hit.type === 'polyline') && !hit.locked && hit.points.length > 2) {
+        // Split (Revu): the right-clicked segment becomes its own markup; Split All breaks every segment apart.
+        const k = segmentAt(hit, raw, 6 / zoom);
+        const part = (pts: Pt[], handles?: Handles) => {
+          const { id: _id, source: _src, seq: _seq, groupId: _g, replies: _r, ...rest } = hit;
+          return s.addMarkup({ ...rest, points: pts, handles: handles && hasCurves(handles) ? handles : undefined });
+        };
+        const slice = (a: number, b: number): [Pt[], Handles | undefined] => [hit.points.slice(a, b + 1), hit.handles?.slice(a, b + 1)];
+        if (k >= 0) items.push({ label: 'Split', action: () => {
+          const n = hit.points.length;
+          // The original keeps the part before the segment (or after, for the first); the rest become new markups.
+          if (k === 0) { s.updateMarkups([hit.id], () => ({ points: hit.points.slice(1), handles: hit.handles?.slice(1) })); part(...slice(0, 1)); }
+          else { s.updateMarkups([hit.id], () => ({ points: hit.points.slice(0, k + 1), handles: hit.handles?.slice(0, k + 1) })); part(...slice(k, k + 1)); if (k + 2 < n) part(...slice(k + 1, n - 1)); }
+          s.setStatus('Split: the segment is its own measurement now.');
+        } });
+        items.push({ label: 'Split All', action: () => {
+          s.updateMarkups([hit.id], () => ({ points: hit.points.slice(0, 2), handles: hit.handles?.slice(0, 2) }));
+          for (let i = 1; i + 1 < hit.points.length; i++) part(...slice(i, i + 1));
+          s.setStatus(`Split All: ${hit.points.length - 1} segments`);
+        } });
         items.push({ sep: true });
       }
       if (hit.type === 'callout' && !hit.locked && hit.points.length > 2) {

@@ -22,7 +22,9 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
   default), Depth (area: gives volume and wall area), Width/Height (to
   scale), Slope (pitch / degree / grade), unit choice for length, area and
   volume, Show Segment Values (+ caption alignment), Show Caption, Show
-  Centroid. Polylength has Rise/Drop (added to the length; exclusive with
+  Centroid. Right-click a Polylength / Perimeter segment: Split (the
+  segment becomes its own measurement) or Split All (every segment).
+  Polylength has Rise/Drop (added to the length; exclusive with
   Depth). With no tool selected, Subject/Label typed here become defaults.
 - Live preview of key values in the lower-right of the drawing while placing
   a measurement on a scaled page; X hides it, an icon recalls it.
@@ -764,7 +766,9 @@ optional border. Not yet: Dim Filtered Markups, Print Visible Hyperlinks.
   leader from the clicked point to the box; each leader's tip has a
   handle; right-click a tip > Delete Leader (the last one gone, the
   callout is a text box again). A text box gets a leader the same way
-  (right-click > Add Leader) and then behaves as a callout. Leaders run straight to the
+  (right-click > Add Leader) and then behaves as a callout. Shift+click a
+  tip's handle removes that leader. Dragging a callout's box moves only
+  the box (the tips stay); Alt+drag moves the whole markup. Leaders run straight to the
   nearest side (ours: no shared knee). Lines, arrows, polylines and
   callouts have Start / End line ends (None, Open Arrow, Closed Arrow,
   Circle, Square, Diamond, Slash, Butt, Reverse arrows) and a size,

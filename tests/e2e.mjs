@@ -567,6 +567,45 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.locator('.side-right button[title="Properties"]').click();
     await page.keyboard.press('Escape');
   }
+  {
+    // Dragging a callout moves only its box (the leader tips stay); Shift+click a tip removes that leader (Revu).
+    await page.keyboard.press('Escape');
+    const g = page.locator('.markup-layer g[data-id]', { has: page.locator('.markup-text', { hasText: /^Callout$/ }) }).first();
+    const tipOf = (l) => [l.getAttribute('x1'), l.getAttribute('y1')];
+    const tip0 = await g.locator('line').first().evaluate(tipOf);
+    const cb = await page.locator('.markup-text', { hasText: /^Callout$/ }).first().boundingBox();
+    await page.mouse.click(cb.x + 6, cb.y + 6);
+    await page.mouse.move(cb.x + 6, cb.y + 6); await page.mouse.down(); await page.mouse.move(cb.x + 46, cb.y + 26, { steps: 5 }); await page.mouse.up();
+    await page.waitForTimeout(200);
+    const tip1 = await g.locator('line').first().evaluate(tipOf);
+    const cb2 = await page.locator('.markup-text', { hasText: /^Callout$/ }).first().boundingBox();
+    assert(tip0[0] === tip1[0] && tip0[1] === tip1[1] && cb2.x > cb.x + 20, `dragging a callout moves its box and leaves the leader tips (${cb.x.toFixed(0)} -> ${cb2.x.toFixed(0)})`);
+    const nLines = await g.locator('line').count();
+    const sp = await g.locator('line').last().evaluate((l) => { const pt = l.ownerSVGElement.createSVGPoint(); pt.x = Number(l.getAttribute('x1')); pt.y = Number(l.getAttribute('y1')); const q = pt.matrixTransform(l.getScreenCTM()); return [q.x, q.y]; });
+    await page.keyboard.down('Shift'); await page.mouse.click(sp[0], sp[1]); await page.keyboard.up('Shift');
+    await page.waitForTimeout(200);
+    assert(await g.locator('line').count() === nLines - 1, `Shift+click a leader tip removes that leader (${nLines} -> ${await g.locator('line').count()})`);
+    await page.keyboard.press('Control+z'); await page.keyboard.press('Control+z');
+    await page.keyboard.press('Escape');
+  }
+  {
+    // Polylength: right-click a segment > Split All breaks it into one measurement per segment (Revu).
+    const polys = async () => (await page.locator('.ml-table tbody').innerText()).split('\nPolylength').length - 1;
+    const n0 = await polys();
+    await page.keyboard.press('Shift+Alt+Q'); await click(44, 12); await click(50, 12); await click(50, 9); await page.keyboard.press('Enter');
+    await page.waitForTimeout(200);
+    assert(await polys() === n0 + 1, 'a polylength with two segments');
+    const p = await toScreen(47, 12);
+    await page.keyboard.press('Escape');
+    await page.mouse.click(p.x, p.y, { button: 'right' });
+    await page.getByRole('menuitem', { name: 'Split All' }).click();
+    await page.waitForTimeout(200);
+    assert(await polys() === n0 + 2, `Split All makes one polylength per segment (${n0} -> ${await polys()})`);
+    await page.keyboard.press('Escape');
+    for (let t = 0; t < 3; t++) await page.keyboard.press('Control+z'); // the split (two steps) and the drawing
+    await page.waitForTimeout(200);
+    assert(await polys() === n0, 'undo takes the split polylengths away again');
+  }
   await page.keyboard.press('s'); await click(52, 14);
   await page.keyboard.press('d'); await drag([47.5, 31.2], [56, 29.6]);
   await page.waitForFunction(() => document.querySelector('.ml-table tbody')?.textContent?.includes('Strikethrough'));
@@ -2896,8 +2935,13 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForTimeout(600);
   const lb = await page.locator('.page .markup-layer').boundingBox();
   await menu('Tools', 'Edit Text');
-  await page.mouse.click(lb.x + lb.width * 0.865, lb.y + lb.height * 0.917);
   const input = page.locator('[aria-label="Edit text"]');
+  // A slow machine may still be re-rendering after the zoom: click again until the text opens.
+  for (let t = 0; t < 6 && !(await input.count()); t++) {
+    const b = await page.locator('.page .markup-layer').boundingBox();
+    await page.mouse.click(b.x + b.width * 0.865, b.y + b.height * 0.917);
+    await page.waitForTimeout(600);
+  }
   await input.waitFor();
   assert(await input.inputValue() === 'FLOOR PLAN', 'Edit Text opens the clicked line of text');
   await input.fill('FLOOR PLAN REV');
