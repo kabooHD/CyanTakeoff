@@ -284,6 +284,22 @@ filling, image signatures, redaction and OCR.
 - [x] Note icons (PDF /Name: Comment, Key, Note, Help, Star...) in Properties
 - [x] Image Mask Color / Tolerance and Encoding (src/model/imageMask.ts,
   src/ui/imageTools.ts)
+- [x] Print: Even/Odd/Landscape/Portrait/First/Last page filters, Print
+  Spaces, pages-per-sheet order and border
+- [x] Slip Sheet options: insert before / replace, copy markups, Superseded
+  stamp, match by label (wildcard filter) or index, CSV report
+  (src/model/slipSheet.ts)
+- [x] Batch Link options: terms from labels or file names, Highlight Links /
+  outline / invisible, keep or replace existing links, CSV report
+  (src/model/batchLink.ts)
+- [x] Flatten Markups: per-type checkboxes, All / Exclude Filtered /
+  Currently Selected scope, Overlay Text on the assigned layer, Capture
+  media attached as a summary PDF
+- [x] Markups List custom column filters (conditions with AND / OR) and
+  dimming of markups filtered out of the list
+- [x] Highlight tool: Enable Text Highlighting preference, Ctrl+drag free box
+- [x] Markups List: Wall Area, Rise/Drop, Sequence columns; saved filter in
+  use checked / starred when changed
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

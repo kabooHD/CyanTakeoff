@@ -1,6 +1,6 @@
 // Page operations on a pdf-lib document (Revu's Document menu): insert,
 // delete, extract, rotate, replace, move, combine, split and flatten.
-import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFNumber, PDFRef, PDFStream, degrees, type PDFPage } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFNumber, PDFRef, PDFStream, degrees, type PDFFont, type PDFPage } from 'pdf-lib';
 
 const N = (s: string) => PDFName.of(s);
 
@@ -72,6 +72,37 @@ export async function replacePage(doc: PDFDocument, at: number, src: PDFDocument
   retargetPage(doc, old.ref, fresh.ref);
 }
 
+/**
+ * Insert page `srcIndex` of `src` in front of page `at` (Slip Sheet: Insert
+ * Revised Pages before Current Pages), optionally with copies of the
+ * current page's markups; links and bookmarks move to the new page.
+ */
+export async function insertRevisedPage(doc: PDFDocument, at: number, src: PDFDocument, srcIndex: number, copyMarkups = true) {
+  const old = doc.getPage(at);
+  const [fresh] = await doc.copyPages(src, [srcIndex]);
+  fresh.node.delete(N('Annots'));
+  if (copyMarkups) {
+    const annots = old.node.lookup(N('Annots'));
+    if (annots instanceof PDFArray) {
+      const copies = annots.asArray().flatMap((r) => {
+        const a = doc.context.lookup(r);
+        if (!(a instanceof PDFDict)) return [];
+        const c = a.clone(doc.context);
+        c.set(N('P'), fresh.ref);
+        c.delete(N('Popup'));
+        return [doc.context.register(c)];
+      });
+      if (copies.length) fresh.node.set(N('Annots'), doc.context.obj(copies));
+    }
+    for (const key of ['VP', 'BSISpaces']) {
+      const v = old.node.get(N(key));
+      if (v) fresh.node.set(N(key), v);
+    }
+  }
+  doc.insertPage(at, fresh);
+  retargetPage(doc, old.ref, fresh.ref);
+}
+
 /** Point links and bookmarks that went to page `from` at page `to` instead. */
 export function retargetPage(doc: PDFDocument, from: PDFRef, to: PDFRef) {
   const fixDest = (d: unknown) => {
@@ -131,7 +162,12 @@ export function flattenPage(doc: PDFDocument, page: PDFPage, keep: (a: PDFDict) 
    * content drawn for them listed on the page (/CTFlattened, /CTFlatContent)
    * so Unflatten can remove the drawing and put the markups back.
    */
-  recover = false): number {
+  recover = false,
+  /**
+   * Overlay Text (Revu, with Assign Layer): a label drawn next to each
+   * flattened markup, in the chosen corner of its rectangle.
+   */
+  overlay?: FlattenOverlay): number {
   const layerName = (ocg: PDFRef) => {
     const res = page.node.Resources() ?? (doc.context.obj({}) as PDFDict);
     const pr = res.lookup(N('Properties'));
@@ -181,6 +217,14 @@ export function flattenPage(doc: PDFDocument, page: PDFPage, keep: (a: PDFDict) 
         }
         const name = page.node.newXObject('Flat', nRef);
         let ops = `q ${sx} 0 0 ${sy} ${rect[0] - x0 * sx} ${rect[1] - y0 * sy} cm /${name.asString().slice(1)} Do Q`;
+        const label = overlay?.text(a);
+        if (overlay && label) {
+          const fname = page.node.newFontDictionary('FlatOv', overlay.font.ref);
+          const w = overlay.font.widthOfTextAtSize(label, overlay.size), gap = 2;
+          const x = overlay.position.endsWith('l') ? rect[0] : rect[2] - w;
+          const y = overlay.position.startsWith('t') ? rect[3] + gap : rect[1] - overlay.size - gap;
+          ops += ` q BT /${fname.asString().slice(1)} ${overlay.size} Tf ${r3(x)} ${r3(y)} Td ${overlay.font.encodeText(label).toString()} Tj ET Q`;
+        }
         const ocg = layerOf?.(a);
         if (ocg) ops = `/OC /${layerName(ocg)} BDC ${ops} EMC`;
         const content = doc.context.register(doc.context.flateStream(ops));
@@ -198,6 +242,16 @@ export function flattenPage(doc: PDFDocument, page: PDFPage, keep: (a: PDFDict) 
   }
   return n;
 }
+
+export interface FlattenOverlay {
+  /** The label for an annotation (its layer's name), or nothing to draw none. */
+  text: (a: PDFDict) => string | undefined;
+  font: PDFFont;
+  size: number;
+  /** Corner of the markup's rectangle the label sits at: top/bottom, left/right. */
+  position: 'tl' | 'tr' | 'bl' | 'br';
+}
+const r3 = (v: number) => Math.round(v * 1000) / 1000;
 
 /** Pages with markups that can be unflattened. */
 export function flattenedPages(doc: PDFDocument): number[] {

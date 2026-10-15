@@ -1,5 +1,5 @@
 import { markupBounds } from './hit';
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { viewerApi } from './Viewer';
 import { anchorOf } from '../model/spaces';
 import { useApp, useActiveDoc } from '../model/store';
@@ -14,9 +14,12 @@ import { markupMenuItems } from './markupMenu';
 import { openCapturePreview } from './Capture';
 import { openSummaryDialog } from './SummaryDialog';
 import { clampNumber } from '../model/columns';
+import { OPS, describeFilter, matchesCustom, type ColumnKind, type CustomFilter } from '../model/listFilter';
 
 /** Saved filter sets (Revu's Saved Filters), kept in the browser. */
-interface SavedFilter { name: string; filters: Record<string, string>; search: string }
+interface SavedFilter { name: string; filters: Record<string, string>; search: string; custom?: Record<string, CustomFilter> }
+const DATE_COLUMNS = new Set(['date', 'created', 'statusDate']);
+const CUSTOM = '__custom__';
 const SF_LS = 'cyantakeoff:markups-list-filters';
 const loadSaved = (): SavedFilter[] => { try { return JSON.parse(localStorage.getItem(SF_LS) ?? '[]'); } catch { return []; } };
 const storeSaved = (l: SavedFilter[]) => { try { localStorage.setItem(SF_LS, JSON.stringify(l)); } catch { /* storage unavailable */ } };
@@ -26,7 +29,7 @@ const GROUPED = new Set(['subject', 'author', 'status', 'layer', 'space', 'label
 const NO_TOTAL = new Set(['depth', 'angle', 'slope']);
 /** Columns that sort by creation date when values tie (Revu does this for Subject and page). */
 const TIE_BY_DATE = new Set(['subject', 'page']);
-const DEFAULT_HIDDEN = ['label', 'angle', 'depth', 'units', 'slope', 'created', 'lock', 'pageIndex', 'x', 'y', 'xCenter', 'yCenter', 'docWidth', 'docHeight', 'width', 'height'];
+const DEFAULT_HIDDEN = ['label', 'angle', 'depth', 'wallArea', 'rise', 'sequence', 'units', 'slope', 'created', 'lock', 'pageIndex', 'x', 'y', 'xCenter', 'yCenter', 'docWidth', 'docHeight', 'width', 'height'];
 const LS = 'cyantakeoff:markups-list';
 
 interface Layout { order: string[]; hidden: string[] }
@@ -52,6 +55,10 @@ export function MarkupsList() {
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 }>({ key: 'page', dir: 1 });
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [custom, setCustom] = useState<Record<string, CustomFilter>>({});
+  const [editing, setEditing] = useState<string | null>(null);
+  /** The saved filter set applied last (Revu shows it checked, starred once changed). */
+  const [engaged, setEngaged] = useState<string | null>(null);
   const [saved, setSaved] = useState<SavedFilter[]>(loadSaved);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -65,6 +72,7 @@ export function MarkupsList() {
   const setLayout = (l: Layout) => { setLayoutState(l); saveLayout(l); };
 
   const defs = useMemo(() => allColumns(doc), [doc]);
+  const kindOf = (key: string): ColumnKind => (defs.find((c) => c.key === key)?.numeric ? 'number' : DATE_COLUMNS.has(key) ? 'date' : 'text');
   const order = effectiveOrder(layout, defs.map((c) => c.key));
   const columns: SummaryColumn[] = order
     .filter((k) => !layout.hidden.includes(k))
@@ -77,10 +85,12 @@ export function MarkupsList() {
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     const active = Object.entries(filters).filter(([, v]) => v !== '');
+    const conds = Object.entries(custom).map(([k, f]) => [k, kindOf(k), f] as const);
     const col = sort.key;
     return all
       .filter((r) => !q || Object.values(r.v).some((x) => String(x).toLowerCase().includes(q)))
       .filter((r) => active.every(([k, v]) => String(r.v[k]) === v))
+      .filter((r) => conds.every(([k, kind, f]) => matchesCustom(r.v[k], kind, f)))
       .sort((a, b) => {
         const x = a.v[col], y = b.v[col];
         let d: number;
@@ -90,7 +100,14 @@ export function MarkupsList() {
         if (d === 0 && TIE_BY_DATE.has(col)) return a.m.created.localeCompare(b.m.created);
         return d * sort.dir;
       });
-  }, [all, sort, search, filters]);
+  }, [all, sort, search, filters, custom]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The page dims markups the filtered list leaves out (Revu).
+  const filtering = search.trim() !== '' || Object.values(filters).some((v) => v !== '') || Object.values(custom).some((f) => f.conds.some((c) => c.value !== ''));
+  useEffect(() => {
+    useApp.setState({ listVisible: filtering && s.markupsList ? new Set(rows.map((r) => r.m.id)) : null });
+  }, [rows, filtering, s.markupsList]);
+  useEffect(() => () => useApp.setState({ listVisible: null }), []);
 
   if (!s.markupsList) return null;
   const sel = new Set(doc?.selection ?? []);
@@ -155,20 +172,25 @@ export function MarkupsList() {
             </div>
           )}
         </div>
-        <button className={showFilters ? 'on' : ''} onClick={() => { setShowFilters(!showFilters); if (showFilters) setFilters({}); }}
+        <button className={showFilters ? 'on' : ''} onClick={() => { setShowFilters(!showFilters); if (showFilters) { setFilters({}); setCustom({}); setEditing(null); } }}
           title="Filter List: filter each column">Filter List</button>
         {showFilters && (
           <select aria-label="Saved Filters" value="" title="Saved Filters" onChange={(e) => {
             const v = e.target.value;
-            if (v === 'clear') { setFilters({}); setSearch(''); }
-            else if (v === 'save') { const name = prompt('Filter name', 'My filter'); if (name) { const next = [...saved.filter((f) => f.name !== name), { name, filters, search }]; setSaved(next); storeSaved(next); } }
+            if (v === 'clear') { setFilters({}); setCustom({}); setSearch(''); setEngaged(null); }
+            else if (v === 'save') { const name = prompt('Filter name', 'My filter'); if (name) { const next = [...saved.filter((f) => f.name !== name), { name, filters, search, custom }]; setSaved(next); storeSaved(next); setEngaged(name); } }
             else if (v.startsWith('del:')) { const next = saved.filter((f) => f.name !== v.slice(4)); setSaved(next); storeSaved(next); }
-            else if (v.startsWith('use:')) { const f = saved.find((x) => x.name === v.slice(4)); if (f) { setFilters(f.filters); setSearch(f.search); } }
+            else if (v.startsWith('use:')) { const f = saved.find((x) => x.name === v.slice(4)); if (f) { setFilters(f.filters); setCustom(f.custom ?? {}); setSearch(f.search); setEngaged(f.name); } }
           }}>
             <option value="">Saved Filters…</option>
             <option value="clear">Clear All</option>
             <option value="save">Save Filter…</option>
-            {saved.map((f) => <option key={f.name} value={`use:${f.name}`}>{f.name}</option>)}
+            {saved.map((f) => {
+              // Revu marks the saved set in use with a check mark, and an asterisk when its filters were changed since.
+              const same = JSON.stringify([f.filters, f.search, f.custom ?? {}]) === JSON.stringify([filters, search, custom]);
+              const mark = engaged === f.name ? '✓ ' : '';
+              return <option key={f.name} value={`use:${f.name}`}>{mark}{f.name}{engaged === f.name && !same ? '*' : ''}</option>;
+            })}
             {saved.map((f) => <option key={`d${f.name}`} value={`del:${f.name}`}>Delete "{f.name}"</option>)}
           </select>
         )}
@@ -218,10 +240,28 @@ export function MarkupsList() {
                 {columns.map((c) => (
                   <th key={c.key}>
                     {c.key === 'color' ? null : (
-                      <select value={filters[c.key] ?? ''} onChange={(e) => setFilters({ ...filters, [c.key]: e.target.value })}>
+                      <select aria-label={`Filter ${c.label}`} value={custom[c.key] ? CUSTOM : filters[c.key] ?? ''} onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === CUSTOM) {
+                          const op = OPS[kindOf(c.key)][0].op;
+                          setFilters({ ...filters, [c.key]: '' });
+                          setCustom({ ...custom, [c.key]: custom[c.key] ?? { join: 'and', conds: [{ op, value: '' }, { op, value: '' }] } });
+                          setEditing(c.key);
+                        } else {
+                          const { [c.key]: _, ...rest } = custom; void _;
+                          setCustom(rest); setEditing(null);
+                          setFilters({ ...filters, [c.key]: v });
+                        }
+                      }}>
                         <option value="">All</option>
                         {distinct(c.key).map((x) => <option key={x} value={x}>{x}</option>)}
+                        <option value={CUSTOM}>{custom[c.key] ? describeFilter(custom[c.key], kindOf(c.key)) : 'Custom…'}</option>
                       </select>
+                    )}
+                    {editing === c.key && custom[c.key] && (
+                      <CustomFilterEditor kind={kindOf(c.key)} label={c.label} value={custom[c.key]}
+                        onChange={(f) => setCustom({ ...custom, [c.key]: f })}
+                        onClose={() => setEditing(null)} />
                     )}
                   </th>
                 ))}
@@ -369,4 +409,33 @@ function CustomCell({ m, col }: { m: Markup; col: CustomColumn }) {
           onBlur={(e) => { const t = e.target.value; if (t !== String(value ?? '')) set(col.type === 'number' ? (t === '' ? undefined : clampNumber(col, Number(t))) : t); }} />
       );
   }
+}
+
+/** Revu's custom column filter: up to two conditions on one column, joined with AND or OR. */
+function CustomFilterEditor({ kind, label, value, onChange, onClose }: { kind: ColumnKind; label: string; value: CustomFilter; onChange: (f: CustomFilter) => void; onClose: () => void }) {
+  const ops = OPS[kind];
+  const setCond = (i: number, c: Partial<CustomFilter['conds'][number]>) => onChange({ ...value, conds: value.conds.map((x, j) => (j === i ? { ...x, ...c } : x)) });
+  return (
+    <div className="ml-custom" role="dialog" aria-label={`Custom filter: ${label}`} onClick={(e) => e.stopPropagation()}>
+      <div className="form-row"><span>Show rows where {label}</span></div>
+      {value.conds.map((c, i) => (
+        <div className="form-row" key={i}>
+          {i > 0 && (
+            <select aria-label="Join" value={value.join} onChange={(e) => onChange({ ...value, join: e.target.value as CustomFilter['join'] })}>
+              <option value="and">and</option><option value="or">or</option>
+            </select>
+          )}
+          <select aria-label={`Condition ${i + 1}`} value={c.op} onChange={(e) => setCond(i, { op: e.target.value as CustomFilter['conds'][number]['op'] })}>
+            {ops.map((o) => <option key={o.op} value={o.op}>{o.label}</option>)}
+          </select>
+          <input aria-label={`Value ${i + 1}`} type={kind === 'date' ? 'date' : 'text'} value={c.value} onChange={(e) => setCond(i, { value: e.target.value })}
+            onKeyDown={(e) => { if (e.key === 'Enter') onClose(); e.stopPropagation(); }} />
+        </div>
+      ))}
+      <div className="form-actions">
+        <button onClick={() => onChange({ ...value, conds: value.conds.map((c) => ({ ...c, value: '' })) })}>Clear</button>
+        <button className="primary" onClick={onClose}>OK</button>
+      </div>
+    </div>
+  );
 }

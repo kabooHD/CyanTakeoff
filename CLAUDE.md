@@ -77,20 +77,20 @@ Underline/Squiggly and text Highlight, Image, Snapshot, Hyperlink, File
 Attachment, Eraser); Group/Ungroup, Arrange, Lock, Align, Flip, rotation (src/model/rotate.ts: handle with 15° steps, box shapes keep an angle), purple scale handles (src/model/scale.ts), cloud Size/Invert (cloudArcLength in measure.ts), Highlight = Multiply, Flip Text, note icons (src/model/noteIcons.ts), image mask colour and encoding (src/model/imageMask.ts, src/ui/imageTools.ts), Blend Mode (src/model/blend.ts, /BM), band selection direction (src/model/select.ts), Length caption leader line, Format
 Painter, Lasso; Spaces (Revu /BSISpaces, panel, Space column); slope, rise/drop, wall area;
 custom columns incl. formulas; Summary to Excel (.xlsx), CSV or PDF report;
-Legends (src/model/legend.ts: extra columns, title/header options, custom source pages, symbol size; src/ui/legendCommands.ts: Apply to All Pages, Copy Legend to Snapshot); Markups List replies, Checkmark/Lock/Creation Date/position columns, right-click menu
-(src/ui/markupMenu.ts), Hide Markups, Saved Filters, section grouping, arrow
+Legends (src/model/legend.ts: extra columns, title/header options, custom source pages, symbol size; src/ui/legendCommands.ts: Apply to All Pages, Copy Legend to Snapshot); Markups List replies, Checkmark/Lock/Creation Date/position/Wall Area/Rise/Sequence columns, right-click menu
+(src/ui/markupMenu.ts), Hide Markups, Saved Filters, custom column filters (src/model/listFilter.ts; filtered-out markups dimmed via store listVisible), section grouping, arrow
 keys and jump-to-markup; Search (Ctrl+F); split view (Ctrl+2/Ctrl+H); undo/redo of page operations; view modes (single, continuous, side by side, cover page, Dark Mode, line-weight and reply-indicator toggles,
 continuous side by side: Ctrl+4..7) and Rotate View (Ctrl+Shift+Plus/Minus); page operations (insert,
 blank, delete, extract, replace keeping markups, rotate, reorder by
-thumbnail drag, split, combine) and Flatten; Compare Documents (clouds
+thumbnail drag, split, combine) and Flatten (per-type; All / Exclude Filtered / selection scope; Overlay Text on the assigned layer; Capture summary attachment); Compare Documents (clouds
 differences, visual or vector, alignment points) and Overlay Pages (two-colour overlay PDF); Page Labels from
-title-block sheet numbers, Batch Link (incl. across open files), Sets panel
-(open files as one set; revision stacks and Set Options in src/model/revisions.ts), Slip Sheet (by sheet number, markups carried);
+title-block sheet numbers, Batch Link (incl. across open files; terms, appearance, overlap and report in src/model/batchLink.ts), Sets panel
+(open files as one set; revision stacks and Set Options in src/model/revisions.ts), Slip Sheet (by sheet number or index with a wildcard filter, replace or insert before, markups carried, Superseded stamp, CSV report; src/model/slipSheet.ts);
 Tool Chest tool sets (new/rename/export/import, Properties vs Drawing mode,
 Symbol/Detail view, set scale, hide, Comment Persistence, Update on Reuse:
 src/model/toolScale.ts),
 Keyboard Shortcuts editor (src/ui/commands.ts), Profiles; Print (Ctrl+P,
-src/ui/Print.tsx, layout math in src/model/print.ts; Selected pages from
+src/ui/Print.tsx, layout math in src/model/print.ts, page filters, Print Spaces, sheet order/border; Selected pages from
 the Thumbnails selection in src/ui/Panels.tsx, margins); Rulers, crosshair,
 Dimmer, Previous/Next View (src/ui/Rulers.tsx, src/model/rulers.ts);
 Bookmarks editing incl. Action dialog, Save Collapse State, Export as PDF (src/ui/BookmarksPanel.tsx, src/pdf/bookmarks.ts, src/pdf/bookmarksReport.ts) and

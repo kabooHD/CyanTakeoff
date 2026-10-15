@@ -169,6 +169,8 @@ interface AppState {
   replyTo: string | null;
   /** Markup kinds the next Legend lists (from a selection or a tool set). */
   legendKeys: string[] | null;
+  /** Markups the filtered Markups List shows (null: no filter), so the others can be dimmed on the page. */
+  listVisible: Set<string> | null;
   /** Image the Image tool places next (signature), instead of asking for a file. */
   pendingImage: { url: string; w: number; h: number; subject: string } | null;
   /** Stamp placed by the Stamp tool. */
@@ -450,6 +452,7 @@ export const useApp = create<AppState>((set, get) => {
     stampName: 'APPROVED',
     pendingImage: null,
     legendKeys: null,
+    listVisible: null,
     replyTo: null,
     linkDialog: null,
     activeViewport: null,

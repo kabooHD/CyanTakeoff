@@ -79,6 +79,8 @@ const TEXTUAL = new Set(['textbox', 'callout', 'typewriter', 'cloudplus']);
 export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
   const replyIndicators = useApp((st) => !!st.toggles.replyIndicators);
   const showAuthorDate = useApp((st) => st.prefs.showAuthorDate);
+  // Filtered out of the Markups List: dimmed on the page (Revu).
+  const dim = useApp((st) => (st.listVisible && !st.listVisible.has(m.id) ? st.prefs.filteredDim : 0));
   const st = m.style;
   const P = m.points;
   // Line style: simple ones are a dash pattern; others (parallel lines, text) are drawn along the outline.
@@ -95,7 +97,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     strokeDasharray: dash?.join(' '),
     fill: hatchArea ? 'none' : st.fill ?? 'none',
     fillOpacity: st.fillOpacity,
-    opacity: ghost ? 0.7 : 1,
+    opacity: (ghost ? 0.7 : 1) * (1 - dim / 100),
   };
   const c = common;
   /** Props for the element that carries a styled outline (drawn separately when styled). */
@@ -191,7 +193,8 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     case 'link': {
       if (P.length < 2) break;
       const b = bounds(P);
-      shape = <rect x={b.minX} y={b.minY} width={b.w} height={b.h} fill="#0066ff" fillOpacity={0.06} stroke={st.color} strokeWidth={0.75} strokeDasharray="4 3" />;
+      // Batch Link appearance: a coloured highlight (fill), an outline, or nothing visible when the width is 0.
+      shape = <rect x={b.minX} y={b.minY} width={b.w} height={b.h} fill={st.fill ?? '#0066ff'} fillOpacity={st.fill ? st.fillOpacity : st.width === 0 ? 0 : 0.06} stroke={st.width === 0 ? 'none' : st.color} strokeWidth={0.75} strokeDasharray="4 3" />;
       break;
     }
     case 'redaction':

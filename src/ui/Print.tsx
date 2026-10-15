@@ -3,13 +3,14 @@
 // in (as saved), laid out per the options, rendered page by page and handed
 // to the browser's print dialog. Layers print when they are shown and their
 // Print usage is on; markups on hidden layers stay off the paper too.
+import { rotateOut, type ViewRotation } from '../model/layout';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { create } from 'zustand';
 import { PDFDocument, PDFName } from 'pdf-lib';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { serialize, useApp, type DocState } from '../model/store';
 import { parsePageRange } from '../model/measure';
-import { DEFAULT_PRINT, PAPER_SIZES, layoutSheets, printOrder, renderScale, type PrintOptions, type Sheet } from '../model/print';
+import { DEFAULT_PRINT, PAPER_SIZES, layoutSheets, printOrder, renderScale, type PrintOptions, type Sheet, filterPages, type PageFilter } from '../model/print';
 import { loadForRender } from '../pdf/document';
 import { layerShown } from './layersView';
 import { PERM, allowed } from '../pdf/crypt';
@@ -17,10 +18,10 @@ import { deviceMemoryGB } from '../model/device';
 import { selectedPages, useThumbSel } from './Panels';
 import { FilesRow, batchHint, targets } from './filesRow';
 
-type Range = 'all' | 'current' | 'selected' | 'custom';
+type Range = 'all' | 'current' | 'selected' | 'custom' | PageFilter;
 type Content = 'both' | 'document' | 'markups';
-export interface PrintSettings extends PrintOptions { content: Content; dim: boolean; dpi: number }
-const DEFAULTS: PrintSettings = { ...DEFAULT_PRINT, content: 'both', dim: false, dpi: 150 };
+export interface PrintSettings extends PrintOptions { content: Content; dim: boolean; dpi: number; /** Print Spaces (Revu): the Spaces' outlines on the printout. */ spaces: boolean }
+const DEFAULTS: PrintSettings = { ...DEFAULT_PRINT, content: 'both', dim: false, dpi: 150, spaces: false };
 const LS = 'cyantakeoff:print';
 
 export const usePrintDialog = create<{ open: boolean; range?: Range }>(() => ({ open: false }));
@@ -76,24 +77,44 @@ async function renderPage(d: DocState, src: Sources, page: number, scale: number
     }).promise;
     return c;
   };
-  if (o.content === 'document') return draw(src.full, false);
-  if (o.content === 'markups') return draw(src.markupsOnly!, true);
-  if (!o.dim) return draw(src.full, true);
+  // Print Spaces: each Space's outline, in its colour, over the page (page space turned with the page).
+  const withSpaces = (c: HTMLCanvasElement) => {
+    const spaces = o.spaces ? d.spaces[page] ?? [] : [];
+    if (!spaces.length) return c;
+    const info = d.loaded.pages[page];
+    const ctx = c.getContext('2d')!;
+    for (const sp of spaces) {
+      const pts = sp.points.map((q) => rotateOut(q.x, q.y, info.width, info.height, rotate as ViewRotation));
+      ctx.beginPath();
+      pts.forEach((q, i) => (i ? ctx.lineTo(q.x * scale, q.y * scale) : ctx.moveTo(q.x * scale, q.y * scale)));
+      ctx.closePath();
+      ctx.globalAlpha = Math.max(0.08, Math.min(1, sp.opacity)); ctx.fillStyle = sp.color; ctx.fill();
+      ctx.globalAlpha = 1; ctx.strokeStyle = sp.color; ctx.lineWidth = Math.max(1, scale); ctx.stroke();
+      ctx.font = `${Math.max(8, 11 * scale)}px Helvetica, Arial, sans-serif`; ctx.fillStyle = sp.color;
+      ctx.fillText(sp.title, pts[0].x * scale + 3 * scale, pts[0].y * scale + 12 * scale);
+    }
+    return c;
+  };
+  if (o.content === 'document') return withSpaces(await draw(src.full, false));
+  if (o.content === 'markups') return withSpaces(await draw(src.markupsOnly!, true));
+  if (!o.dim) return withSpaces(await draw(src.full, true));
   // Dim Page Content: faded page, markups at full strength on top.
   const base = await draw(src.full, false), top = await draw(src.markupsOnly!, true, true);
   const ctx = base.getContext('2d')!;
   ctx.globalAlpha = 0.65; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, base.width, base.height);
   ctx.globalAlpha = 1; ctx.drawImage(top, 0, 0);
   top.width = top.height = 0;
-  return base;
+  return withSpaces(base);
 }
 
 export function pagesToPrint(d: DocState, range: Range, custom: string): number[] {
   const n = d.loaded.pages.length;
+  const all = Array.from({ length: n }, (_, i) => i);
   if (range === 'current') return [d.page];
   if (range === 'selected') return selectedPages(d);
   if (range === 'custom') return parsePageRange(custom, n);
-  return Array.from({ length: n }, (_, i) => i);
+  if (range === 'all') return all;
+  return filterPages(all, range, d.loaded.pages.map((p) => ({ w: p.width, h: p.height })));
 }
 
 export function sheetsFor(d: DocState, pages: number[], o: PrintSettings): Sheet[] {
@@ -157,7 +178,7 @@ export async function printSheets(jobs: PrintJob[], o: PrintSettings) {
           const img = document.createElement('img');
           img.src = url;
           img.alt = `Page ${page.label}`;
-          Object.assign(img.style, { left: pt(it.x), top: pt(it.y), width: pt(it.w), height: pt(it.h) });
+          Object.assign(img.style, { left: pt(it.x), top: pt(it.y), width: pt(it.w), height: pt(it.h), ...(o.border && o.perSheet > 1 ? { outline: '0.5pt solid #000', outlineOffset: '-0.5pt' } : {}) });
           el.appendChild(img);
         }
         root.appendChild(el);
@@ -221,6 +242,9 @@ function PrintForm({ d }: { d: DocState }) {
                 <option value="current">Current ({d.loaded.pages[d.page]?.label})</option>
                 <option value="selected" disabled={!selectedPages(d).length}>Selected ({selectedPages(d).length})</option>
                 <option value="custom">Custom</option>
+                <option value="even">Even Pages</option><option value="odd">Odd Pages</option>
+                <option value="landscape">Landscape Pages</option><option value="portrait">Portrait Pages</option>
+                <option value="first">First Page</option><option value="last">Last Page</option>
               </select>
               {range === 'custom' && <input aria-label="Custom pages" value={custom} onChange={(e) => { setCustom(e.target.value); setSheet(0); }} placeholder="1-3, 5, 9" style={{ width: 110 }} />}
             </div>
@@ -271,7 +295,16 @@ function PrintForm({ d }: { d: DocState }) {
             </div>
             <div className="form-row"><span>Options</span>
               <label><input type="checkbox" disabled={o.content !== 'both'} checked={o.dim} onChange={(e) => set({ dim: e.target.checked })} /> Dim Page Content</label>
+              <label><input type="checkbox" checked={o.spaces} onChange={(e) => set({ spaces: e.target.checked })} /> Print Spaces</label>
             </div>
+            {o.perSheet > 1 && fixedPaper && (
+              <div className="form-row"><span>Layout</span>
+                <select aria-label="Sheet order" value={o.sheetOrder ?? 'rows'} onChange={(e) => set({ sheetOrder: e.target.value as 'rows' | 'columns' })}>
+                  <option value="rows">Across, then down</option><option value="columns">Down, then across</option>
+                </select>
+                <label><input type="checkbox" checked={!!o.border} onChange={(e) => set({ border: e.target.checked })} /> Border around each page</label>
+              </div>
+            )}
             <div className="form-row"><span>Quality</span>
               <select aria-label="Print quality" value={o.dpi} onChange={(e) => set({ dpi: Number(e.target.value) })}>
                 <option value={150}>Standard (150 dpi)</option>

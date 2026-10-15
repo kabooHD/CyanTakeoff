@@ -101,6 +101,10 @@ export const SUMMARY_COLUMNS: SummaryColumn[] = [
   { key: 'angle', label: 'Angle', value: (m) => round(meas(m)?.angle), numeric: true },
   { key: 'count', label: 'Count', value: (m) => meas(m)?.count ?? '', numeric: true },
   { key: 'depth', label: 'Depth', value: (m) => m.depth ?? '', numeric: true },
+  // Wall Area (Revu): a perimeter/length with depth gives its area; an area/volume with depth gives perimeter × depth.
+  { key: 'wallArea', label: 'Wall Area', value: (m) => { if (!m.depth) return ''; const r = meas(m); return m.type === 'area' || m.type === 'volume' ? round((r?.length ?? 0) * m.depth) : m.type === 'length' || m.type === 'polylength' || m.type === 'perimeter' ? round(r?.area) : ''; }, numeric: true },
+  { key: 'rise', label: 'Rise/Drop', value: (m) => m.rise ?? '', numeric: true },
+  { key: 'sequence', label: 'Sequence', value: (m) => m.seq?.n ?? '', numeric: true, noTotal: true },
   { key: 'slope', label: 'Slope', value: (m) => (m.slope ? `${m.slope.value}${m.slope.unit === 'pitch' ? '/12' : m.slope.unit === 'degree' ? '°' : '%'}` : '') },
   { key: 'units', label: 'Units', value: (m) => unitsOf(m) },
   { key: 'capture', label: 'Capture', value: (m) => (m.capture?.length ? `📷 ${m.capture.length}` : '') },

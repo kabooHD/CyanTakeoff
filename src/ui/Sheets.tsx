@@ -7,6 +7,7 @@ import { findSheetNumber, sheetReferences } from '../model/sheets';
 import { writePageLabels } from '../pdf/pages';
 import { pageText } from './toolActions';
 import { inRect } from '../model/measure';
+import { DEFAULT_BATCH_LINK, batchLinkReportCsv, linkTargets, type BatchLinkOptions, type LinkAppearance, type LinkReportRow, type Overlap, type TermSource } from '../model/batchLink';
 import { setSheets, useTagDialogs, useTags } from './Tags';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { openPrint } from './Print';
@@ -32,33 +33,46 @@ export async function detectSheetNumbers(d: DocState): Promise<(string | null)[]
  * Batch Link: for every page of `docs`, hyperlink each mention of another
  * page's label (sheet number) to that page, in the same or another document.
  */
-export async function batchLink(docs: DocState[]): Promise<number> {
+export async function batchLink(docs: DocState[], o: BatchLinkOptions = DEFAULT_BATCH_LINK): Promise<{ created: number; rows: LinkReportRow[] }> {
   const app = useApp.getState();
-  const targets = docs.flatMap((d) => d.loaded.pages.map((p) => ({ doc: d, page: p.index, label: p.label })))
-    .filter((t) => t.label && !/^\d+$/.test(t.label)); // plain page numbers are not sheet references
+  const targets = linkTargets(docs.map((d) => ({ id: d.id, name: d.name, labels: d.loaded.pages.map((p) => p.label) })), o.source);
   const labels = [...new Set(targets.map((t) => t.label))];
+  const byId = new Map(docs.map((d) => [d.id, d]));
+  // Link appearance (Revu): an outline, a coloured highlight, or nothing visible (the link still works).
+  const style = o.appearance === 'highlight' ? { ...app.toolDefaults.link, color: o.color, fill: o.color, fillOpacity: 0.35, width: 0 }
+    : o.appearance === 'none' ? { ...app.toolDefaults.link, width: 0 } : app.toolDefaults.link;
   let n = 0;
+  const rows: LinkReportRow[] = [];
   const cur = app.activeId;
   for (const d of docs) {
     for (const pg of d.loaded.pages) {
-      const refs = sheetReferences(await pageBoxes(d, pg.index), labels).filter((r) => r.label !== pg.label);
+      const boxes = await pageBoxes(d, pg.index);
+      const refs = sheetReferences(boxes, labels).filter((r) => r.label !== pg.label);
       const existing = d.markups.filter((m) => m.type === 'link' && m.page === pg.index);
       useApp.setState({ activeId: d.id });
+      let created = 0, replaced = 0;
       for (const r of refs) {
         const c = { x: (r.box.x0 + r.box.x1) / 2, y: (r.box.y0 + r.box.y1) / 2 };
-        if (existing.some((m) => inRect(c, [m.points[0], m.points[1]]))) continue; // already linked
-        const t = targets.find((x) => x.label === r.label && x.doc.id === d.id) ?? targets.find((x) => x.label === r.label)!;
+        const over = existing.filter((m) => inRect(c, [m.points[0], m.points[1]]));
+        if (over.length) {
+          if (o.overlap === 'skip') continue; // already linked
+          useApp.getState().deleteMarkups(over.map((m) => m.id));
+          replaced += over.length;
+        }
+        const t = targets.find((x) => x.label === r.label && x.docId === d.id) ?? targets.find((x) => x.label === r.label)!;
+        const other = byId.get(t.docId);
         useApp.getState().addMarkup({
           type: 'link', page: pg.index, points: [{ x: r.box.x0, y: r.box.y0 }, { x: r.box.x1, y: r.box.y1 }],
-          style: app.toolDefaults.link, subject: 'Hyperlink', comment: `${t.doc.id === d.id ? '' : `${t.doc.name}: `}${r.label}`,
-          link: t.doc.id === d.id ? { page: t.page } : { file: t.doc.name, page: t.page },
+          style, subject: 'Hyperlink', comment: `${t.docId === d.id ? '' : `${t.docName}: `}${r.label}`,
+          link: t.docId === d.id ? { page: t.page } : { file: other?.name ?? t.docName, page: t.page },
         });
-        n++;
+        n++; created++;
       }
+      rows.push({ document: d.name, page: pg.label, created, replaced, note: boxes.length ? '' : 'no searchable text' });
     }
   }
   useApp.setState({ activeId: cur });
-  return n;
+  return { created: n, rows };
 }
 
 export function SheetsDialog() {
@@ -115,6 +129,8 @@ function LabelsForm({ doc }: { doc: DocState }) {
 function BatchLinkForm({ doc }: { doc: DocState }) {
   const s = useApp();
   const [scope, setScope] = useState<'doc' | 'all'>(s.docs.length > 1 ? 'all' : 'doc');
+  const [o, setO] = useState<BatchLinkOptions>(DEFAULT_BATCH_LINK);
+  const set = (p: Partial<BatchLinkOptions>) => setO((x) => ({ ...x, ...p }));
   const close = () => useSheetsDialog.setState({ open: null });
   return (
     <Frame title="Batch Link">
@@ -124,14 +140,30 @@ function BatchLinkForm({ doc }: { doc: DocState }) {
             <option value="doc">This document</option><option value="all">All open documents (as a set)</option>
           </select>
         </div>
-        <p className="muted small">Finds sheet numbers (page labels such as A-101) mentioned in the drawings and turns each mention into a hyperlink to that sheet. Set page labels first (Document &gt; Page Labels).</p>
+        <div className="form-row"><span>Search terms</span>
+          <select aria-label="Search terms" value={o.source} onChange={(e) => set({ source: e.target.value as TermSource })}><option value="label">Page labels (sheet numbers)</option><option value="filename">File names</option></select>
+        </div>
+        <div className="form-row"><span>Appearance</span>
+          <select aria-label="Link appearance" value={o.appearance} onChange={(e) => set({ appearance: e.target.value as LinkAppearance })}><option value="outline">Outline</option><option value="highlight">Highlight Links</option><option value="none">Invisible</option></select>
+          {o.appearance === 'highlight' && <input type="color" aria-label="Highlight colour" value={o.color} onChange={(e) => set({ color: e.target.value })} />}
+        </div>
+        <div className="form-row"><span>Existing links</span>
+          <select aria-label="Overlap" value={o.overlap} onChange={(e) => set({ overlap: e.target.value as Overlap })}><option value="skip">Keep (skip the mention)</option><option value="replace">Replace</option></select>
+        </div>
+        <div className="form-row"><label><input type="checkbox" checked={o.report} onChange={(e) => set({ report: e.target.checked })} /> Save the summary report (CSV)</label></div>
+        <p className="muted small">Finds the terms (page labels such as A-101, or file names) mentioned in the drawings and turns each mention into a hyperlink to that sheet. Set page labels first (Document &gt; Page Labels).</p>
         <div className="modal-actions">
           <span className="spacer" />
           <button className="primary" onClick={async () => {
             close();
             s.setStatus('Batch Link: reading sheets…');
-            const n = await batchLink(scope === 'all' ? s.docs : [doc]);
+            const { created: n, rows } = await batchLink(scope === 'all' ? s.docs : [doc], o);
             s.setStatus(`Batch Link created ${n} hyperlink${n === 1 ? '' : 's'}`);
+            if (o.report) {
+              const url = URL.createObjectURL(new Blob(['\ufeff' + batchLinkReportCsv(rows)], { type: 'text/csv' }));
+              Object.assign(document.createElement('a'), { href: url, download: `${doc.name.replace(/\.pdf$/i, '')} - Batch Link report.csv` }).click();
+              setTimeout(() => URL.revokeObjectURL(url), 10_000);
+            }
           }}>Run</button>
           <button onClick={close}>Cancel</button>
         </div>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { PDFArray, PDFDocument, PDFName } from 'pdf-lib';
+import { PDFArray, PDFDocument, PDFName, PDFRawStream, StandardFonts, decodePDFRawStream } from 'pdf-lib';
 import { deletePages, extractPages, flattenPage, flattenedPages, unflattenPage, insertBlankPage, insertPages, movePage, replacePage, rotatePages, splitDocument } from '../src/pdf/pages';
 
 const load = (f: string) => PDFDocument.load(readFileSync(f), { updateMetadata: false });
@@ -50,6 +50,19 @@ describe('page operations', () => {
     expect(annots(d, 0)).toBe(0);
     const again = await PDFDocument.load(await d.save());
     expect(again.getPageCount()).toBe(1);
+  });
+  it('overlay text puts the layer name next to each flattened markup', async () => {
+    const d = await load('tests/fixtures/revu/measure.pdf');
+    const font = await d.embedFont(StandardFonts.Helvetica);
+    const n = flattenPage(d, d.getPage(0), () => false, undefined, false, { text: () => 'Markups', font, size: 8, position: 'tr' });
+    expect(n).toBeGreaterThan(0);
+    const page = d.getPage(0);
+    const streams = (page.node.lookup(PDFName.of('Contents')) as PDFArray).asArray().map((r) => d.context.lookup(r) as PDFRawStream);
+    const text = streams.map((st) => (st instanceof PDFRawStream ? new TextDecoder('latin1').decode(decodePDFRawStream(st).decode()) : '')).join('\n');
+    const label = font.encodeText('Markups').toString();
+    expect(text.split(label).length - 1).toBe(n);
+    expect(/8 Tf/.test(text)).toBe(true);
+    expect(page.node.Resources()?.lookup(PDFName.of('Font'))).toBeTruthy();
   });
   it('unflattens markups flattened with recovery', async () => {
     const d = await load('tests/fixtures/revu/measure.pdf');

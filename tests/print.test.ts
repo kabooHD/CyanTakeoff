@@ -1,10 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_PRINT, layoutSheets, printOrder, renderScale } from '../src/model/print';
+import { DEFAULT_PRINT, filterPages, layoutSheets, printOrder, renderScale } from '../src/model/print';
 
 const ARCH_D = { w: 36 * 72, h: 24 * 72 }; // landscape drawing
 const LETTER = { w: 8.5 * 72, h: 11 * 72 };
 
 describe('print layout', () => {
+  it('filters pages by position and orientation', () => {
+    const sizes = [ARCH_D, LETTER, ARCH_D, LETTER, LETTER];
+    const all = [0, 1, 2, 3, 4];
+    expect(filterPages(all, 'odd', sizes)).toEqual([0, 2, 4]);
+    expect(filterPages(all, 'even', sizes)).toEqual([1, 3]);
+    expect(filterPages(all, 'landscape', sizes)).toEqual([0, 2]);
+    expect(filterPages(all, 'portrait', sizes)).toEqual([1, 3, 4]);
+    expect(filterPages(all, 'first', sizes)).toEqual([0]);
+    expect(filterPages(all, 'last', sizes)).toEqual([4]);
+  });
+  it('fills a grid across then down, or down then across', () => {
+    const sizes = [LETTER, LETTER, LETTER, LETTER];
+    const rows = layoutSheets(sizes, [0, 1, 2, 3], { ...DEFAULT_PRINT, paper: 'Letter', perSheet: 4 })[0].items;
+    expect(rows[1].x).toBeGreaterThan(rows[0].x); expect(rows[1].y).toBe(rows[0].y);
+    const cols = layoutSheets(sizes, [0, 1, 2, 3], { ...DEFAULT_PRINT, paper: 'Letter', perSheet: 4, sheetOrder: 'columns' })[0].items;
+    expect(cols[1].y).toBeGreaterThan(cols[0].y); expect(cols[1].x).toBe(cols[0].x);
+  });
   it('copies, collate and reverse order', () => {
     expect(printOrder([0, 1, 2], { copies: 2, collate: true, reverse: false })).toEqual([0, 1, 2, 0, 1, 2]);
     expect(printOrder([0, 1, 2], { copies: 2, collate: false, reverse: false })).toEqual([0, 0, 1, 1, 2, 2]);

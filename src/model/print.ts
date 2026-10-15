@@ -45,6 +45,24 @@ export interface PrintOptions {
   margins: [number, number, number, number];
   /** Centre each page in its cell (else top-left). */
   center: boolean;
+  /** Several pages per sheet: filled across then down (rows) or down then across (columns), with a border around each page. */
+  sheetOrder?: 'rows' | 'columns';
+  border?: boolean;
+}
+
+/** Page range filters (Revu): by position or orientation. */
+export type PageFilter = 'even' | 'odd' | 'landscape' | 'portrait' | 'first' | 'last';
+
+/** The pages (0-based) kept by a filter; `sizes` gives each page's size for the orientation filters. */
+export function filterPages(pages: number[], filter: PageFilter, sizes: { w: number; h: number }[]): number[] {
+  switch (filter) {
+    case 'even': return pages.filter((p) => (p + 1) % 2 === 0);
+    case 'odd': return pages.filter((p) => (p + 1) % 2 === 1);
+    case 'landscape': return pages.filter((p) => sizes[p] && sizes[p].w > sizes[p].h);
+    case 'portrait': return pages.filter((p) => sizes[p] && sizes[p].w <= sizes[p].h);
+    case 'first': return pages.slice(0, 1);
+    case 'last': return pages.slice(-1);
+  }
 }
 
 export const DEFAULT_PRINT: PrintOptions = {
@@ -111,7 +129,7 @@ export function layoutSheets(sizes: { w: number; h: number }[], order: number[],
       const rotate: 0 | 90 = paper && o.autoRotate && (w > h) !== (cw > ch) && Math.abs(w - h) > 1e-6 ? 90 : 0;
       const [rw, rh] = rotate ? [h, w] : [w, h];
       const scale = paper ? fitScale(rw, rh, cw, ch, iw, ih, o) : 1;
-      const col = k % cols, row = Math.floor(k / cols);
+      const col = o.sheetOrder === 'columns' ? Math.floor(k / rows) : k % cols, row = o.sheetOrder === 'columns' ? k % rows : Math.floor(k / cols);
       // The box the page is placed in: the cell, or the cell inside the margins.
       const bx = col * cw + (toMargins ? ml / cols : 0), by = row * ch + (toMargins ? mt / rows : 0);
       const bw = toMargins ? iw : cw, bh = toMargins ? ih : ch;

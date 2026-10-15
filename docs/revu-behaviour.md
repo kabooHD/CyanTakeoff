@@ -172,11 +172,26 @@ displayed value (in the markup's own unit when set), as Revu writes it.
   log as a document. Rows are sorted by Sheet Number.
 - Page labels: sheet numbers such as A-101; can be generated from the
   title block. Saved as the PDF's /PageLabels.
-- Batch Link: turns sheet references in the drawings into hyperlinks to
-  those sheets (same file: page destination; another file: GoToR).
-- Slip Sheet: new revisions replace sheets matched by sheet number; the
-  markups (and scale, Spaces) carry forward; links and bookmarks to the
-  replaced page follow it.
+- Batch Link: turns mentions of the search terms in the drawings into
+  hyperlinks. Terms come from page labels (sheet numbers), file names, a
+  page region (AutoMark) or an imported CSV, with a filter on the term
+  text; options: relative paths, Highlight Links (a coloured rectangle),
+  what to do where a link exists, link appearance (colour, width, style:
+  a highlight markup or an outline/fill outside the Markups list); the
+  summary reports links created and deleted and pages without text.
+  Ours: terms from page labels or file names over this document or all
+  open ones; Outline / Highlight Links (colour) / Invisible; keep or
+  replace existing links; CSV report.
+- Slip Sheet: new revisions go over sheets matched by page label (sheet
+  number, with an Advanced Match Filter: * any text, # number, ? letter,
+  ; separates), by file name + page index, by page region, or by hand.
+  Options: Replace Current Pages with Revised Pages, or Insert Revised
+  Pages before Current Pages (the old sheet stays, optionally stamped
+  'Superseded'); Copy Markups from Current Pages to Revised Pages (with
+  unflatten before / flatten after); a PDF or CSV report. Ours: label (with
+  the filter) or index matching, replace or insert, copy markups (also
+  scale and Spaces), Superseded stamp, CSV report; links and bookmarks to
+  the old page follow the new one.
 
 ## Tool Chest, shortcuts, profiles
 - Tool Chest: tool sets (gear menu: rename, export, delete, Legend), My
@@ -245,6 +260,22 @@ displayed value (in the markup's own unit when set), as Revu writes it.
   open document), Reset (clears every field), Highlight Fields (the blue
   tint), Migrate Typewritten Text (Typewriter markups inside a text field
   become its value and are removed), Button fields with a caption.
+
+## Flatten Markups (Document > Flatten, Ctrl+Shift+M)
+- Type list: check the markup types to flatten. Scope: All Markups,
+  Exclude Filtered Markups, or Currently Selected Markups (shown when a
+  selection exists). Allow Markup Recovery (Unflatten), Flatten to Layer
+  (Leave Markups on Existing Layer, Overlay Text with font and position),
+  Show Properties in Popup, Flatten Capture Media as Attachment, page
+  range, batch over files. Right-click > Flatten uses the defaults
+  (recoverable). Ours: types present in the document; All, Exclude
+  Filtered (offered while the Markups List is filtered) or Currently
+  Selected; recovery; Assign Layer with Overlay Text (the layer name in
+  Helvetica at the chosen size in a corner of each flattened markup:
+  Top/Bottom Left/Right); Flatten Capture Media as Attachment (the
+  Capture Summary PDF with a title, attached to the file; offered when a
+  markup has photos). Not yet: property pop-ups, Leave Markups on
+  Existing Layer.
 
 ## Compare
 - Compare Documents: pick the original and revised document/page; the
@@ -376,6 +407,14 @@ displayed value (in the markup's own unit when set), as Revu writes it.
   (the PDF blend modes). Highlights multiply by default; stamps darken.
 - CyanTakeoff: saved as /BM in the appearance's graphics state and read back
   from it; drawn with CSS mix-blend-mode on screen.
+
+## Highlight (H)
+- Drag over page text: the text lines are highlighted (one markup, text
+  copied into the comment when the preference says so). Elsewhere a free
+  highlight box. Ctrl+drag over text draws the free box anyway.
+  Preferences > Markup > Enable Text Highlighting (on by default): off
+  makes every drag a free highlight. Shift constrains the box; a text
+  highlight cannot be moved or resized.
 
 ## Editing markups (move, resize, rotate)
 - Drag a markup to move it; drag a yellow control point to resize or
@@ -684,8 +723,10 @@ Ours: the browser picks the printer, so the dialog prepares the sheets
 opens the browser's print dialog. Layers print when shown and their Print
 usage is on; markups on hidden layers do not print. Selected pages come
 from the Thumbnails panel (click, Ctrl+click, Shift+click); margins (in or
-mm) with Fit/Reduce to Margins and Center. Not yet: Dim Filtered Markups,
-Print Spaces.
+mm) with Fit/Reduce to Margins and Center; page filters Even/Odd/
+Landscape/Portrait/First/Last; Print Spaces draws each Space's outline and
+name; several pages per sheet across-then-down or down-then-across with an
+optional border. Not yet: Dim Filtered Markups, Print Visible Hyperlinks.
 
 ## Small commands (Window, Document, Markup menus)
 - Properties panel with nothing selected: File Properties (title, author,
@@ -907,6 +948,12 @@ folders, manual correlation and saved .bcx batches).
 - Columns menu to show/hide; drag headers to reorder; custom columns and
   statuses.
 - Filter List adds an "All" filter row above the columns; Clear All.
+  Each column's filter also offers Custom…: up to two conditions on the
+  column joined with AND or OR (numbers: equal / not equal / greater /
+  less than; dates: before / after / on a day; text: contains / equal /
+  not equal); the filter row then shows the conditions ("> 2 or ≠ 1").
+  Markups the filtered list (or the search box) leaves out are dimmed on
+  the page (Preferences > Markups List > Dim filtered markups, 75 %).
 - Click a header to sort, again to reverse; Subject / page sorts tie-break
   on creation date.
 - Right-click a row: Copy Cell, Properties, Edit Action, Add to My Tools,
@@ -921,7 +968,10 @@ folders, manual correlation and saved .bcx batches).
   Media (a .zip of the photos, named after the markups). Columns also:
   Legend (the legends listing the markup), Page Index, Lock, Units, X, Y,
   X/Y Center, Document Width/Height (inches from the lower left), Width
-  and Height (real-world, at the markup's scale).
+  and Height (real-world, at the markup's scale), Wall Area (perimeter ×
+  depth of an area/volume, or the area of a length/perimeter with depth),
+  Rise/Drop, Sequence (hidden by default). The saved filter set in use is
+  shown with a check mark, starred once its filters were changed.
 - Summary (Summary ▾ > Summary…, Batch > Summary…): Columns tab (pick
   and order columns, Show empty columns), Filter & Sort tab (a filter
   per column, Sort by / Then by with direction), Output tab: Export as

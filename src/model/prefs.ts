@@ -23,6 +23,8 @@ export interface Prefs {
   showAuthorDate: boolean;
   /** Text under a Highlight/Underline/Strikethrough/Squiggly goes into the markup's comment. */
   copyHighlightedText: boolean;
+  /** Enable Text Highlighting: the Highlight tool marks the text under a drag (Ctrl+drag: free box). Off: always a box. */
+  textHighlighting: boolean;
   /** Snapshot resolution in dpi. */
   snapshotDpi: number;
   includeMarkupsInSnapshots: boolean;
@@ -59,6 +61,8 @@ export interface Prefs {
   /** Zoom to fit a markup when it is selected in the list. */
   zoomFitOnSelect: boolean;
   wrapComments: boolean;
+  /** How much markups filtered out of the list are dimmed on the page (0-100 %). */
+  filteredDim: number;
   // Layers
   /** Hiding a parent layer hides its children too. */
   hideChildLayers: boolean;
@@ -74,14 +78,14 @@ export interface Prefs {
 export const DEFAULT_PREFS: Prefs = {
   tabTruncation: 'end', showRecentOnStartup: false,
   wheelSingle: 'zoom', wheelContinuous: 'zoom', reverseWheel: false, wheelSensitivity: 5,
-  dynamicDefaults: false, autosizeText: false, showAuthorDate: true, copyHighlightedText: true, snapshotDpi: 216, includeMarkupsInSnapshots: true,
+  dynamicDefaults: false, autosizeText: false, showAuthorDate: true, copyHighlightedText: true, textHighlighting: true, snapshotDpi: 216, includeMarkupsInSnapshots: true,
   sketchRotation: 'page', ellipseMode: 'size',
   fieldHighlightColor: '#cce0ff', fieldHighlightOpacity: 55,
   hashAlgorithm: 'sha256',
   fillSize: 2, fillBoundarySize: 2, fillColor: '#00a0ff', fillBoundaryColor: '#ff4d00', fillSpeed: 'Medium', fillSensitivity: 'Medium', fillHideMarkups: false,
   gridSpacing: 12, snapSensitivity: 10, snapColor: '#3a7bd5',
   maxZoom: 6400, defaultLayout: 'single',
-  zoomFitOnSelect: false, wrapComments: false,
+  zoomFitOnSelect: false, wrapComments: false, filteredDim: 75,
   hideChildLayers: true, layersOnPageOnly: false,
   spellUpperCase: false, customWords: '',
 };

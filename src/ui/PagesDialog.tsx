@@ -4,18 +4,24 @@ import { useState } from 'react';
 import { PDFDict, PDFName, PDFRef } from 'pdf-lib';
 import { readLayers, writeLayers } from '../pdf/layers';
 import { create } from 'zustand';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { attachFile } from '../pdf/docInfo';
+import { captureSummaryPdf } from './captureExport';
 import { serialize, useApp, useActiveDoc } from '../model/store';
 import { parsePageRange } from '../model/measure';
 import {
-  deletePages, extractPages, flattenPage, flattenedPages, unflattenPage, insertBlankPage, insertPages, replacePage, rotatePages, splitDocument,
+  deletePages, extractPages, flattenPage, flattenedPages, unflattenPage, insertBlankPage, insertPages, replacePage, rotatePages, splitDocument, insertRevisedPage,
 } from '../pdf/pages';
 import { pickFile } from './toolActions';
 import { openPdf } from '../pdf/document';
 import { OCR_LANGUAGES, addTextLayer, ocrPages } from './ocr';
 import { FilesRow, batchHint, targets } from './filesRow';
 import { detectSheetNumbers } from './Sheets';
+import { slipPlan, slipReportRows, supersededIndex, type SlipMatch } from '../model/slipSheet';
+import { batchReportCsv } from '../model/batchPairs';
 import type { DocState } from '../model/store';
+import type { Markup, MarkupType } from '../model/types';
+import { toolById } from '../tools/tools';
 
 export type PagesOp = 'insert' | 'insert-blank' | 'delete' | 'extract' | 'rotate' | 'replace' | 'flatten' | 'split' | 'slip-sheet' | 'ocr';
 export const usePagesDialog = create<{ op: PagesOp | null }>(() => ({ op: null }));
@@ -72,10 +78,29 @@ function PagesForm({ op }: { op: PagesOp }) {
   });
   const [file, setFile] = useState<{ name: string; doc: PDFDocument; bytes: Uint8Array } | null>(null);
   const [appendNew, setAppendNew] = useState(true);
+  // Slip Sheet options (Revu): replace or insert in front, copy the markups, stamp the superseded pages, how pages match, a report.
+  const [slipMode, setSlipMode] = useState<'replace' | 'insert'>('replace');
+  const [slipCopy, setSlipCopy] = useState(true);
+  const [slipStamp, setSlipStamp] = useState(false);
+  const [slipBy, setSlipBy] = useState<SlipMatch>('label');
+  const [slipFilter, setSlipFilter] = useState('');
+  const [slipReport, setSlipReport] = useState(false);
   const [all, setAll] = useState(() => batchHint.take());
   // Flatten > Assign Layer (Revu): an existing layer's name, or a new one ("Markups" when the file has none).
   const [assign, setAssign] = useState(false);
   const [recover, setRecover] = useState(true);
+  // Flatten Markups (Revu): which markup types, and all of them or only the selected ones.
+  const typesPresent = [...new Set((doc?.markups ?? []).map((m) => m.type))].sort((a, b) => toolById(a).name.localeCompare(toolById(b).name));
+  const [flatTypes, setFlatTypes] = useState<Set<MarkupType>>(() => new Set(typesPresent));
+  const [flatScope, setFlatScope] = useState<'all' | 'selected' | 'unfiltered'>('all');
+  // Overlay Text (with Assign Layer): the layer's name next to each flattened markup.
+  const [overlay, setOverlay] = useState(false);
+  const [overlaySize, setOverlaySize] = useState(8);
+  const [overlayPos, setOverlayPos] = useState<'tl' | 'tr' | 'bl' | 'br'>('tr');
+  // Flatten Capture Media as Attachment: the Capture Summary PDF attached to the file.
+  const [flatCapture, setFlatCapture] = useState(false);
+  const [captureTitle, setCaptureTitle] = useState(() => `${(doc?.name ?? '').replace(/\.pdf$/i, '')} - Capture Summary`);
+  const listVisible = useApp((st) => st.listVisible);
   const [layerName, setLayerName] = useState(() => (doc?.layers ? Object.values(doc.layers.layers)[0]?.name : undefined) ?? 'Markups');
   if (!doc) return null;
   const close = () => usePagesDialog.setState({ op: null });
@@ -121,7 +146,7 @@ function PagesForm({ op }: { op: PagesOp }) {
         }, `Replaced ${Math.min(pages.length, file.doc.getPageCount())} page(s)${keep ? ', markups kept' : ''}`);
         break;
       case 'flatten':
-        await s.transformDoc((lib) => {
+        await s.transformDoc(async (lib) => {
           let target: PDFRef | undefined;
           if (assign && layerName.trim()) {
             const set = readLayers(lib) ?? { layers: {}, order: [], configs: [] };
@@ -135,7 +160,24 @@ function PagesForm({ op }: { op: PagesOp }) {
           }
           // Markups go to the assigned layer, else stay on the layer they were on.
           const layerOf = (a: PDFDict) => target ?? (a.get(PDFName.of('OC')) instanceof PDFRef ? a.get(PDFName.of('OC')) as PDFRef : undefined);
-          for (const p of pages) flattenPage(lib, lib.getPage(p), () => false, layerOf, recover);
+          // Only the chosen types (and only the selection, when asked) are flattened; the rest stays as markups.
+          const everything = flatScope === 'all' && typesPresent.every((t) => flatTypes.has(t));
+          const inScope = (m: Markup) => (flatScope === 'all' ? true : flatScope === 'selected' ? doc.selection.includes(m.id) : !listVisible || listVisible.has(m.id));
+          const chosen = doc.markups.filter((m) => flatTypes.has(m.type) && inScope(m));
+          const ids = new Set(chosen.map((m) => m.id));
+          const refs = new Set(chosen.filter((m) => m.source).map((m) => `${m.source!.objectNumber} ${m.source!.generation}`));
+          const keep = everything ? () => false : (a: PDFDict) => {
+            const nm = a.get(PDFName.of('NM'));
+            const id = nm && 'decodeText' in nm ? (nm as { decodeText(): string }).decodeText() : '';
+            const ref = lib.context.getObjectRef(a);
+            return !(ids.has(id) || (ref ? refs.has(`${ref.objectNumber} ${ref.generationNumber}`) : false));
+          };
+          const ov = assign && overlay ? { text: () => layerName.trim(), font: await lib.embedFont(StandardFonts.Helvetica), size: overlaySize, position: overlayPos } : undefined;
+          for (const p of pages) flattenPage(lib, lib.getPage(p), keep, layerOf, recover, ov);
+          if (flatCapture) {
+            const bytes = await captureSummaryPdf(doc, chosen.filter((m) => pages.includes(m.page)), captureTitle.trim() || 'Capture Summary');
+            if (bytes) await attachFile(lib, `${captureTitle.trim() || 'Capture Summary'}.pdf`, bytes, 'application/pdf');
+          }
         }, `Flattened markups on ${pages.length} page(s)${assign ? ` to layer "${layerName.trim()}"` : ''}`);
         break;
       case 'ocr': {
@@ -161,12 +203,33 @@ function PagesForm({ op }: { op: PagesOp }) {
         const newLabels = rev.pages.map((p, i) => (/^\d+$/.test(p.label) && found[i] ? found[i]! : p.label));
         rev.pdf.loadingTask.destroy();
         const oldLabels = doc.loaded.pages.map((p) => p.label);
-        const pairs = newLabels.map((l, i) => ({ src: i, at: oldLabels.indexOf(l) }));
-        const matched = pairs.filter((x) => x.at >= 0), extra = pairs.filter((x) => x.at < 0);
-        await s.transformDoc(async (lib) => {
-          for (const { src, at: i } of matched) await replacePage(lib, i, file.doc, src, true);
-          if (appendNew && extra.length) await insertPages(lib, file.doc, lib.getPageCount(), extra.map((x) => x.src));
-        }, `Slip Sheet: ${matched.length} sheet(s) replaced with markups carried forward${appendNew && extra.length ? `, ${extra.length} new sheet(s) added` : ''}`);
+        const plan = slipPlan(oldLabels, newLabels, slipBy, slipFilter);
+        const { matched, extra } = plan;
+        const insert = slipMode === 'insert';
+        const docId = doc.id;
+        const done = await s.transformDoc(async (lib) => {
+          if (insert) {
+            // Front to back from the end, so the positions still to come stay valid.
+            for (const { src, at: i } of [...matched].sort((a, b) => b.at - a.at)) await insertRevisedPage(lib, i, file.doc, src, slipCopy);
+          } else for (const { src, at: i } of matched) await replacePage(lib, i, file.doc, src, slipCopy);
+          if (appendNew && extra.length) await insertPages(lib, file.doc, lib.getPageCount(), extra);
+        }, `Slip Sheet: ${matched.length} sheet(s) ${insert ? 'inserted in front of the current ones' : 'replaced'}${slipCopy ? ' with markups carried forward' : ''}${appendNew && extra.length ? `, ${extra.length} new sheet(s) added` : ''}`);
+        if (done && insert && slipStamp && matched.length) {
+          // Stamp Current Pages 'Superseded': in the middle of each page that was slipped over.
+          const app = useApp.getState();
+          const d2 = app.docs.find((x) => x.id === docId);
+          if (d2) {
+            const now = new Date().toISOString();
+            app.addMarkups(matched.map(({ at }) => {
+              const pg = supersededIndex(at, matched), info = d2.loaded.pages[pg];
+              return { id: crypto.randomUUID(), type: 'stamp' as const, page: pg, points: [{ x: info.width / 2, y: info.height / 2 }], style: app.toolDefaults.stamp, subject: 'Stamp', text: 'SUPERSEDED', author: app.author, created: now, modified: now, status: 'None' as const, label: '', comment: '' };
+            }), docId);
+          }
+        }
+        if (done && slipReport) {
+          const csv = batchReportCsv(slipReportRows(oldLabels, newLabels, plan, slipMode), 'Slip Sheet');
+          download(new TextEncoder().encode(csv), `${base(doc.name)} - Slip Sheet report.csv`);
+        }
         break;
       }
       case 'split': {
@@ -232,14 +295,56 @@ function PagesForm({ op }: { op: PagesOp }) {
           {op === 'replace' && <>{range_}{fileRow}<div className="form-row"><label><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} /> Keep markups, page scale and Spaces</label></div>
             <p className="muted small">Replaces the chosen pages, in order, with the new file's pages from page 1.</p></>}
           {op === 'flatten' && <>
+            <div className="form-row"><span>Markups</span>
+              <select aria-label="Flatten scope" value={flatScope} onChange={(e) => setFlatScope(e.target.value as 'all' | 'selected')}>
+                <option value="all">All Markups</option>
+                {listVisible && <option value="unfiltered">Exclude Filtered Markups</option>}
+                {doc.selection.length > 0 && <option value="selected">Currently Selected Markups ({doc.selection.length})</option>}
+              </select>
+            </div>
+            {typesPresent.length > 0 && (
+              <div className="form-row flatten-types"><span>Types</span>
+                <span className="flatten-type-list" aria-label="Markup types to flatten">
+                  {typesPresent.map((t) => (
+                    <label key={t}><input type="checkbox" aria-label={`Flatten ${toolById(t).name}`} checked={flatTypes.has(t)} onChange={(e) => { const n = new Set(flatTypes); if (e.target.checked) n.add(t); else n.delete(t); setFlatTypes(n); }} /> {toolById(t).name}</label>
+                  ))}
+                  <button type="button" className="link-btn" onClick={() => setFlatTypes(new Set(typesPresent))}>All</button>
+                  <button type="button" className="link-btn" onClick={() => setFlatTypes(new Set())}>None</button>
+                </span>
+              </div>
+            )}
             <div className="form-row"><label><input type="checkbox" checked={assign} onChange={(e) => setAssign(e.target.checked)} /> Assign Layer</label>
               <input aria-label="Flatten to layer" list="flatten-layers" value={layerName} disabled={!assign} onChange={(e) => setLayerName(e.target.value)} />
               <datalist id="flatten-layers">{Object.values(doc.layers?.layers ?? {}).map((l) => <option key={l.id} value={l.name} />)}</datalist>
             </div>
+            {assign && (
+              <div className="form-row"><label><input type="checkbox" checked={overlay} onChange={(e) => setOverlay(e.target.checked)} /> Overlay Text</label>
+                <input aria-label="Overlay font size" type="number" min={4} max={48} value={overlaySize} disabled={!overlay} onChange={(e) => setOverlaySize(Math.max(4, Math.min(48, Number(e.target.value) || 8)))} style={{ width: 50 }} /> pt
+                <select aria-label="Overlay position" value={overlayPos} disabled={!overlay} onChange={(e) => setOverlayPos(e.target.value as typeof overlayPos)}>
+                  <option value="tl">Top Left</option><option value="tr">Top Right</option><option value="bl">Bottom Left</option><option value="br">Bottom Right</option>
+                </select>
+              </div>
+            )}
             <div className="form-row"><label><input type="checkbox" checked={recover} onChange={(e) => setRecover(e.target.checked)} /> Allow markup recovery (Document &gt; Unflatten, Ctrl+Shift+U)</label></div>
+            {doc.markups.some((m) => m.capture?.length) && (
+              <div className="form-row"><label><input type="checkbox" checked={flatCapture} onChange={(e) => setFlatCapture(e.target.checked)} /> Flatten Capture Media as Attachment</label>
+                <input aria-label="Capture summary title" value={captureTitle} disabled={!flatCapture} onChange={(e) => setCaptureTitle(e.target.value)} />
+              </div>
+            )}
             <p className="muted small">Markups become part of the page content{recover ? '; Unflatten brings them back as long as the page content is not edited (Edit Text, Erase Content, redaction)' : ' and can no longer be edited'}. With Assign Layer they go on that layer (a new name creates it); otherwise a markup on a layer stays on its layer.</p>
           </>}
-          {op === 'slip-sheet' && <>{fileRow}<div className="form-row"><label><input type="checkbox" checked={appendNew} onChange={(e) => setAppendNew(e.target.checked)} /> Add sheets that are not in this document</label></div>
+          {op === 'slip-sheet' && <>{fileRow}
+            <div className="form-row"><span>Match by</span>
+              <select aria-label="Match pages by" value={slipBy} onChange={(e) => setSlipBy(e.target.value as SlipMatch)}><option value="label">Page Label (sheet number)</option><option value="index">File name, page index</option></select>
+              {slipBy === 'label' && <input aria-label="Match filter" placeholder="Filter: * any, # number, ? letter" value={slipFilter} onChange={(e) => setSlipFilter(e.target.value)} style={{ width: 150 }} />}
+            </div>
+            <div className="form-row"><span>Options</span>
+              <select aria-label="Slip sheet mode" value={slipMode} onChange={(e) => setSlipMode(e.target.value as 'replace' | 'insert')}><option value="replace">Replace Current Pages with Revised Pages</option><option value="insert">Insert Revised Pages before Current Pages</option></select>
+            </div>
+            <div className="form-row"><label><input type="checkbox" checked={slipCopy} onChange={(e) => setSlipCopy(e.target.checked)} /> Copy Markups from Current Pages to Revised Pages</label></div>
+            {slipMode === 'insert' && <div className="form-row"><label><input type="checkbox" checked={slipStamp} onChange={(e) => setSlipStamp(e.target.checked)} /> Stamp Current Pages 'Superseded'</label></div>}
+            <div className="form-row"><label><input type="checkbox" checked={slipReport} onChange={(e) => setSlipReport(e.target.checked)} /> Save a report (CSV)</label></div>
+            <div className="form-row"><label><input type="checkbox" checked={appendNew} onChange={(e) => setAppendNew(e.target.checked)} /> Add sheets that are not in this document</label></div>
             <p className="muted small">Each sheet of the new revision replaces the sheet with the same number (page label), keeping its markups, scale and Spaces.</p></>}
           {op === 'split' && <div className="form-row"><span>Every</span><input aria-label="Pages per file" type="number" min={1} value={every} onChange={(e) => setEvery(e.target.value)} style={{ width: 60 }} /> page(s) per file</div>}
           <div className="modal-actions">

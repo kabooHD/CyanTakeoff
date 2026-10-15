@@ -215,10 +215,40 @@ await page.getByRole('button', { name: 'Columns ▾' }).click();
 await page.locator('.ml-columns-menu label', { hasText: 'Author' }).locator('input').uncheck();
 await page.mouse.move(5, 5);
 assert(!(await page.locator('.ml-table thead').innerText()).includes('Author'), 'column chooser hides Author');
+{
+  await page.getByRole('button', { name: 'Columns ▾' }).click();
+  const names = await page.locator('.ml-columns-menu label').allInnerTexts();
+  await page.getByRole('button', { name: 'Columns ▾' }).click();
+  assert(['Wall Area', 'Rise/Drop', 'Sequence'].every((c) => names.some((n) => n.trim() === c)), `Columns menu offers Wall Area, Rise/Drop and Sequence (${names.length} columns)`);
+}
 await page.getByRole('button', { name: 'Filter List' }).click();
 await page.locator('.ml-filter-row th').first().locator('select').selectOption('Count Measurement');
 assert((await page.locator('.ml-table tbody tr').count()) === 1, 'filter row shows only the count');
+{
+  // Custom column filter (conditions joined with AND / OR); markups left out of the list are dimmed on the page.
+  const allRows = await page.locator('.ml-table tbody tr').count();
+  await page.locator('.ml-filter-row th').first().locator('select').selectOption('');
+  const fullRows = await page.locator('.ml-table tbody tr').count();
+  const dimmed = async () => page.locator('.page .markup-layer [data-id] [opacity="0.25"]').count();
+  assert(fullRows > allRows && await dimmed() === 0, `filter cleared (${fullRows} rows, nothing dimmed)`);
+  await page.getByLabel('Filter Count', { exact: true }).selectOption('__custom__');
+  const ce = page.getByRole('dialog', { name: 'Custom filter: Count' });
+  await ce.getByLabel('Condition 1').selectOption('gt');
+  await ce.getByLabel('Value 1').fill('2');
+  await page.waitForTimeout(200);
+  assert((await page.locator('.ml-table tbody tr').count()) === 1, 'Custom filter "Count greater than 2" lists only the count of 3');
+  assert(await dimmed() > 0, 'markups filtered out of the list are dimmed on the page');
+  await ce.getByLabel('Join').selectOption('or');
+  await ce.getByLabel('Condition 2').selectOption('ne');
+  await ce.getByLabel('Value 2').fill('1');
+  await page.waitForTimeout(200);
+  assert((await page.locator('.ml-table tbody tr').count()) === fullRows, 'OR with "not equal to 1" lets every row through again');
+  await ce.getByRole('button', { name: 'OK' }).click();
+  assert((await page.getByLabel('Filter Count', { exact: true }).inputValue()) === '__custom__' && (await page.getByLabel('Filter Count', { exact: true }).locator('option:checked').innerText()).includes('> 2 or ≠ 1'), 'the filter row sums up the custom filter');
+}
 await page.getByRole('button', { name: 'Filter List' }).click();
+await page.waitForTimeout(200);
+assert(await page.locator('.page .markup-layer [data-id] [opacity="0.25"]').count() === 0, 'closing the filter row restores every markup');
 await page.getByRole('button', { name: 'Columns ▾' }).click();
 await page.locator('.ml-columns-menu label', { hasText: 'Author' }).locator('input').check();
 await page.mouse.move(5, 5);
@@ -1252,6 +1282,17 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const p1 = await onPage1();
   await page.keyboard.press('Control+Shift+M');
   const fd = page.getByRole('dialog', { name: 'Flatten Markups' });
+  // Types (Revu): only the checked types are flattened; the first pass keeps everything but the clouds.
+  const cloudRowsOnPage1 = async () => (await page.locator('.ml-table tbody tr:not(.reply-row)').allInnerTexts()).filter((t) => t.split('\t')[0]?.trim() === 'Cloud' && t.split('\t')[1]?.trim() === '1').length;
+  const cloudsOnPage1 = await cloudRowsOnPage1();
+  await fd.getByLabel('Page range').selectOption('current');
+  await fd.locator('.flatten-type-list').getByRole('button', { name: 'None' }).click();
+  await fd.getByLabel('Flatten Cloud', { exact: true }).check();
+  await fd.getByRole('button', { name: 'OK' }).click();
+  await page.waitForTimeout(1500);
+  assert(cloudsOnPage1 > 0 && await onPage1() === p1 - cloudsOnPage1 && await cloudRowsOnPage1() === 0, `flattening only the Cloud type leaves the other ${p1 - cloudsOnPage1} markups (${await onPage1()} left)`);
+  await page.getByRole('button', { name: 'Document', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^Flatten/ }).first().click();
   await fd.getByLabel('Page range').selectOption('current');
   await fd.getByRole('button', { name: 'OK' }).click();
   await page.waitForTimeout(1500);
@@ -1375,10 +1416,24 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await openMenu('Document', 'Batch Link…');
   const bl = page.getByRole('dialog', { name: 'Batch Link' });
   await bl.getByLabel('Batch link scope').selectOption('doc');
+  await bl.getByLabel('Link appearance').selectOption('highlight');
   await bl.getByRole('button', { name: 'Run' }).click();
   await page.waitForFunction(() => /Batch Link created \d+/.test(document.querySelector('.statusbar')?.textContent ?? ''));
   const made = Number((await page.locator('.statusbar').innerText()).match(/Batch Link created (\d+)/)[1]);
   assert(made === 2, `Batch Link links the two sheet references (${made})`);
+  assert(await page.locator('.markup-layer g[data-id] rect[fill="#ffd400"]').count() >= 1, 'Highlight Links draws the links as coloured highlights');
+  // Existing links are kept (skipped) by default and replaced on request.
+  await openMenu('Document', 'Batch Link…');
+  await bl.getByLabel('Batch link scope').selectOption('doc');
+  await bl.getByRole('button', { name: 'Run' }).click();
+  await page.waitForFunction(() => /Batch Link created 0/.test(document.querySelector('.statusbar')?.textContent ?? ''));
+  assert(true, 'a second run skips the mentions that already have links');
+  await openMenu('Document', 'Batch Link…');
+  await bl.getByLabel('Batch link scope').selectOption('doc');
+  await bl.getByLabel('Overlap').selectOption('replace');
+  await bl.getByRole('button', { name: 'Run' }).click();
+  await page.waitForFunction(() => /Batch Link created 2/.test(document.querySelector('.statusbar')?.textContent ?? ''));
+  assert((await page.locator('.ml-table tbody').innerText()).split('Hyperlink').length - 1 === 2, 'Replace swaps the existing links for new ones instead of adding more');
   await page.keyboard.press('Alt+2');
   await page.locator('.set-sheet', { hasText: 'C-101' }).first().click();
   assert((await page.locator('.statusbar input').first().inputValue()) === 'C-101', 'Sets panel jumps to sheet C-101');
@@ -1833,10 +1888,25 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.getByRole('menuitem', { name: /^Flatten/ }).first().click();
   const fd = page.getByRole('dialog', { name: 'Flatten Markups' });
   await fd.getByLabel('Assign Layer').check();
-  await fd.getByLabel('Flatten to layer').fill('Flat');
+  await fd.getByLabel('Flatten to layer').fill('FlatOverlay');
+  await fd.getByLabel('Overlay Text').check();
+  await fd.getByLabel('Overlay position').selectOption('bl');
   await fd.getByRole('button', { name: 'OK' }).click();
-  await lpanel.getByRole('treeitem', { name: 'Layer Flat' }).waitFor({ timeout: 15000 });
+  await lpanel.getByRole('treeitem', { name: 'Layer FlatOverlay' }).waitFor({ timeout: 15000 });
   assert(await page.locator('.ml-table tbody tr:not(.reply-row)').filter({ hasText: 'Rectangle' }).count() === 0, 'Flatten with Assign Layer puts the flattened markups on a new layer');
+  // Overlay Text: the layer's name is drawn next to the flattened markup, as page text.
+  await page.keyboard.press('Control+F');
+  await page.getByLabel('Search text').fill('FlatOverlay');
+  await page.getByLabel('Search text').press('Enter');
+  await page.waitForFunction(() => /\d+ results?/.test(document.querySelector('.search-panel')?.textContent ?? ''));
+  assert(/[1-9]\d* results?/.test(await page.locator('.search-panel').innerText()), `Overlay Text writes the layer name next to the flattened markups (${(await page.locator('.search-panel').innerText()).match(/\d+ results?/)?.[0]})`);
+  await page.keyboard.press('Escape');
+  // The search took the side panel: bring the Layers panel back.
+  if (!(await lpanel.count())) {
+    await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click();
+    await page.getByRole('menuitem', { name: /^Layers/ }).click();
+    await lpanel.waitFor();
+  }
 
   // Add Layer from Page: the sheet drawn onto itself as a new layer.
   await page.getByRole('button', { name: 'From Page…' }).click();
@@ -2225,7 +2295,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.locator('img[alt="Symbol to find"]').waitFor();
   await page.locator('[aria-label="Sensitivity"]').fill('70');
   await page.locator('.visual-search button.primary:enabled', { hasText: 'Search' }).waitFor({ timeout: 20000 });
-  await page.locator('.visual-search').getByRole('button', { name: 'Search', exact: true }).click({ timeout: 20000 });
+  await page.locator('.visual-search').getByRole('button', { name: 'Search', exact: true }).click({ timeout: 20000, force: true }); // the results list below it may still be settling
   await page.waitForFunction(() => /\d+ results?$/.test(document.querySelector('.visual-search .muted.small:last-of-type')?.textContent ?? '') || document.querySelectorAll('.vs-result').length > 0, null, { timeout: 60000 });
   await page.waitForFunction(() => !document.querySelector('.visual-search')?.textContent?.includes('Searching'), null, { timeout: 60000 });
   const n = await page.locator('.vs-result').count();
@@ -2517,7 +2587,11 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     page.once('dialog', (dl) => dl.accept('Test filter'));
     await page.locator('[aria-label="Saved Filters"]').selectOption('save');
     await page.waitForTimeout(200);
-    assert((await page.locator('[aria-label="Saved Filters"] option').allInnerTexts()).some((t) => t === 'Test filter'), 'Save Filter keeps a named filter set');
+    assert((await page.locator('[aria-label="Saved Filters"] option').allInnerTexts()).some((t) => t === '✓ Test filter'), 'Save Filter keeps a named filter set, shown checked while in use');
+    await page.locator('.ml-filter-row th').first().locator('select').selectOption({ index: 1 });
+    await page.waitForTimeout(100);
+    assert((await page.locator('[aria-label="Saved Filters"] option').allInnerTexts()).some((t) => t === '✓ Test filter*'), 'a saved set changed since it was applied is starred');
+    await page.locator('.ml-filter-row th').first().locator('select').selectOption('');
     await page.locator('[aria-label="Saved Filters"]').selectOption('del:Test filter');
     await page.getByRole('button', { name: 'Filter List' }).click();
     await page.locator('.ml-table thead th', { hasText: /^Subject/ }).first().click();
@@ -2931,6 +3005,21 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     const top = await page.evaluate(() => document.querySelector('#print-root .print-sheet img').style.top);
     assert(parseFloat(top) >= 72, `Fit to Margins keeps the page below the 1 in top margin (top=${top})`);
     await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+    // Page filters (Revu): First Page, Odd Pages; Print Spaces and the pages-per-sheet layout options.
+    await page.keyboard.press('Control+p');
+    await dlg.waitFor();
+    await dlg.locator('[aria-label="Page range"]').selectOption('first');
+    assert((await dlg.innerText()).includes('Sheet 1 of 1'), 'First Page prints one sheet');
+    const pagesTotal = Number((await page.locator('.statusbar').innerText()).match(/of (\d+)\)/)[1]);
+    await dlg.locator('[aria-label="Page range"]').selectOption('odd');
+    assert((await dlg.innerText()).includes(`Sheet 1 of ${Math.ceil(pagesTotal / 2)}`), `Odd Pages prints ${Math.ceil(pagesTotal / 2)} of ${pagesTotal} pages`);
+    await dlg.getByLabel('Print Spaces').check();
+    await dlg.locator('[aria-label="Pages per sheet"]').selectOption('4');
+    await dlg.getByLabel('Sheet order').selectOption('columns');
+    await dlg.getByLabel('Border around each page').check();
+    await dlg.locator('[aria-label="Pages per sheet"]').selectOption('1');
+    await dlg.getByLabel('Print Spaces').uncheck();
+    await dlg.getByRole('button', { name: 'Cancel' }).click();
     await thumbs.nth(0).click();
     // Number Pages: labels P-1, P-2… over all pages; Page Setup puts the current page on Letter.
     await page.locator('.menubar-item > button', { hasText: /^Document$/ }).click();
@@ -3109,6 +3198,25 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   assert(await page.locator('.ml-table tbody tr').count() === rows0 + 1, 'right-click > Highlight marks the selected text');
   assert(await page.locator('.text-sel').count() === 0, 'the text selection is cleared after marking it');
   await page.keyboard.press('Control+z');
+  {
+    // Highlight tool (H) over text marks the text lines; Ctrl+drag draws a free box instead (Revu).
+    const rectsOfLast = async () => page.locator('.markup-layer g[data-id]').last().locator('rect').count();
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('h');
+    await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 6 }); await page.mouse.up();
+    await page.waitForTimeout(400);
+    const textRects = await rectsOfLast();
+    await page.keyboard.press('Control+z');
+    await page.keyboard.press('h');
+    await page.keyboard.down('Control');
+    await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 6 }); await page.mouse.up();
+    await page.keyboard.up('Control');
+    await page.waitForTimeout(400);
+    const boxRects = await rectsOfLast();
+    assert(textRects > 1 && boxRects === 1, `Highlight over text marks each line (${textRects} rects); Ctrl+drag draws one free box (${boxRects})`);
+    await page.keyboard.press('Control+z');
+    await page.keyboard.press('Escape');
+  }
   await page.keyboard.press('Escape');
   await page.keyboard.press('Control+Shift+A');
   await page.locator('.text-sel').first().waitFor();
@@ -3615,6 +3723,28 @@ for (const [file, expected] of [
   await so.getByLabel('Previous Revisions').selectOption('gray');
   await so.getByLabel('Show', { exact: true }).selectOption('label');
   await so.getByRole('button', { name: 'Close' }).click();
+  // Slip Sheet options: the revision inserted in front of the current page (matched by index), the current page stamped Superseded.
+  {
+    await page.locator('.doc-tab', { hasText: /^A-101\.pdf/ }).click();
+    await page.waitForTimeout(300);
+    const stampsBefore = (await page.locator('.ml-table tbody').innerText()).split('SUPERSEDED').length - 1;
+    await page.locator('.menubar-item > button', { hasText: /^Document$/ }).click();
+    await page.getByRole('menuitem', { name: 'Slip Sheet…' }).click();
+    const ss = page.getByRole('dialog', { name: 'Slip Sheet' });
+    const [sfc] = await Promise.all([page.waitForEvent('filechooser'), ss.getByRole('button', { name: 'Choose PDF…' }).click()]);
+    await sfc.setFiles(`${OUT}/A-101 R2.pdf`);
+    await ss.getByText('(1 page').waitFor();
+    await ss.getByLabel('Match pages by').selectOption('index');
+    await ss.getByLabel('Slip sheet mode').selectOption('insert');
+    await ss.getByLabel("Stamp Current Pages 'Superseded'").check();
+    await ss.getByLabel('Copy Markups from Current Pages to Revised Pages').uncheck();
+    await ss.getByRole('button', { name: 'OK' }).click();
+    await page.waitForFunction(() => /Slip Sheet: 1 sheet\(s\) inserted/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 30000 });
+    await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('of 2)'));
+    await page.waitForTimeout(400);
+    const stampsAfter = (await page.locator('.ml-table tbody').innerText()).split('SUPERSEDED').length - 1;
+    assert(stampsAfter === stampsBefore + 1, `Insert Revised Pages keeps the current page and stamps it Superseded (${stampsBefore} -> ${stampsAfter})`);
+  }
 }
 
 // File > Create > From File: an image becomes a one-page PDF; Window > Hide/Show Panels puts every panel away and back.

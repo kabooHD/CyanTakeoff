@@ -1021,7 +1021,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     switch (def.interaction) {
       case 'two-point': case 'box': case 'callout':
         if (!draft) setDraft({ tool: s.tool, points: [p], cursor: p, dragFrom: { x: e.clientX, y: e.clientY } });
-        else completeTwoPoint(p);
+        else completeTwoPoint(p, !s.prefs.textHighlighting || e.ctrlKey || e.metaKey);
         break;
       case 'poly': {
         const pts = draft ? [...draft.points, p] : [p];
@@ -1096,7 +1096,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     }
   };
 
-  const completeTwoPoint = (p: Pt) => {
+  /** `free`: the Highlight tool draws a box even over text (Ctrl held, or Enable Text Highlighting off). */
+  const completeTwoPoint = (p: Pt, free = false) => {
     if (!draft) return;
     const a = draft.points[0];
     if (dist(a, p) * zoom < 2) return;
@@ -1162,8 +1163,9 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       return;
     }
     if (draft.tool === 'highlight') {
-      // Over text, Highlight marks the text lines; elsewhere it draws a box (Revu).
+      // Over text, Highlight marks the text lines; elsewhere (or with Ctrl, or the preference off) it draws a box (Revu).
       setDraft(null);
+      if (free) { finish('highlight', [a, p]); return; }
       textMarkup('highlight', a, p).then((done) => { if (!done) finish('highlight', [a, p]); });
       return;
     }
@@ -1345,7 +1347,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     // Drag-to-draw for two-point and box tools; click-click otherwise.
     if (['two-point', 'box', 'cutout', 'cutout-ellipse', 'text', 'cloudplus'].includes(def.interaction) && draft.dragFrom && draft.points.length === 1) {
       const moved = Math.hypot(e.clientX - draft.dragFrom.x, e.clientY - draft.dragFrom.y) > 4;
-      if (moved) completeTwoPoint(constrain(toPage(e), e, draft.points[0]));
+      if (moved) completeTwoPoint(constrain(toPage(e), e, draft.points[0]), !s.prefs.textHighlighting || e.ctrlKey || e.metaKey);
       // Review Text: a plain click marks where text is inserted.
       else if (draft.tool === 'review-text') { setDraft(null); reviewTextMark(pageIdx, [], draft.points[0]); }
     }

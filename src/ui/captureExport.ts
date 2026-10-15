@@ -13,6 +13,19 @@ function download(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(href), 10_000);
 }
 
+/** The Capture Summary PDF (every embedded photo with its markup), or null without photos. */
+export async function captureSummaryPdf(d: DocState, markups: Markup[], title = `${d.name.replace(/\.pdf$/i, '')} - Capture Summary`): Promise<Uint8Array | null> {
+  const files = captureFiles(markups);
+  if (!files.length) return null;
+  return buildSummaryPdf({
+    title,
+    subtitle: `${files.length} photo${files.length === 1 ? '' : 's'}, ${new Date().toLocaleString()}, CyanTakeoff`,
+    header: ['Subject', 'Page', 'Author', 'Photo', 'Comments'],
+    rows: [], numeric: [false, false, false, false, false], thumb: 96,
+    sections: [{ rows: files.map((f) => [f.markup.subject, d.loaded.pages[f.markup.page]?.label ?? f.markup.page + 1, f.markup.author, f.name, f.markup.comment]), thumbs: files.map((f) => f.bytes) }],
+  });
+}
+
 export async function captureSummary(d: DocState, markups: Markup[]) {
   const files = captureFiles(markups);
   if (!files.length) { useApp.getState().setStatus('No markup has a Capture photo.'); return; }

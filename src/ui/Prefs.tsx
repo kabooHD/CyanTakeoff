@@ -214,6 +214,7 @@ function PreferencesDialog() {
       <>
         {check('zoomFitOnSelect', 'Zoom fit markups when selected', 'Selecting a row zooms to the markup instead of only scrolling to it')}
         {check('wrapComments', 'Wrap comment text')}
+        <label className="pref-row" title="Markups the filtered list does not show are dimmed on the page"><span>Dim filtered markups</span><input aria-label="Dim filtered markups" type="number" min={0} max={100} step={5} value={p.filteredDim} onChange={(e) => set({ filteredDim: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} /> %</label>
       </>
     ),
     Layers: (
@@ -243,6 +244,7 @@ function PreferencesDialog() {
         <label className="pref-row"><input type="checkbox" checked={!!s.toggles.reuse} onChange={() => s.toggle('reuse')} /> Reuse tools</label>
         {check('autosizeText', 'Autosize text box and callout markups')}
         {check('showAuthorDate', 'Show author and date when hovering a markup')}
+        {check('textHighlighting', 'Enable Text Highlighting', 'The Highlight tool marks the text it is dragged over; Ctrl+drag draws a free highlight. Off: always a free highlight')}
         {check('copyHighlightedText', 'Copy highlighted text into markup comment')}
         {select('snapshotDpi', 'Snapshot resolution', [[72 as never, '72 dpi'], [144 as never, '144 dpi'], [216 as never, '216 dpi'], [300 as never, '300 dpi']])}
         {check('includeMarkupsInSnapshots', 'Include markups in snapshots')}

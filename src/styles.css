@@ -212,6 +212,11 @@ button.primary { background: var(--accent) !important; color: #fff; border-color
 .ml-columns-menu label:hover { background: var(--hover); }
 .ml-filter-row th { top: 23px; padding: 2px 4px; cursor: default; }
 .ml-filter-row select { width: 100%; font-size: 11px; padding: 0; }
+.ml-custom { position: absolute; left: 0; top: 100%; z-index: 20; min-width: 260px; padding: 6px 8px; background: var(--panel, #fff); border: 1px solid var(--border, #999); box-shadow: 0 2px 8px rgba(0,0,0,.25); font-weight: normal; text-align: left; }
+.ml-custom .form-row { display: flex; gap: 4px; align-items: center; margin: 3px 0; }
+.ml-custom select { width: auto; font-size: 11px; }
+.ml-custom input { flex: 1; font-size: 11px; min-width: 80px; }
+.ml-custom .form-actions { display: flex; justify-content: flex-end; gap: 4px; margin-top: 4px; }
 .ml-table th.dragging { opacity: 0.5; }
 .ml-table-wrap { flex: 1; overflow: auto; }
 .ml-table { border-collapse: collapse; width: max-content; min-width: 100%; }
@@ -626,3 +631,4 @@ label.button, a.button { display: inline-block; padding: 2px 8px; border: 1px so
 .pref-row.pref-col { flex-direction: column; align-items: stretch; }
 .pref-row textarea { font: inherit; }
 .scale-handle { pointer-events: none; }
+.flatten-type-list { display: flex; flex-wrap: wrap; gap: 4px 10px; max-width: 420px; font-size: 12px; }
