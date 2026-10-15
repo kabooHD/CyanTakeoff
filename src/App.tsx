@@ -59,6 +59,8 @@ import { CameraDialog, useCamera } from './ui/Camera';
 import { ManageStatusDialog } from './ui/StatusModels';
 import { DocToolsDialogs, emailDocument, publishCompressed, useDocTools } from './ui/DocTools';
 import { copyPageToSnapshot, copyText, selectAllText } from './ui/textCommands';
+import { clearSession, saveSession } from './model/session';
+import { reopenLastSession } from './ui/FileAccess';
 import { autosizeTextBoxes, balanceSplit, closeAll, editAction, hideShowPanels, refreshDocument, removeSelectedFromGroup, saveAll, toggleFullScreen } from './ui/quickCommands';
 
 const isEditable = (t: EventTarget | null) =>
@@ -77,6 +79,8 @@ export function App() {
   useEffect(() => { document.documentElement.dataset.theme = darkMode ? 'dark' : 'light'; }, [darkMode]);
   // Preferences > Show recent files on startup.
   useEffect(() => { const st = useApp.getState(); if (st.prefs.showRecentOnStartup && !st.docs.length) st.setPanels({ left: 'files' }); }, []);
+  // Preferences > Reopen Files from Last Session on Startup.
+  useEffect(() => { if (useApp.getState().prefs.reopenLastSession && !useApp.getState().docs.length) void reopenLastSession(); }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isEditable(e.target)) return; // form fields: see singleKeyInField (Viewer's form layer)
@@ -248,7 +252,9 @@ export function App() {
 
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
-      if (useApp.getState().docs.some((d) => d.dirty)) e.preventDefault();
+      const st = useApp.getState();
+      if (st.prefs.reopenLastSession) saveSession(st.docs.map((d) => d.name)); else clearSession();
+      if (st.docs.some((d) => d.dirty)) e.preventDefault();
     };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);

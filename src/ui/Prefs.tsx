@@ -190,6 +190,7 @@ function PreferencesDialog() {
         </label>
         {select('tabTruncation', 'Tab truncation', [['end', 'Cut long names at the end'], ['start', 'Cut long names at the start']])}
         {check('showRecentOnStartup', 'Show recent files on startup', 'Opens the File Access panel when no document is open')}
+        {check('reopenLastSession', 'Reopen files from last session on startup', 'Files whose access is still granted open on their own; the others wait for a click in the File Access panel')}
         <label className="pref-row"><input type="checkbox" checked={!!s.toggles.crosshair} onChange={() => s.toggle('crosshair')} /> Show full-screen crosshair</label>
       </>
     ),

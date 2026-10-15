@@ -4352,6 +4352,30 @@ for (const [file, expected] of [
   await page.keyboard.press('Delete');
 }
 
+// Preferences > General > Reopen Files from Last Session on Startup: the sample is open again after a reload.
+{
+  const pd = page.getByRole('dialog', { name: 'Preferences' });
+  const prefs = async (tab, fn) => { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press('Control+k'); await pd.waitFor(); await pd.getByRole('tab', { name: tab, exact: true }).click(); await fn(); await pd.getByRole('button', { name: 'Close' }).click(); await pd.waitFor({ state: 'hidden' }); };
+  await prefs('General', () => pd.getByLabel('Reopen files from last session on startup').check());
+  await page.keyboard.press('Escape');
+  // Only the sample drawing (which needs no file access) is open when the page is left.
+  const ok = (d) => d.accept().catch(() => {});
+  page.on('dialog', ok);
+  await page.keyboard.press('Control+Shift+W');
+  await page.locator('.start-page').waitFor({ timeout: 20000 });
+  await page.getByRole('button', { name: 'Open sample drawing' }).click();
+  await page.locator('.markup-layer').first().waitFor({ timeout: 30000 });
+  const sampleTab = page.locator('.doc-tab', { hasText: /Sample Floor/ }); // the tab text may be truncated
+  assert(await sampleTab.count() === 1, `the sample drawing is open before the reload (${(await page.locator('.doc-tab').allInnerTexts()).join(' | ')})`);
+  await page.reload();
+  page.off('dialog', ok);
+  await page.locator('.menubar').waitFor();
+  await sampleTab.waitFor({ timeout: 30000 });
+  await page.locator('.markup-layer').first().waitFor({ timeout: 30000 });
+  assert(await sampleTab.count() === 1, 'Reopen Files from Last Session opens the sample drawing again on startup');
+  await prefs('General', () => pd.getByLabel('Reopen files from last session on startup').uncheck());
+}
+
 assert(errors.length === 0, `no page errors (${errors.join(' | ')})`);
 await browser.close();
 console.log('E2E PASSED');

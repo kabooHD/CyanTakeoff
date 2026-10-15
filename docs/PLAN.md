@@ -330,6 +330,7 @@ filling, image signatures, redaction and OCR.
   Measure: Automatically Split Count Measurements by Space
 - [x] Save Mode (Maintain Revisions / Publish Without Revisions / Publish
   Compressed) and File > Revert As… (earlier revisions open as documents)
+- [x] Preferences > General: Reopen Files from Last Session on Startup
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

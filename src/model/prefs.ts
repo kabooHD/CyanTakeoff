@@ -7,6 +7,8 @@ export interface Prefs {
   tabTruncation: 'end' | 'start';
   /** Open the File Access panel when the app starts with no document. */
   showRecentOnStartup: boolean;
+  /** Reopen Files from Last Session on Startup: the files open when the app was left open again (those needing file access wait for a click). */
+  reopenLastSession: boolean;
   // Navigation
   /** What the mouse wheel does in single page / continuous mode. */
   wheelSingle: 'zoom' | 'scroll';
@@ -114,7 +116,7 @@ export interface Prefs {
 }
 
 export const DEFAULT_PREFS: Prefs = {
-  tabTruncation: 'end', showRecentOnStartup: false,
+  tabTruncation: 'end', showRecentOnStartup: false, reopenLastSession: false,
   wheelSingle: 'zoom', wheelContinuous: 'zoom', reverseWheel: false, wheelSensitivity: 5,
   dynamicDefaults: false, autosizeText: false, showAuthorDate: true, copyHighlightedText: true, textHighlighting: true, dragShapes: 'rect', snapshotDpi: 216, includeMarkupsInSnapshots: true,
   sketchRotation: 'page', ellipseMode: 'size',

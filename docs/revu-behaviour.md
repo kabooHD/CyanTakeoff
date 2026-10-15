@@ -1040,7 +1040,11 @@ folders, manual correlation and saved .bcx batches).
 ## Preferences (Ctrl+K)
 - General: User (author of new markups), Theme (Light/Dark), tab
   truncation (end or start of long names), Show recent files on startup
-  (File Access panel), full-screen crosshair.
+  (File Access panel), Reopen Files from Last Session on Startup (the
+  names are kept in the browser; the sample and files whose access is
+  still granted open on their own, the others wait for a click in the
+  File Access panel; files opened without file access cannot be
+  reopened), full-screen crosshair.
 - Document: page layout when opening (Single, Continuous, by page size),
   display when opening (Fit Page, Fit Width, Actual Size), maximum zoom,
   Rotate all pages by default (Shift+Alt+Plus / Minus turn every page),
