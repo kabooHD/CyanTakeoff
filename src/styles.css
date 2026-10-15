@@ -625,3 +625,4 @@ label.button, a.button { display: inline-block; padding: 2px 8px; border: 1px so
 .ml-table.wrap-comments td { white-space: normal; }
 .pref-row.pref-col { flex-direction: column; align-items: stretch; }
 .pref-row textarea { font: inherit; }
+.scale-handle { pointer-events: none; }

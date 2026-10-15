@@ -33,6 +33,7 @@ import { CURVABLE, arcSegment, bezierAt, closedType, flatPoints, hasCurves, inse
 import { MarkupShape, handlePoints } from './renderMarkup';
 import { cutoutAt, hitTest, markupBounds, outline } from './hit';
 import { ROTATION_FIELD, angleAbout, canRotate, normDeg, rotateHandle, rotated, rotationCenter, snapRotation, unrotatePt } from '../model/rotate';
+import { aspectCorner, hasScaleHandles, oppositeCorner, scaleAbout, scaleFactor, scaleHandles } from '../model/scale';
 import { bandOf, inBand } from '../model/select';
 import { fitZoom } from '../model/prefs';
 import { selectText } from '../model/textSelect';
@@ -105,6 +106,9 @@ const MEASURE_TYPES_WITH_CAPTION = new Set(['length', 'polylength', 'perimeter',
 type Draft = { tool: ToolId; points: Pt[]; cursor: Pt | null; dragFrom?: { x: number; y: number }; target?: string;
   /** Curved segments drawn with Ctrl+drag: handlebars per point, and the point whose handlebar is being dragged. */
   handles?: Handles; curving?: number };
+/** How far (screen px) the purple scale handles sit outside the markup's box. */
+const SCALE_OUT = 11;
+
 type Drag =
   | { kind: 'pan'; sx: number; sy: number; left: number; top: number }
   | { kind: 'move'; start: Pt; snapshot: Markup[]; ids: string[]; moved: boolean }
@@ -114,6 +118,8 @@ type Drag =
   | { kind: 'captionRotate'; id: string; center: Pt; snapshot: Markup[]; moved: boolean }
   /** The orange handle above a markup turns it (15° steps, Shift: free); `deg` is the turn applied so far. */
   | { kind: 'rotate'; id: string; center: Pt; start: number; orig: Markup; snapshot: Markup[]; moved: boolean; deg: number }
+  /** A purple corner handle scales the markup about the opposite corner (Shift: each axis on its own). */
+  | { kind: 'scale'; id: string; fixed: Pt; corner: Pt; grab: Pt; orig: Markup; snapshot: Markup[]; moved: boolean }
   | { kind: 'band'; start: Pt; cur: Pt; add: boolean; right?: { x: number; y: number } }
   /** Move (corner -1) or resize (corner 0..3) the highlighted viewport. */
   | { kind: 'viewport'; id: string; corner: number; start: Pt; orig: [Pt, Pt]; rect: [Pt, Pt] }
@@ -895,6 +901,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
               }
             }
           }
+          if (hasScaleHandles(m)) {
+            // Purple scale handles (Revu) sit at the corners of the box, outside the yellow points.
+            const sh = scaleHandles(m, SCALE_OUT / zoom), corners = scaleHandles(m);
+            const k = sh.findIndex((h) => dist(h, raw) <= 6 / zoom);
+            if (k >= 0) { setDrag({ kind: 'scale', id: m.id, fixed: oppositeCorner(corners, k), corner: corners[k], grab: { x: raw.x - corners[k].x, y: raw.y - corners[k].y }, orig: m, snapshot: doc.markups, moved: false }); capture(e); return; }
+          }
           const hs = handlePoints(m);
           const i = hs.findIndex((h) => dist(h, raw) <= 6 / zoom);
           if (i >= 0 && curvable && (e.ctrlKey || e.metaKey)) {
@@ -1190,9 +1202,20 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         const p = snap(raw, drag.id);
         s.updateMarkups([drag.id], (m) => {
           const pts = [...m.points];
-          pts[drag.index] = unrotatePt(m, p); // a turned box is edited in its own frame
+          let q = unrotatePt(m, p); // a turned box is edited in its own frame
+          // Ctrl+drag a box corner keeps the box's proportions (Revu: rectangles have no purple handles).
+          if ((e.ctrlKey || e.metaKey) && ROTATION_FIELD.has(m.type) && pts.length === 2 && drag.index < 2) {
+            const orig = drag.snapshot.find((x) => x.id === m.id);
+            if (orig) q = aspectCorner(pts[1 - drag.index], orig.points[drag.index], q);
+          }
+          pts[drag.index] = q;
           return { points: pts };
         }, { history: false });
+        if (!drag.moved) setDrag({ ...drag, moved: true });
+      } else if (drag.kind === 'scale') {
+        const { kx, ky } = scaleFactor(drag.fixed, drag.corner, { x: raw.x - drag.grab.x, y: raw.y - drag.grab.y }, e.shiftKey);
+        s.updateMarkups([drag.id], () => scaleAbout(drag.orig, drag.fixed, kx, ky), { history: false });
+        s.setStatus(`Scale: ${Math.round(kx * 100)}%${e.shiftKey ? ` × ${Math.round(ky * 100)}%` : ''} (Shift: width and height on their own)`);
         if (!drag.moved) setDrag({ ...drag, moved: true });
       } else if (drag.kind === 'rotate') {
         const d = angleAbout(drag.center, raw) - drag.start;
@@ -1294,7 +1317,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     }
     if (s.tool === 'dynamic-fill') fillUp();
     if (drag) {
-      if ((drag.kind === 'move' || drag.kind === 'vertex' || drag.kind === 'caption' || drag.kind === 'captionRotate' || drag.kind === 'rotate') && drag.moved) s.pushUndo(drag.snapshot);
+      if ((drag.kind === 'move' || drag.kind === 'vertex' || drag.kind === 'caption' || drag.kind === 'captionRotate' || drag.kind === 'rotate' || drag.kind === 'scale') && drag.moved) s.pushUndo(drag.snapshot);
       if (drag.kind === 'bezier') s.pushUndo(drag.snapshot);
       if (drag.kind === 'band') selectInBand(drag);
       if (drag.kind === 'viewport' && drag.rect !== drag.orig) {
@@ -1725,6 +1748,10 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
                       </g>
                     );
                   })()}
+                  {doc.selection.length === 1 && hasScaleHandles(m) && scaleHandles(m, SCALE_OUT / zoom).map((h, i) => (
+                    <rect key={`sc${i}`} className="scale-handle" x={h.x - 4 / zoom} y={h.y - 4 / zoom} width={8 / zoom} height={8 / zoom} rx={1.5 / zoom}
+                      fill="#a64dff" stroke="#fff" strokeWidth={1 / zoom}><title>Drag to scale (keeps the proportions; Shift: free)</title></rect>
+                  ))}
                   {doc.selection.length === 1 && handlePoints(m).map((h, i) => (
                     <rect key={i} x={h.x - 3.5 / zoom} y={h.y - 3.5 / zoom} width={7 / zoom} height={7 / zoom}
                       fill="#fff" stroke="#1a73e8" strokeWidth={1 / zoom} />

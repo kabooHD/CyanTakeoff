@@ -565,6 +565,30 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.keyboard.press('Delete');
     await page.waitForTimeout(200);
   }
+  // Scale handles (Revu): the purple corner handles scale a polygon about the opposite corner, keeping its proportions.
+  {
+    const areaRow = page.locator('.ml-table tbody tr').filter({ hasText: 'Area Measurement' }).first();
+    await areaRow.locator('td').nth(1).click(); // a plain cell: the row's inputs stop the click
+    const areaBefore = await areaRow.innerText();
+    const handles = page.locator('.scale-handle');
+    await handles.first().waitFor({ timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(300);
+    assert(await handles.count() === 4, `a selected area shows four purple scale handles (${await handles.count()} handles, ${await page.locator('.ml-table tbody tr.selected').count()} selected rows, page ${await page.locator('.statusbar input').first().inputValue()})`);
+    const box = async () => { const a = await handles.nth(0).boundingBox(), c = await handles.nth(2).boundingBox(); return { w: c.x - a.x, h: c.y - a.y }; };
+    const b0 = await box();
+    const br = await handles.nth(2).boundingBox();
+    await page.mouse.move(br.x + br.width / 2, br.y + br.height / 2); await page.mouse.down();
+    await page.mouse.move(br.x + br.width / 2 + 60, br.y + br.height / 2 + 10, { steps: 6 }); await page.mouse.up();
+    await page.waitForTimeout(200);
+    const b1 = await box();
+    assert(b1.w > b0.w * 1.1 && Math.abs(b1.w / b1.h - b0.w / b0.h) < 0.02, `dragging a scale handle grows the area and keeps its proportions (${(b0.w / b0.h).toFixed(3)} -> ${(b1.w / b1.h).toFixed(3)})`);
+    assert((await areaRow.innerText()) !== areaBefore, 'the scaled area measures more');
+    await page.evaluate(() => document.activeElement?.blur?.());
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(300);
+    assert((await areaRow.innerText()) === areaBefore, 'undo restores the area after scaling');
+    await page.keyboard.press('Escape');
+  }
   // Rise/Drop on a length (Properties): 10 ft + 2 ft rise reads 12'-0"; then undone.
   await page.keyboard.press('Shift+Alt+L'); await click(44, 33); await click(54, 33);
   await page.locator('.side-right button[title="Properties"]').click();

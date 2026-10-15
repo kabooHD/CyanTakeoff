@@ -360,10 +360,12 @@ displayed value (in the markup's own unit when set), as Revu writes it.
   from it; drawn with CSS mix-blend-mode on screen.
 
 ## Editing markups (move, resize, rotate)
-- Drag a markup to move it; drag a control point to resize. Polygons and
-  polylines keep their proportions when resized with the purple resize
-  points; Shift resizes length and width independently (ours: vertex
-  points only, no separate resize points yet).
+- Drag a markup to move it; drag a yellow control point to resize or
+  reshape. Polygons, polylines, clouds, pen strokes and arcs also have
+  purple scale points at the corners of their box: dragging one scales the
+  markup about the opposite corner, keeping its proportions (Shift: width
+  and height on their own). Rectangles and ellipses have no purple points:
+  Ctrl+drag a corner keeps their proportions.
 - Rotate: drag the orange control point outside the bounding box; the
   angle shows while dragging and the shape turns in 15° steps (Shift: any
   angle). Lines (two control points) cannot rotate. Stamps also take an
