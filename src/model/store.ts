@@ -1,4 +1,4 @@
-import { withDefaults, type Prefs } from './prefs';
+import { layoutForPage, withDefaults, type Prefs } from './prefs';
 import { profileColumns } from './columns';
 import { create } from 'zustand';
 import { useStatusModels } from './statusModels';
@@ -510,7 +510,9 @@ export const useApp = create<AppState>((set, get) => {
         };
         const why = security && loaded.readOnly ? 'the file\'s permissions do not allow markups' : 'file could not be parsed for editing';
         rememberFile(name, bytes.length, handle).catch(() => {});
-        set((s) => ({ docs: [...s.docs, doc], activeId: doc.id, status: loaded.readOnly ? `${name} opened read-only (${why})` : `Opened ${name}${security ? ' (password protected)' : ''}` }));
+        // Preferences > Document > Page Layout: the layout a document opens in (Single Page keeps whatever is shown).
+        const layout = get().prefs.defaultLayout === 'single' ? null : layoutForPage(loaded.pages[0]?.height ?? 0, get().prefs.defaultLayout);
+        set((s) => ({ docs: [...s.docs, doc], activeId: doc.id, ...(layout ? { viewMode: layout } : {}), status: loaded.readOnly ? `${name} opened read-only (${why})` : `Opened ${name}${security ? ' (password protected)' : ''}` }));
       } catch (e) {
         console.error(e);
         set({ status: `Could not open ${name}: ${(e as Error).message}` });
@@ -558,7 +560,7 @@ export const useApp = create<AppState>((set, get) => {
       });
     },
     setViewZoom(pane, zoom) {
-      const z = Math.max(0.02, Math.min(64, zoom));
+      const z = Math.max(0.02, Math.min((get().prefs.maxZoom || 6400) / 100, zoom));
       const { split, docs, toggles } = get();
       // Synchronize Page (Revu): both panes share the zoom (the Viewer mirrors the scroll).
       const both = split && toggles.sync;

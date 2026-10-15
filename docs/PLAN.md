@@ -275,6 +275,9 @@ filling, image signatures, redaction and OCR.
   (Show / Sort By / Sort Order), Print Set, Search Set (src/model/revisions.ts)
 - [x] File > Create > From File / From Multiple Files (images to PDF; Open takes
   images too); Window > Hide/Show Panels (Shift+F4)
+- [x] Preferences: Document (opening layout, max zoom), Grid & Snap (spacing,
+  sensitivity, colour), Markups List (zoom fit on select, wrap comments),
+  Layers (hide children, on page only), Spelling (upper case, custom words)
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

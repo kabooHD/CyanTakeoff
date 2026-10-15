@@ -34,6 +34,7 @@ import { MarkupShape, handlePoints } from './renderMarkup';
 import { cutoutAt, hitTest, markupBounds, outline } from './hit';
 import { ROTATION_FIELD, angleAbout, canRotate, normDeg, rotateHandle, rotated, rotationCenter, snapRotation, unrotatePt } from '../model/rotate';
 import { bandOf, inBand } from '../model/select';
+import { fitZoom } from '../model/prefs';
 import { selectText } from '../model/textSelect';
 import { copyText, searchFor } from './textCommands';
 import { followPlace } from './LinksPanel';
@@ -76,6 +77,8 @@ export const viewerApi = {
   zoomBy: (_f: number) => {},
   /** Scroll so page point `p` is in the middle of the view. */
   centerOn: (_p: Pt) => {},
+  /** Zoom so the page box (a, b) fills the view, centred (Markups List: Zoom Fit Markups when selected). */
+  fitRect: (_a: Pt, _b: Pt) => {},
   /** Scroll so page point `p` is at the top left of the view. */
   showAt: (_p: Pt) => {},
   /** Page point at the top left of the view. */
@@ -269,6 +272,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   useEffect(() => {
     if (!isActivePane) return;
     viewerApi.fitPage = fitPage;
+    viewerApi.fitRect = (a, b) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      s.setViewZoom(pane, fitZoom(el.clientWidth, el.clientHeight, Math.abs(b.x - a.x), Math.abs(b.y - a.y)));
+      setTimeout(() => viewerApi.centerOn({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }), 30);
+    };
     viewerApi.fitWidth = fitWidth;
     viewerApi.zoomBy = (f) => zoomAt(f);
     viewerApi.centerOn = (p) => {
@@ -579,11 +588,11 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     const q = rotateIn(e.clientX - r.left, e.clientY - r.top, pw, ph, rot);
     return { x: q.x / zoom, y: q.y / zoom };
   };
-  const GRID = 12;
+  const GRID = Math.max(2, s.prefs.gridSpacing || 12);
   // Like Revu's status bar: Markup = snap to markups, Content = snap to the
   // drawing, Snap = snap to grid. Each works on its own.
   const snap = (p: Pt, exclude?: string): Pt => {
-    const tol = 10 / zoom;
+    const tol = Math.max(5, Math.min(25, s.prefs.snapSensitivity || 10)) / zoom;
     let best: Pt | null = null, bestD = tol;
     if (s.toggles.markup) {
       for (const m of markups) {
@@ -1651,7 +1660,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
               <>
                 <defs>
                   <pattern id="grid" width={GRID} height={GRID} patternUnits="userSpaceOnUse">
-                    <path d={`M${GRID} 0H0V${GRID}`} fill="none" stroke="#3a7bd5" strokeOpacity={0.25} strokeWidth={0.3} />
+                    <path d={`M${GRID} 0H0V${GRID}`} fill="none" stroke={s.prefs.snapColor || '#3a7bd5'} strokeOpacity={0.35} strokeWidth={0.3} />
                   </pattern>
                 </defs>
                 <rect width={page.width} height={page.height} fill="url(#grid)" pointerEvents="none" />

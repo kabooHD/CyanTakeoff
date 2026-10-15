@@ -17,7 +17,7 @@ import { openCompare } from './Compare';
 
 const EMPTY: LayerSet = { layers: {}, order: [], configs: [] };
 
-export const useLayersUi = create<{ dialog: { kind: 'delete' | 'props' | 'adjust'; keys: string[] } | null; onPage: boolean; alpha: boolean }>(() => ({ dialog: null, onPage: false, alpha: false }));
+export const useLayersUi = create<{ dialog: { kind: 'delete' | 'props' | 'adjust'; keys: string[] } | null; onPage: boolean; alpha: boolean }>(() => ({ dialog: null, onPage: !!useApp.getState().prefs.layersOnPageOnly, alpha: false }));
 
 const setOf = (d: DocState) => d.layers ?? EMPTY;
 const newId = () => `new:${crypto.randomUUID()}`;
@@ -132,7 +132,8 @@ export function LayersPanel({ doc }: { doc: DocState }) {
   const target = sel[0] ?? null;
 
   const toggleNode = (n: LayerNode, on?: boolean) => {
-    const ids = idsUnder(n).filter((id) => !set.layers[id]?.locked);
+    // Preferences > Layers: Hide Child Layers when Hiding Parent Layers (on by default).
+    const ids = (useApp.getState().prefs.hideChildLayers || !n.id ? idsUnder(n) : [n.id]).filter((id) => !set.layers[id]?.locked);
     const next = on ?? !(n.id ? vis[n.id] !== false : ids.some((id) => vis[id] === false));
     view({ ...vis, ...Object.fromEntries(ids.map((id) => [id, next])) });
   };

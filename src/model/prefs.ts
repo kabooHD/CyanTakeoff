@@ -43,6 +43,32 @@ export interface Prefs {
   fillSpeed: 'Slow' | 'Medium' | 'Fast';
   fillSensitivity: 'Low' | 'Medium' | 'High';
   fillHideMarkups: boolean;
+  // Grid & Snap
+  /** Grid spacing in points (the grid is drawn when Show Grid is on; Snap to Grid uses it). */
+  gridSpacing: number;
+  /** Snap area in screen pixels (5..25). */
+  snapSensitivity: number;
+  /** Colour of the grid and snap indicators. */
+  snapColor: string;
+  // Document
+  /** Largest zoom, percent. */
+  maxZoom: number;
+  /** Page layout a document opens in: single, continuous, or by page size (pages under 14 in: continuous). */
+  defaultLayout: 'single' | 'continuous' | 'auto';
+  // Markups List
+  /** Zoom to fit a markup when it is selected in the list. */
+  zoomFitOnSelect: boolean;
+  wrapComments: boolean;
+  // Layers
+  /** Hiding a parent layer hides its children too. */
+  hideChildLayers: boolean;
+  /** The Layers panel starts with Show Layers on Page Only. */
+  layersOnPageOnly: boolean;
+  // Spelling
+  /** Check words written in capitals too. */
+  spellUpperCase: boolean;
+  /** Custom words (one per line) the spell checker accepts. */
+  customWords: string;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -53,6 +79,11 @@ export const DEFAULT_PREFS: Prefs = {
   fieldHighlightColor: '#cce0ff', fieldHighlightOpacity: 55,
   hashAlgorithm: 'sha256',
   fillSize: 2, fillBoundarySize: 2, fillColor: '#00a0ff', fillBoundaryColor: '#ff4d00', fillSpeed: 'Medium', fillSensitivity: 'Medium', fillHideMarkups: false,
+  gridSpacing: 12, snapSensitivity: 10, snapColor: '#3a7bd5',
+  maxZoom: 6400, defaultLayout: 'single',
+  zoomFitOnSelect: false, wrapComments: false,
+  hideChildLayers: true, layersOnPageOnly: false,
+  spellUpperCase: false, customWords: '',
 };
 
 /** Fill in defaults for a saved (possibly older) preferences object. */
@@ -68,6 +99,24 @@ export function wheelZoomFactor(p: Prefs, continuous: boolean, e: { deltaY: numb
   if (mode === 'scroll' && !e.ctrlKey) return null;
   const k = 0.0015 * (Math.max(1, Math.min(10, p.wheelSensitivity)) / 5);
   return Math.exp((p.reverseWheel ? 1 : -1) * e.deltaY * k);
+}
+
+/** The zoom that shows a box of `w` × `h` page units in a view of `vw` × `vh` pixels with room around it. */
+export function fitZoom(vw: number, vh: number, w: number, h: number, pad = 40): number {
+  const z = Math.min((vw - pad * 2) / Math.max(1, w), (vh - pad * 2) / Math.max(1, h));
+  return Math.max(0.05, Math.min(8, z));
+}
+
+/** The page layout a document opens in ('auto': continuous for pages under 14 in tall, single otherwise); null keeps the current one. */
+export function layoutForPage(pageHeightPt: number, pref: Prefs['defaultLayout']): 'single' | 'continuous' | null {
+  if (pref === 'auto') return pageHeightPt < 14 * 72 ? 'continuous' : 'single';
+  return pref === 'continuous' ? 'continuous' : pref === 'single' ? 'single' : null;
+}
+
+/** Whether the spell checker leaves a word alone: capitals (unless checked), or a custom word. */
+export function skipSpelling(word: string, upperCase: boolean, customWords: string): boolean {
+  if (!upperCase && word.length > 1 && word === word.toUpperCase() && /[A-Z]/.test(word)) return true;
+  return customWords.split(/\r?\n|,/).map((w) => w.trim().toLowerCase()).filter(Boolean).includes(word.toLowerCase());
 }
 
 /** "#rrggbb" + opacity (0..100) as a CSS rgba() colour. */

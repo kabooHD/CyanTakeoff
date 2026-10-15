@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_PREFS, rgbaOf, wheelZoomFactor, withDefaults } from '../src/model/prefs';
+import { DEFAULT_PREFS, fitZoom, layoutForPage, rgbaOf, skipSpelling, wheelZoomFactor, withDefaults } from '../src/model/prefs';
 
 describe('preferences', () => {
   it('fills defaults into an older saved object', () => {
@@ -22,5 +22,18 @@ describe('preferences', () => {
   it('turns a hex colour and opacity into rgba', () => {
     expect(rgbaOf('#ff8000', 50)).toBe('rgba(255, 128, 0, 0.5)');
     expect(rgbaOf('bad', 120)).toBe('rgba(204, 224, 255, 1)');
+  });
+  it('fits a markup into the view, picks the opening layout, and skips capitals and custom words', () => {
+    expect(fitZoom(800, 600, 100, 50)).toBeCloseTo(7.2, 6);
+    expect(fitZoom(800, 600, 1000, 50)).toBeCloseTo(0.72, 6);
+    expect(fitZoom(100, 100, 1, 1)).toBe(8); // clamped
+    expect(layoutForPage(792, 'auto')).toBe('continuous');
+    expect(layoutForPage(24 * 72, 'auto')).toBe('single');
+    expect(layoutForPage(792, 'single')).toBe('single');
+    expect(skipSpelling('HVAC', false, '')).toBe(true);
+    expect(skipSpelling('HVAC', true, '')).toBe(false);
+    expect(skipSpelling('A', false, '')).toBe(false);
+    expect(skipSpelling('rebar', false, 'Rebar\nconduit')).toBe(true);
+    expect(skipSpelling('rebar', false, '')).toBe(false);
   });
 });

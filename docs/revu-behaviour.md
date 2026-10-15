@@ -929,6 +929,19 @@ folders, manual correlation and saved .bcx batches).
   ellipse by width/height or by radius.
 - Forms: field highlight colour and opacity, Highlight fields.
 - Signature: digest algorithm (SHA-256 default, SHA-384, SHA-512).
+- Document: Page Layout when opening (Single Page, Continuous, by page
+  size: pages under 14 in open Continuous), Maximum Zoom; Revu also has
+  Save Mode, document recovery, Remember Last Page.
+- Grid & Snap: grid spacing, snap sensitivity (5-25 px), snap colour,
+  Show Grid, Snap to Grid / Content / Markup (also on the status bar).
+- Markups List: Zoom Fit Markups when selected (selecting a row zooms to
+  the markup), Wrap Comment Text; Revu also has Exclude Filtered Markups
+  on Export, rich text comments, dominant-markup value, dim percent.
+- Layers: Hide Child Layers when Hiding Parent Layers, Show Layers on Page
+  Only (how the panel opens).
+- Spelling: Include Upper Case Words (all-caps words are skipped unless
+  on), Custom Words; Revu also has auto-complete lists and dictionary
+  imports.
 - Not ours: language, startup mode, 3D mouse, keyboard accelerators,
   scrollbars, digital ID folders (browsers choose files per signature).
 

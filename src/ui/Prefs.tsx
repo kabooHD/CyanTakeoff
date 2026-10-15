@@ -161,7 +161,7 @@ function ProfilesDialog() {
 
 // ---------- Preferences (Ctrl+K) ----------
 
-const SECTIONS = ['General', 'Navigation', 'Markup', 'Measure', 'Sketch', 'Forms', 'Signature'] as const;
+const SECTIONS = ['General', 'Document', 'Navigation', 'Grid & Snap', 'Markup', 'Measure', 'Sketch', 'Forms', 'Signature', 'Markups List', 'Layers', 'Spelling'] as const;
 type Section = typeof SECTIONS[number];
 
 function PreferencesDialog() {
@@ -191,6 +191,41 @@ function PreferencesDialog() {
         {select('tabTruncation', 'Tab truncation', [['end', 'Cut long names at the end'], ['start', 'Cut long names at the start']])}
         {check('showRecentOnStartup', 'Show recent files on startup', 'Opens the File Access panel when no document is open')}
         <label className="pref-row"><input type="checkbox" checked={!!s.toggles.crosshair} onChange={() => s.toggle('crosshair')} /> Show full-screen crosshair</label>
+      </>
+    ),
+    Document: (
+      <>
+        {select('defaultLayout', 'Page layout when opening', [['single', 'Single Page'], ['continuous', 'Continuous'], ['auto', 'By page size (under 14 in: Continuous)']])}
+        <label className="pref-row"><span>Maximum zoom</span><input aria-label="Maximum zoom" type="number" min={400} max={6400} step={100} value={p.maxZoom} onChange={(e) => set({ maxZoom: Math.max(400, Math.min(6400, Number(e.target.value) || 6400)) })} /> %</label>
+      </>
+    ),
+    'Grid & Snap': (
+      <>
+        <label className="pref-row"><span>Grid spacing</span><input aria-label="Grid spacing" type="number" min={2} max={288} value={p.gridSpacing} onChange={(e) => set({ gridSpacing: Math.max(2, Math.min(288, Number(e.target.value) || 12)) })} /> pt</label>
+        <label className="pref-row"><span>Snap sensitivity</span><input aria-label="Snap sensitivity" type="range" min={5} max={25} value={p.snapSensitivity} onChange={(e) => set({ snapSensitivity: Number(e.target.value) })} /> {p.snapSensitivity} px</label>
+        <label className="pref-row"><span>Snap colour</span><input aria-label="Snap colour" type="color" value={p.snapColor} onChange={(e) => set({ snapColor: e.target.value })} /></label>
+        <label className="pref-row"><input type="checkbox" checked={!!s.toggles.grid} onChange={() => s.toggle('grid')} /> Show grid</label>
+        <label className="pref-row"><input type="checkbox" checked={!!s.toggles.snap} onChange={() => s.toggle('snap')} /> Snap to grid</label>
+        <label className="pref-row"><input type="checkbox" checked={!!s.toggles.content} onChange={() => s.toggle('content')} /> Snap to content</label>
+        <label className="pref-row"><input type="checkbox" checked={!!s.toggles.markup} onChange={() => s.toggle('markup')} /> Snap to markup</label>
+      </>
+    ),
+    'Markups List': (
+      <>
+        {check('zoomFitOnSelect', 'Zoom fit markups when selected', 'Selecting a row zooms to the markup instead of only scrolling to it')}
+        {check('wrapComments', 'Wrap comment text')}
+      </>
+    ),
+    Layers: (
+      <>
+        {check('hideChildLayers', 'Hide child layers when hiding parent layers')}
+        {check('layersOnPageOnly', 'Show layers on page only (when the panel opens)')}
+      </>
+    ),
+    Spelling: (
+      <>
+        {check('spellUpperCase', 'Include upper case words')}
+        <label className="pref-row pref-col"><span>Custom words (one per line)</span><textarea aria-label="Custom words" rows={5} value={p.customWords} onChange={(e) => set({ customWords: e.target.value })} /></label>
       </>
     ),
     Navigation: (

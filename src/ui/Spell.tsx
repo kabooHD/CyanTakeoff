@@ -7,6 +7,7 @@
 // languages loaded on first use from /dict/; words added go to a personal
 // dictionary. The language is chosen in either dialog (Revu: Preferences >
 // Spelling) and remembered.
+import { skipSpelling } from '../model/prefs';
 import { useEffect, useState } from 'react';
 import { create } from 'zustand';
 import type NSpell from 'nspell';
@@ -128,12 +129,13 @@ async function findNext() {
   if (!d) return;
   const sp = await loadSpeller();
   const st = useSpell.getState();
+  const s0 = useApp.getState();
   const list = targets(d);
   for (let t = st.from.t; t < list.length; t++) {
     const text = textOf(d, list[t]);
     for (const w of words(text)) {
       if (t === st.from.t && w.start < st.from.off) continue;
-      if (st.ignoreAll.includes(w.word) || sp.correct(w.word)) continue;
+      if (st.ignoreAll.includes(w.word) || skipSpelling(w.word, s0.prefs.spellUpperCase, s0.prefs.customWords) || sp.correct(w.word)) continue;
       useSpell.setState({ issue: { t, start: w.start, end: w.end, word: w.word, suggestions: sp.suggest(w.word).slice(0, 8) }, done: false });
       const tg = list[t];
       const s = useApp.getState();
@@ -228,7 +230,7 @@ export async function markSpellingMistakes(d: DocState, pages: number[], color: 
     for (const b of boxes) {
       const len = b.str.length;
       for (const w of words(b.str)) {
-        if (sp.correct(w.word)) continue;
+        if (skipSpelling(w.word, s.prefs.spellUpperCase, s.prefs.customWords) || sp.correct(w.word)) continue;
         // Word extent: its share of the run's width (horizontal text).
         const x0 = b.x0 + ((b.x1 - b.x0) * w.start) / len, x1 = b.x0 + ((b.x1 - b.x0) * w.end) / len;
         s.addMarkup({

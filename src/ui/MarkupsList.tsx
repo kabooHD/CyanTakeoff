@@ -1,3 +1,4 @@
+import { markupBounds } from './hit';
 import { Fragment, useMemo, useState } from 'react';
 import { viewerApi } from './Viewer';
 import { anchorOf } from '../model/spaces';
@@ -114,6 +115,7 @@ export function MarkupsList() {
     if (doc && m.page !== doc.page) s.setPage(m.page);
     // A grouped markup is picked on its own here, so it can be edited or removed from its group (Revu).
     s.select([m.id], add, true);
+    if (s.prefs.zoomFitOnSelect && m.points.length > 1) { const b = markupBounds(m); setTimeout(() => viewerApi.fitRect({ x: b.minX, y: b.minY }, { x: b.maxX, y: b.maxY }), 60); return; }
     setTimeout(() => viewerApi.centerOn(anchorOf(m)), 60);
   };
   /** Up/Down arrows step through the list. */
@@ -197,7 +199,7 @@ export function MarkupsList() {
         <button onClick={() => s.setPanels({ markupsList: false })} title="Close"><Icon name="close" size={12} /></button>
       </div>
       <div className="ml-table-wrap" tabIndex={0} onKeyDown={onListKey}>
-        <table className="ml-table">
+        <table className={`ml-table${s.prefs.wrapComments ? ' wrap-comments' : ''}`}>
           <thead>
             <tr>
               {columns.map((c) => (
