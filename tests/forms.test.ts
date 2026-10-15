@@ -4,6 +4,18 @@ import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { createField, deleteField, readFields, renameField, setFieldOptions, uniqueFieldName, writeFields } from '../src/pdf/forms';
 
 describe('PDF forms', () => {
+  it('reads the Required flag', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([300, 200]);
+    const form = doc.getForm();
+    const must = form.createTextField('must'); must.enableRequired(); must.addToPage(page, { x: 20, y: 150, width: 200, height: 20 });
+    const may = form.createTextField('may'); may.addToPage(page, { x: 20, y: 100, width: 200, height: 20 });
+    const again = await PDFDocument.load(await doc.save());
+    const fields = readFields(again);
+    expect(fields.find((f) => f.name === 'must')?.required).toBe(true);
+    expect(fields.find((f) => f.name === 'may')?.required).toBeUndefined();
+  });
+
   it('reads fields with widgets and writes values back', async () => {
     const doc = await PDFDocument.load(readFileSync('tests/fixtures/form.pdf'));
     const f = readFields(doc);

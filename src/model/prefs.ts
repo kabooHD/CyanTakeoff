@@ -25,6 +25,8 @@ export interface Prefs {
   copyHighlightedText: boolean;
   /** Enable Text Highlighting: the Highlight tool marks the text under a drag (Ctrl+drag: free box). Off: always a box. */
   textHighlighting: boolean;
+  /** Drag Behavior for Shapes: a drag with a shape tool draws a rectangle (Ctrl+drag pulls a curve) or pulls a curve (Ctrl+drag: rectangle). */
+  dragShapes: 'rect' | 'curves';
   /** Snapshot resolution in dpi. */
   snapshotDpi: number;
   includeMarkupsInSnapshots: boolean;
@@ -78,7 +80,7 @@ export interface Prefs {
 export const DEFAULT_PREFS: Prefs = {
   tabTruncation: 'end', showRecentOnStartup: false,
   wheelSingle: 'zoom', wheelContinuous: 'zoom', reverseWheel: false, wheelSensitivity: 5,
-  dynamicDefaults: false, autosizeText: false, showAuthorDate: true, copyHighlightedText: true, textHighlighting: true, snapshotDpi: 216, includeMarkupsInSnapshots: true,
+  dynamicDefaults: false, autosizeText: false, showAuthorDate: true, copyHighlightedText: true, textHighlighting: true, dragShapes: 'rect', snapshotDpi: 216, includeMarkupsInSnapshots: true,
   sketchRotation: 'page', ellipseMode: 'size',
   fieldHighlightColor: '#cce0ff', fieldHighlightOpacity: 55,
   hashAlgorithm: 'sha256',

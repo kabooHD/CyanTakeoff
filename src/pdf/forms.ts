@@ -13,6 +13,8 @@ export interface FormField {
   options?: string[];
   multiline?: boolean;
   readOnly?: boolean;
+  /** Required (/Ff bit 2): Revu tints the field red until it is filled. */
+  required?: boolean;
   /** Widget rectangles in PDF space; radio widgets carry their option. */
   widgets: { page: number; rect: [number, number, number, number]; option?: string }[];
 }
@@ -36,7 +38,7 @@ export function readFields(doc: PDFDocument): FormField[] {
       const on = w.getOnValue?.();
       return { page: page ?? -1, rect: [r.x, r.y, r.x + r.width, r.y + r.height] as [number, number, number, number], option: on ? on.decodeText() : undefined };
     }).filter((w) => w.page >= 0);
-    const base = { name: f.getName(), widgets, readOnly: f.isReadOnly() };
+    const base = { name: f.getName(), widgets, readOnly: f.isReadOnly(), required: f.isRequired() || undefined };
     if (f instanceof PDFTextField) out.push({ ...base, type: 'text', value: f.getText() ?? '', multiline: f.isMultiline() });
     else if (f instanceof PDFCheckBox) out.push({ ...base, type: 'checkbox', value: f.isChecked() });
     else if (f instanceof PDFRadioGroup) {

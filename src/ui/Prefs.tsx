@@ -244,6 +244,7 @@ function PreferencesDialog() {
         <label className="pref-row"><input type="checkbox" checked={!!s.toggles.reuse} onChange={() => s.toggle('reuse')} /> Reuse tools</label>
         {check('autosizeText', 'Autosize text box and callout markups')}
         {check('showAuthorDate', 'Show author and date when hovering a markup')}
+        {select('dragShapes', 'Drag behavior for shapes', [['rect', 'Drag Rectangle (Ctrl+drag: curve)'], ['curves', 'Drag Curves (Ctrl+drag: rectangle)']])}
         {check('textHighlighting', 'Enable Text Highlighting', 'The Highlight tool marks the text it is dragged over; Ctrl+drag draws a free highlight. Off: always a free highlight')}
         {check('copyHighlightedText', 'Copy highlighted text into markup comment')}
         {select('snapshotDpi', 'Snapshot resolution', [[72 as never, '72 dpi'], [144 as never, '144 dpi'], [216 as never, '216 dpi'], [300 as never, '300 dpi']])}

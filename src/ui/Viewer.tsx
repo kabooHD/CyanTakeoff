@@ -1057,8 +1057,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
           if (c) finish('radius', [c.center, pts[0]]);
           else s.setStatus('3-Point Radius: the three points are in a line; pick a point off the line.');
         } else if (def.maxPoints && pts.length >= def.maxPoints) finish(s.tool as MarkupType, pts.slice(0, def.maxPoints));
-        else if ((e.ctrlKey || e.metaKey) && CURVABLE.has(s.tool)) {
-          // Ctrl+drag: this point gets a curve handlebar, dragged out until release (Revu).
+        else if (!draft && !wantCurve(e) && closedType(s.tool as MarkupType) && CURVABLE.has(s.tool)) {
+          // Drag Rectangle (Revu's default Drag Behavior for Shapes): press and drag draws a rectangle; a click starts click-click drawing.
+          setDraft({ tool: s.tool, points: [p], cursor: p, dragFrom: { x: e.clientX, y: e.clientY } });
+          capture(e);
+        } else if (wantCurve(e) && CURVABLE.has(s.tool)) {
+          // Ctrl+drag (or a plain drag with Drag Curves): this point gets a curve handlebar, dragged out until release (Revu).
           const handles: Handles = [...(draft?.handles ?? (draft?.points ?? []).map(() => null)), null];
           setDraft({ tool: s.tool, points: pts, cursor: p, handles, curving: pts.length - 1 });
           capture(e);
@@ -1124,6 +1128,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   };
 
   /** `free`: the Highlight tool draws a box even over text (Ctrl held, or Enable Text Highlighting off). */
+  /** Drag Behavior for Shapes (Preferences > Markup): Ctrl+drag pulls a curve with Drag Rectangle, a plain drag with Drag Curves. */
+  const wantCurve = (e: { ctrlKey: boolean; metaKey: boolean }) => (e.ctrlKey || e.metaKey) !== (s.prefs.dragShapes === 'curves');
   const completeTwoPoint = (p: Pt, free = false) => {
     if (!draft) return;
     const a = draft.points[0];
@@ -1396,6 +1402,16 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         const m = finish('pen', draft.points, extra);
         penGroup.current = { id: extra.groupId ?? crypto.randomUUID(), at: now, last: m.id, applied: !!extra.groupId };
       } else setDraft(null);
+      return;
+    }
+    // Shapes (polygon, area, volume, cloud...): a drag draws a rectangle (Shift: a square); a click goes on click-click.
+    if (def.interaction === 'poly' && draft.dragFrom && draft.points.length === 1) {
+      const moved = Math.hypot(e.clientX - draft.dragFrom.x, e.clientY - draft.dragFrom.y) > 4;
+      if (!moved) { setDraft({ ...draft, dragFrom: undefined }); return; }
+      const a = draft.points[0], raw = toPage(e);
+      const side = Math.max(Math.abs(raw.x - a.x), Math.abs(raw.y - a.y));
+      const q = e.shiftKey ? { x: a.x + Math.sign(raw.x - a.x) * side, y: a.y + Math.sign(raw.y - a.y) * side } : snap(raw);
+      finish(baseType(draft.tool), rectCorners(a, q));
       return;
     }
     // Drag-to-draw for two-point and box tools; click-click otherwise.
@@ -2115,15 +2131,15 @@ function FormLayer({ doc, pageIdx, zoom, interactive }: { doc: DocState; pageIdx
         switch (f.type) {
           case 'text':
             return f.multiline
-              ? <textarea key={key} className="form-field" aria-label={f.name} style={style} value={String(value)} onChange={(e) => set(e.target.value)} {...stop} />
-              : <input key={key} className="form-field" aria-label={f.name} style={style} value={String(value)} onChange={(e) => set(e.target.value)} {...stop} />;
+              ? <textarea key={key} className={`form-field ${f.required && !value ? 'required' : ''}`} aria-label={f.name} style={style} value={String(value)} onChange={(e) => set(e.target.value)} {...stop} />
+              : <input key={key} className={`form-field ${f.required && !value ? 'required' : ''}`} aria-label={f.name} style={style} value={String(value)} onChange={(e) => set(e.target.value)} {...stop} />;
           case 'checkbox':
-            return <input key={key} type="checkbox" className="form-field" aria-label={f.name} style={style} checked={!!value} onChange={(e) => set(e.target.checked)} {...stop} />;
+            return <input key={key} type="checkbox" className={`form-field ${f.required && !value ? 'required' : ''}`} aria-label={f.name} style={style} checked={!!value} onChange={(e) => set(e.target.checked)} {...stop} />;
           case 'radio':
             return <input key={key} type="radio" className="form-field" aria-label={`${f.name} ${w.option}`} style={style} name={`${doc.id}:${f.name}`} checked={value === w.option} onChange={() => set(w.option ?? '')} {...stop} />;
           case 'dropdown': case 'list':
             return (
-              <select key={key} className="form-field" aria-label={f.name} style={style} value={String(value)} onChange={(e) => set(e.target.value)} {...stop}>
+              <select key={key} className={`form-field ${f.required && !value ? 'required' : ''}`} aria-label={f.name} style={style} value={String(value)} onChange={(e) => set(e.target.value)} {...stop}>
                 <option value="" />
                 {(f.options ?? []).map((o) => <option key={o}>{o}</option>)}
               </select>

@@ -366,6 +366,8 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
 .form-field { position: absolute; box-sizing: border-box; margin: 0; padding: 0 2px; border: 1px solid #7aa7e8; background: var(--field-bg, rgba(204, 224, 255, 0.55)); font-family: Helvetica, Arial, sans-serif; color: #000; }
 .form-field:focus { outline: 2px solid var(--accent); background: rgba(255, 255, 255, 0.9); }
 /* Form > Highlight Fields off */
+/* Required fields are tinted red until filled (Revu). */
+.form-layer .form-field.required { background: rgba(255, 170, 170, 0.6); border-color: #d05050; }
 .form-layer.no-highlight .form-field { background: transparent; border-color: transparent; }
 .form-layer.no-highlight .form-field:focus { background: rgba(255, 255, 255, 0.9); }
 .signature-field { display: flex; align-items: center; justify-content: center; color: #345; font-style: italic; }

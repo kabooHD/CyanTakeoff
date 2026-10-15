@@ -98,6 +98,17 @@ list = await page.locator('.ml-table tbody').innerText();
 assert((list.match(/432 sf\b/g) ?? []).length === 2, 'content snap gives exact 432 sf from imprecise clicks');
 await page.keyboard.press('Control+Z');
 
+// Area tool: a drag draws a rectangle (Revu's default Drag Behavior for Shapes); click-click still works.
+{
+  await page.keyboard.press('Shift+Alt+A');
+  const a = await toScreen(44, 30), b = await toScreen(50, 34);
+  await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up();
+  await page.waitForTimeout(200);
+  assert((await page.locator('.ml-table tbody').innerText()).includes('24 sf'), 'dragging with the Area tool draws a 6 x 4 ft rectangle (24 sf)');
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Escape');
+}
+
 // Length of the north wall: 60 ft.
 await page.keyboard.press('Shift+Alt+L');
 let a = await toScreen(0, 40), b = await toScreen(60, 40);
@@ -1717,6 +1728,28 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await toolsItem('Highlight Fields');
     assert(await page.locator('.form-layer.no-highlight').count() >= 1, 'Highlight Fields off removes the field tint');
     await toolsItem('Highlight Fields');
+    {
+      // Required fields are tinted red until filled (Revu).
+      const rdoc = await PDFDocument.create();
+      const rp = rdoc.addPage([400, 300]);
+      const rf = rdoc.getForm();
+      const must = rf.createTextField('must'); must.enableRequired(); must.addToPage(rp, { x: 40, y: 220, width: 300, height: 24 });
+      const may = rf.createTextField('may'); may.addToPage(rp, { x: 40, y: 160, width: 300, height: 24 });
+      writeFileSync(`${OUT}/required.pdf`, await rdoc.save());
+      const tabsR = await page.locator('.doc-tab').count();
+      const rfc = await ctrlO();
+      await rfc.setFiles(`${OUT}/required.pdf`);
+      await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabsR);
+      await page.getByLabel('must').waitFor();
+      assert(await page.locator('.form-field.required').count() === 1 && await page.getByLabel('must').evaluate((el) => el.classList.contains('required')), 'a required field is tinted red');
+      await page.getByLabel('must').fill('done');
+      await page.waitForTimeout(100);
+      assert(await page.locator('.form-field.required').count() === 0, 'the tint goes once the required field is filled');
+      await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+      page.once('dialog', (d) => d.accept());
+      await page.getByRole('menuitem', { name: /^Close\b/ }).first().click();
+      await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n, tabsR);
+    }
   }
 
   // Forms editor: create fields by dragging their box, rename/delete them, fill and save.

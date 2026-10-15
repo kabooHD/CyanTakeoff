@@ -225,6 +225,7 @@ displayed value (in the markup's own unit when set), as Revu writes it.
 
 ## Document tools
 - Forms: fields are filled in place; values are saved into the PDF form.
+  Required fields (/Ff Required) are tinted red until they hold a value.
 - Signature (image): a drawn or typed signature, kept for reuse, placed as
   an image markup.
 - Digital signatures: sign with a digital ID (.pfx/.p12 + password) into an
@@ -472,7 +473,10 @@ displayed value (in the markup's own unit when set), as Revu writes it.
 ## Curved segments
 - Polygon, Polyline, Area, Perimeter, Polylength and Volume can have
   Bézier segments. While drawing, Ctrl+drag at a point pulls out its
-  handlebar (with the default "Drag Rectangle" preference).
+  handlebar with the default Drag Rectangle preference, where a plain
+  drag with a shape tool draws a rectangle (Shift: a square). Preferences >
+  Markup > Drag Behavior for Shapes = Drag Curves swaps the two: a plain
+  drag pulls the curve, Ctrl+drag draws the rectangle.
 - On a selected markup: drag a handlebar end to reshape (the other side
   turns with it); Ctrl+drag a handlebar moves one side only; Ctrl+click a
   control point converts it straight <-> curve; Shift+click a line adds a
