@@ -351,6 +351,15 @@ displayed value (in the markup's own unit when set), as Revu writes it.
 - Add Layer from Page draws another sheet on the page as a new layer, with
   Align Points when the sheets differ in position or scale.
 
+## Appearance extras (Properties)
+- Cloud and Cloud+: Size (width of the cloud arcs, 1 = default, 2 =
+  twice as big; saved as the border effect intensity /BE /I) and Invert
+  (arcs bulge inward).
+- Highlight: makes the fill (and hatch) transparent so the content shows
+  through; ours: the Multiply blend mode (unchecking a Highlight markup's
+  Highlight turns it into a Pen markup in Revu).
+- Length captions: right-click > Flip Text turns the caption 180°.
+
 ## Blend Mode (Properties > Appearance)
 - How a markup combines with the content under it: Normal, Multiply,
   Screen, Overlay, Darken, Lighten, Color Dodge, Color Burn, Hard Light,

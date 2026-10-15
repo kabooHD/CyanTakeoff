@@ -13,7 +13,7 @@ import { spaceTree, type SpaceNode } from '../model/spaces';
 import { cellAnchor, cellX, legendHeader, legendLayout, legendRows, type LegendRow } from '../model/legend';
 import { ROTATION_FIELD } from '../model/rotate';
 import { blendOf } from '../model/blend';
-import { arcPoints, arcThrough, bounds, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
+import { arcPoints, arcThrough, bounds, cloudArcLength, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import { fitFontSize, quadding, shapeOutline, textStyleOf, toDS, toRC } from '../model/textStyle';
 import { countRadius, countStyleName, countSymbolPolygon, countSymbolStrokes } from '../model/count';
 import { calloutTips, endsOf, leName, lineEndShape, type EndShape } from '../model/lineEnds';
@@ -285,7 +285,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
       break;
     case 'cloudplus': {
       const cloud = rectCorners(P[0], P[1]);
-      const segs = cloudSegments(cloud, Math.max(14, st.width * 8));
+      const segs = cloudSegments(cloud, cloudArcLength(st.width, st.cloudSize), st.cloudInvert);
       segs.forEach(([p0, c1, c2, p1], i) => { if (!i) o.moveTo(p0); o.curveTo(c1, c2, p1); });
       o.add('h S');
       if (P.length >= 4) {
@@ -470,7 +470,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
       } else o.add(paint);
       break;
     case 'cloud': {
-      const segs = cloudSegments(P, Math.max(14, st.width * 8));
+      const segs = cloudSegments(P, cloudArcLength(st.width, st.cloudSize), st.cloudInvert);
       segs.forEach(([p0, c1, c2, p1], i) => { if (!i) o.moveTo(p0); o.curveTo(c1, c2, p1); });
       o.add('h ' + paint);
       break;
@@ -617,6 +617,7 @@ function ctData(m: Markup, P: Pt[]): CTData {
     capture: m.capture?.length ? m.capture : undefined,
     valign: m.style.valign, margin: m.style.margin, autoSize: m.style.autoSize || undefined, shape: m.style.shape,
     countSymbol: m.style.countSymbol, countScale: m.style.countScale,
+    cloudSize: m.style.cloudSize, cloudInvert: m.style.cloudInvert || undefined,
     lineDef: m.style.lineDef, hatch: m.style.hatch, hatchScale: m.style.hatch ? m.style.hatchScale : undefined,
     points: m.type === 'count' || m.type === 'arc' || m.type === 'cloudplus' || (m.type === 'callout' && P.length > 3) ? P.flatMap((p) => [p.x, p.y]) : undefined,
     comment: measure(m) || m.type === 'cloudplus' || m.type === 'stamp' ? m.comment || undefined : undefined,
@@ -774,7 +775,7 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
       // Revu writes a radius as [arc start, center, arc end]; a full circle ends at its start.
       entries.Vertices = flat(m.type === 'radius' ? [P[1], P[0], P[2] ?? P[1]] : m.type === 'cloudplus' ? rectCorners(P[0], P[1]) : flattenPath(P, m.handles, true, 16));
       if (hasCurves(m.handles)) entries.Path = pdfPath(P, m.handles, true, (p) => [p.x, p.y]);
-      if (m.type === 'cloud' || m.type === 'cloudplus') entries.BE = { S: 'C', I: 1 };
+      if (m.type === 'cloud' || m.type === 'cloudplus') entries.BE = { S: 'C', I: st.cloudSize ?? 1 };
       break;
     case 'StrikeOut': case 'Underline': case 'Squiggly':
       entries.QuadPoints = quads(P);

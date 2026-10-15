@@ -73,6 +73,7 @@ export interface CTData {
   capture?: Markup['capture']; // Capture photos
   valign?: MarkupStyle['valign']; margin?: number; autoSize?: boolean; shape?: MarkupStyle['shape']; // text box extras
   countSymbol?: MarkupStyle['countSymbol']; countScale?: number; // Count appearance
+  cloudSize?: number; cloudInvert?: boolean; // Cloud arcs (size also in /BE /I)
   handles?: (number[] | null)[]; // curved segments: PDF-space [inX, inY, outX, outY] offsets per vertex
 }
 
@@ -149,6 +150,8 @@ function readCT(doc: PDFDocument, dict: PDFDict): CTData | undefined {
 function readStyle(doc: PDFDocument, dict: PDFDict, type: MarkupType, ct?: CTData): MarkupStyle {
   const defaults = DEFAULT_STYLES[type];
   const blend = readBlend(doc, dict);
+  const be = getDict(doc, dict, 'BE');
+  const cloudSize = ct?.cloudSize ?? (be ? getNumber(doc, be, 'I') : undefined);
   const stroke = colorToHex(numbers(doc, getArray(doc, dict, 'C')));
   const fill = colorToHex(numbers(doc, getArray(doc, dict, 'IC')));
   const ca = getNumber(doc, dict, 'CA');
@@ -186,6 +189,8 @@ function readStyle(doc: PDFDocument, dict: PDFDict, type: MarkupType, ct?: CTDat
     ...(ct?.lineDef ? { lineDef: ct.lineDef } : {}),
     ...(ct?.hatch ? { hatch: ct.hatch, hatchScale: ct.hatchScale } : {}),
     ...(blend && blend !== defaultBlend(type) ? { blend } : {}),
+    ...((type === 'cloud' || type === 'cloudplus') && cloudSize && cloudSize !== 1 ? { cloudSize } : {}),
+    ...(ct?.cloudInvert ? { cloudInvert: true } : {}),
     fontSize,
     ...readLineEnds(doc, dict, type),
     ...(type === 'count' ? { countSymbol: ct?.countSymbol ?? symbolOfCountStyle(getName(doc, dict, 'CountStyle')), countScale: ct?.countScale } : {}),

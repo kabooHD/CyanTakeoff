@@ -379,6 +379,17 @@ function StyleEditor({ style, type, onChange }: { style: MarkupStyle; type: Mark
       {style.fill && <Row label="Fill Opacity"><span className="inline"><input type="range" min={0} max={100} value={Math.round(style.fillOpacity * 100)} onChange={(e) => onChange({ fillOpacity: +e.target.value / 100 })} />{Math.round(style.fillOpacity * 100)}</span></Row>}
       <Row label="Line Width"><input type="number" min={0} max={50} step={0.25} value={style.width} onChange={(e) => onChange({ width: Math.max(0, +e.target.value) })} /></Row>
       <Row label="Line Style"><LineStyleSelect style={style} onChange={onChange} /></Row>
+      {(type === 'cloud' || type === 'cloudplus') && (
+        <Row label="Cloud">
+          <span className="inline">
+            <input aria-label="Cloud size" type="number" min={0.25} max={4} step={0.25} value={style.cloudSize ?? 1} title="Size" onChange={(e) => onChange({ cloudSize: +e.target.value === 1 ? undefined : Math.max(0.25, Math.min(4, +e.target.value || 1)) })} style={{ width: 52 }} />
+            <label><input type="checkbox" aria-label="Invert cloud" checked={!!style.cloudInvert} onChange={(e) => onChange({ cloudInvert: e.target.checked || undefined })} /> Invert</label>
+          </span>
+        </Row>
+      )}
+      {!textTypes && !['highlight', 'count', 'stamp', 'image', 'link', 'note', 'flag', 'attachment', 'strikeout', 'underline', 'squiggly', 'redaction', 'legend', 'caret'].includes(type) && (
+        <Row label="Highlight"><label className="inline"><input type="checkbox" aria-label="Highlight (transparent)" checked={style.blend === 'Multiply'} onChange={(e) => onChange({ blend: e.target.checked ? 'Multiply' : undefined })} /> Content shows through the fill</label></Row>
+      )}
       {LINE_END_TYPES.has(type) && (
         <>
           {type !== 'callout' && <Row label="Start">

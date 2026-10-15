@@ -527,6 +527,10 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     assert(/rotate\(-90 /.test((await cap.getAttribute('transform')) ?? ''), `dragging the anchor rotates the caption in 15° steps (${await cap.getAttribute('transform')})`);
     const mid = await toScreen(49, 38);
     await page.mouse.click(mid.x, mid.y, { button: 'right' });
+    await page.getByRole('menuitem', { name: 'Flip Text' }).click();
+    await page.waitForTimeout(200);
+    assert(/rotate\(-270 /.test((await cap.getAttribute('transform')) ?? ''), `Flip Text turns the caption 180° (${await cap.getAttribute('transform')})`);
+    await page.mouse.click(mid.x, mid.y, { button: 'right' });
     await page.getByRole('menuitem', { name: 'Reset Caption Position' }).click();
     await page.waitForTimeout(200);
     assert(!(await cap.getAttribute('transform')) && Math.abs(Number(await cap.getAttribute('x')) - x0) < 1, 'Reset Caption Position puts the caption back');
@@ -587,6 +591,34 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.keyboard.press('Control+z');
     await page.waitForTimeout(300);
     assert((await areaRow.innerText()) === areaBefore, 'undo restores the area after scaling');
+    await page.keyboard.press('Escape');
+  }
+  // Cloud Size and Invert (Properties > Appearance), and Highlight (the content shows through the fill: Multiply).
+  {
+    const cloudRow = page.locator('.ml-table tbody tr', { has: page.locator('td', { hasText: /^Cloud$/ }) }).first();
+    await cloudRow.locator('td').nth(1).click();
+    await page.locator('.markup-layer g[data-id] path').first().waitFor();
+    if (!(await page.locator('[aria-label="Cloud size"]').count())) await page.keyboard.press('Alt+P');
+    await page.getByLabel('Cloud size').waitFor();
+    // All cloud-like paths on the page, joined: the cloud's arcs change with Size and Invert, the rest stays.
+    const cloudPathD = () => page.locator('.markup-layer g[data-id] > path[d*="C"]').evaluateAll((ps) => ps.map((p) => p.getAttribute('d')).join('|'));
+    const d0 = await cloudPathD();
+    await page.getByLabel('Cloud size').fill('2');
+    await page.waitForTimeout(200);
+    const d1 = await cloudPathD();
+    assert(d1 !== d0 && (d1.split('C').length < d0.split('C').length), `Cloud Size 2 draws fewer, bigger arcs (${d0.split('C').length - 1} -> ${d1.split('C').length - 1})`);
+    await page.getByLabel('Invert cloud').check();
+    await page.waitForTimeout(200);
+    const d2 = await cloudPathD();
+    assert(d2 !== d1, 'Invert turns the arcs inward');
+    await page.getByLabel('Highlight (transparent)').check();
+    await page.waitForTimeout(200);
+    assert(await page.locator('.markup-layer g[data-id][style*="multiply"]').count() >= 1, 'Highlight draws the cloud with Multiply blending');
+    await page.getByLabel('Highlight (transparent)').uncheck();
+    await page.getByLabel('Invert cloud').uncheck();
+    await page.getByLabel('Cloud size').fill('1');
+    await page.evaluate(() => document.activeElement?.blur?.());
+    await page.keyboard.press('Alt+P');
     await page.keyboard.press('Escape');
   }
   // Rise/Drop on a length (Properties): 10 ft + 2 ft rise reads 12'-0"; then undone.

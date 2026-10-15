@@ -1474,6 +1474,11 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         items.push({ label: 'Reset Caption Position', action: () => s.updateMarkups([hit.id], (x) => ({ display: { ...x.display, captionOffset: undefined, captionAngle: undefined } })) });
         items.push({ sep: true });
       }
+      if ((hit.type === 'length' || hit.type === 'polylength' || hit.type === 'perimeter') && !hit.locked && captionText(hit)) {
+        // Flip Text (Revu): the caption turned 180°.
+        items.push({ label: 'Flip Text', action: () => s.updateMarkups([hit.id], (x) => ({ display: { ...x.display, captionAngle: (((x.display?.captionAngle ?? 0) + 180) % 360) || undefined } })) });
+        items.push({ sep: true });
+      }
       if (hit.type === 'callout' && !hit.locked && hit.points.length > 2) {
         // Callout leaders (Revu): Add Leader at the clicked point; Delete Leader on a leader's tip.
         const tips = [hit.points[0], ...hit.points.slice(3)];

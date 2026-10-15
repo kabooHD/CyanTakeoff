@@ -2,7 +2,7 @@ import { hasCurves, svgPath } from '../model/curves';
 import { captionLeaderLine, captionPosition, captionText, segmentValues } from '../model/measureDisplay';
 import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTileWH, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type LineStyleDef } from '../model/lineStyles';
 import { calloutAttach } from '../pdf/save';
-import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
+import { arcPoints, arcThrough, bounds, centroid, cloudArcLength, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
 import type { Cutout, Markup, MarkupStyle, MarkupType, Pt } from '../model/types';
 import { useEffect } from 'react';
 import { openCapturePreview } from './Capture';
@@ -17,8 +17,8 @@ import { cellAnchor, cellX, legendHeader, legendLayout, legendRows, type FontFla
 
 const pts = (p: Pt[]) => p.map((q) => `${q.x},${q.y}`).join(' ');
 
-export function cloudPath(points: Pt[], width: number) {
-  const segs = cloudSegments(points, Math.max(14, width * 8));
+export function cloudPath(points: Pt[], width: number, size = 1, invert = false) {
+  const segs = cloudSegments(points, cloudArcLength(width, size), invert);
   if (!segs.length) return '';
   return segs.map(([p0, c1, c2, p1], i) =>
     `${i ? '' : `M${p0.x},${p0.y}`}C${c1.x},${c1.y} ${c2.x},${c2.y} ${p1.x},${p1.y}`).join('') + 'Z';
@@ -149,7 +149,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
           </foreignObject>
         </>;
       }
-      shape = <><path {...c} fill="none" d={cloudPath(cloud, st.width)} />{extra}</>;
+      shape = <><path {...c} fill="none" d={cloudPath(cloud, st.width, st.cloudSize, st.cloudInvert)} />{extra}</>;
       break;
     }
     case 'flag': {
@@ -235,7 +235,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
         : <polygon {...cm} points={pts(P)} />;
       break;
     case 'cloud':
-      shape = <path {...c} d={cloudPath(P, st.width)} />;
+      shape = <path {...c} d={cloudPath(P, st.width, st.cloudSize, st.cloudInvert)} />;
       break;
     case 'rectangle': case 'highlight': {
       if (P.length < 2) break;

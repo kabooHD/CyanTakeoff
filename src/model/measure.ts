@@ -144,10 +144,14 @@ export function pointInPolygon(p: Pt, poly: Pt[]): boolean {
  * Cloud outline as cubic Bézier segments [p0, c1, c2, p1]. Scallops bulge
  * outward from the polygon regardless of winding.
  */
-export function cloudSegments(poly: Pt[], arc: number): [Pt, Pt, Pt, Pt][] {
+/** Length of one cloud arc along the outline: from the line width, times the Cloud Size (Revu: 1 = default, 2 = twice as big). */
+export const cloudArcLength = (width: number, size = 1) => Math.max(14, width * 8) * Math.max(0.25, Math.min(4, size || 1));
+
+export function cloudSegments(poly: Pt[], arc: number, invert = false): [Pt, Pt, Pt, Pt][] {
   const out: [Pt, Pt, Pt, Pt][] = [];
   if (poly.length < 2) return out;
-  const sign = signedArea(poly) >= 0 ? 1 : -1;
+  // Invert (Revu): the arcs bulge inward instead of outward.
+  const sign = (signedArea(poly) >= 0 ? 1 : -1) * (invert ? -1 : 1);
   for (let i = 0; i < poly.length; i++) {
     const a = poly[i];
     const b = poly[(i + 1) % poly.length];

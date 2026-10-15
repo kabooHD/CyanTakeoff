@@ -152,6 +152,9 @@ export interface MarkupStyle {
   fontSize: number; // points
   /** Blend mode (PDF /BM); undefined = the type's default (see model/blend.ts). */
   blend?: import('./blend').BlendMode;
+  /** Cloud and Cloud+: arc size (1 = default, saved as /BE /I) and Invert (arcs bulge inward). */
+  cloudSize?: number;
+  cloudInvert?: boolean;
   // Text formatting (Text Box, Callout, Typewriter, Cloud+); undefined = Revu defaults.
   font?: 'Helvetica' | 'Times' | 'Courier';
   bold?: boolean;
