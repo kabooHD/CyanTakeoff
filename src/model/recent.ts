@@ -51,20 +51,41 @@ async function store(list: RecentFile[]) {
 
 export const useRecent = create<{ list: RecentFile[]; loaded: boolean }>(() => ({ list: [], loaded: false }));
 
+/** Preferences > File Access (set from the app's preferences; this module cannot read the store). */
+const limits = { enabled: true, max: MAX_RECENT, days: 90 };
+export function setRecentLimits(l: Partial<typeof limits>) {
+  const changed = Object.entries(l).some(([k, v]) => limits[k as keyof typeof limits] !== v);
+  Object.assign(limits, l);
+  if (changed && useRecent.getState().loaded) void update((x) => x);
+}
+export const recentEnabled = () => limits.enabled;
+const prune = (l: RecentFile[]) => pruneRecent(l, limits.max, limits.days);
+
 export async function loadRecent() {
   if (useRecent.getState().loaded) return;
-  useRecent.setState({ list: sortRecent(await load()), loaded: true });
+  useRecent.setState({ list: prune(sortRecent(await load())), loaded: true });
 }
 
 async function update(fn: (l: RecentFile[]) => RecentFile[]) {
   await loadRecent();
-  const list = fn(useRecent.getState().list);
+  const list = prune(fn(useRecent.getState().list));
   useRecent.setState({ list });
   await store(list);
 }
 
 export const rememberFile = (name: string, size: number, handle?: FileSystemFileHandle) =>
-  update((l) => addToRecent(l, { name, size, opened: new Date().toISOString(), handle }));
+  limits.enabled ? update((l) => addToRecent(l, { name, size, opened: new Date().toISOString(), handle }, Math.max(limits.max, 1))) : Promise.resolve();
 export const forgetFile = (name: string) => update((l) => l.filter((r) => r.name !== name));
 export const pinFile = (name: string, pinned: boolean) => update((l) => sortRecent(l.map((r) => (r.name === name ? { ...r, pinned } : r))));
 export const clearRecent = () => update((l) => l.filter((r) => r.pinned));
+
+/**
+ * Preferences > File Access: at most `max` unpinned files, none older than
+ * `days` (0: no age limit); pinned files always stay.
+ */
+export function pruneRecent(list: RecentFile[], max: number, days: number, now = new Date()): RecentFile[] {
+  const oldest = days > 0 ? new Date(now.getTime() - days * 86400000).toISOString() : '';
+  const sorted = sortRecent(list);
+  let n = 0;
+  return sorted.filter((r) => r.pinned || (r.opened >= oldest && n++ < max));
+}

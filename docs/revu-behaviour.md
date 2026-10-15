@@ -1044,7 +1044,9 @@ folders, manual correlation and saved .bcx batches).
   names are kept in the browser; the sample and files whose access is
   still granted open on their own, the others wait for a click in the
   File Access panel; files opened without file access cannot be
-  reopened), full-screen crosshair.
+  reopened), full-screen crosshair; File Access: Enable Recent Files,
+  Items in Recent (0-100, 20), Recent history limit (days, 90; pinned
+  files always stay).
 - Document: page layout when opening (Single, Continuous, by page size),
   display when opening (Fit Page, Fit Width, Actual Size), maximum zoom,
   Rotate all pages by default (Shift+Alt+Plus / Minus turn every page),
@@ -1086,8 +1088,14 @@ folders, manual correlation and saved .bcx batches).
 - Grid & Snap: grid spacing, snap sensitivity (5-25 px), snap colour,
   Show Grid, Snap to Grid / Content / Markup (also on the status bar).
 - Markups List: Zoom Fit Markups when selected (selecting a row zooms to
-  the markup), Wrap Comment Text; Revu also has Exclude Filtered Markups
-  on Export, rich text comments, dominant-markup value, dim percent.
+  the markup), Show Measurement Value for Dominant Markup Only (a Group
+  item shows its first markup's values instead of the sums), Exclude
+  Filtered Markups on Export (the Summary leaves out what the filtered
+  list hides), Wrap Comment Text, dim percent; Revu also has rich text
+  comments.
+- Presentation: Loop after last page, Auto advance every N seconds,
+  Background Color, Mouse Cursor (shown, hidden, hidden after a pause).
+- Advanced: Dimmer Amount (the View menu's 25/50/75 % as a number).
 - Layers: Hide Child Layers when Hiding Parent Layers, Show Layers on Page
   Only (how the panel opens).
 - Spelling: Enable Spell Check (the browser's underline while typing),

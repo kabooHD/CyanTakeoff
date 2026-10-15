@@ -64,7 +64,9 @@ const when = (iso: string) => {
 export function RecentList({ limit }: { limit?: number }) {
   const list = useRecent((x) => x.list);
   useEffect(() => { loadRecent(); }, []);
+  const enabled = useApp((s) => s.prefs.recentEnabled);
   const shown = limit ? list.slice(0, limit) : list;
+  if (!enabled) return <p className="muted small">Recent files are off (Preferences &gt; General &gt; Enable recent files).</p>;
   if (!shown.length) return <p className="muted small">No recent files yet.</p>;
   return (
     <div className="recent-list" role="list" aria-label="Recent files">

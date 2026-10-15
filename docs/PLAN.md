@@ -331,6 +331,9 @@ filling, image signatures, redaction and OCR.
 - [x] Save Mode (Maintain Revisions / Publish Without Revisions / Publish
   Compressed) and File > Revert As… (earlier revisions open as documents)
 - [x] Preferences > General: Reopen Files from Last Session on Startup
+- [x] Preferences: File Access limits, Markups List dominant-markup value and
+  Exclude Filtered on Export, Presentation (loop, auto advance, background,
+  cursor), Dimmer Amount
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

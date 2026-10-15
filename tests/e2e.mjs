@@ -4376,6 +4376,107 @@ for (const [file, expected] of [
   await prefs('General', () => pd.getByLabel('Reopen files from last session on startup').uncheck());
 }
 
+// Preferences: File Access limits, Markups List dominant-markup value and Exclude Filtered on Export,
+// Presentation loop / auto advance / background, Dimmer Amount.
+{
+  const pd = page.getByRole('dialog', { name: 'Preferences' });
+  const prefs = async (tab, fn) => { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press('Control+k'); await pd.waitFor(); await pd.getByRole('tab', { name: tab, exact: true }).click(); await fn(); await pd.getByRole('button', { name: 'Close' }).click(); await pd.waitFor({ state: 'hidden' }); };
+  const wm = async (item) => { await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click(); await page.getByRole('menuitem', { name: item }).click(); };
+  const ids = async () => page.locator('.page .markup-layer g[data-id]').evaluateAll((els) => els.map((e) => e.dataset.id));
+  const dragFt = async (a, b) => { const p = await toScreen(...a), q = await toScreen(...b); await page.mouse.move(p.x, p.y); await page.mouse.down(); await page.mouse.move(q.x, q.y, { steps: 4 }); await page.mouse.up(); await page.waitForTimeout(150); };
+  // File Access: Items in Recent = 1 leaves at most one unpinned file in the list.
+  {
+    await prefs('General', () => pd.getByLabel('Items in recent').fill('1'));
+    if (!(await page.locator('.recent-list').count())) await wm('File Access');
+    await page.waitForTimeout(300);
+    const unpinned = await page.locator('.recent-row').filter({ hasNot: page.locator('.recent-pin.on') }).count();
+    assert(unpinned <= 1, `Items in Recent limits the File Access list (${unpinned} unpinned)`);
+    await prefs('General', () => pd.getByLabel('Items in recent').fill('20'));
+    await wm('File Access');
+  }
+  // Markups List: a Group of two areas sums them unless Dominant Markup Only is on; Exclude Filtered on Export.
+  {
+    await page.keyboard.press('Escape');
+    // The sample was reopened fresh by the previous block: give it a scale again.
+    if ((await page.locator('.sb-scale').innerText()) === 'Scale Not Set') {
+      await page.locator('.side-right button[title="Measurements"]').click();
+      await page.locator('.props select').first().selectOption(`1/4" = 1'-0"`);
+      await page.locator('.side-right button[title="Measurements"]').click();
+    }
+    const before = await ids();
+    await page.keyboard.press('Shift+Alt+A'); await dragFt([30, 30], [34, 27]); await page.keyboard.press('Escape');
+    await page.keyboard.press('Shift+Alt+A'); await dragFt([36, 30], [40, 27]); await page.keyboard.press('Escape');
+    assert((await ids()).length === before.length + 2, 'two area measurements drawn');
+    await dragFt([28, 32], [42, 25]);
+    await page.keyboard.press('Control+g');
+    await page.waitForTimeout(300);
+    if (!(await page.locator('.ml-table').count())) await wm('Markups List');
+    for (const b of await page.getByRole('button', { name: 'Collapse group' }).all()) await b.click().catch(() => {});
+    const grow = page.locator('.ml-group-row').filter({ hasText: 'Group (2)' }).last();
+    await grow.waitFor({ timeout: 10000 });
+    const t1 = (await grow.innerText()).replace(/\s+/g, ' ');
+    assert(/\b24\b/.test(t1), `a Group item sums its members' areas (${t1.slice(0, 100)})`);
+    await prefs('Markups List', () => pd.getByLabel('Show measurement value for dominant markup only').check());
+    const t2 = (await grow.innerText()).replace(/\s+/g, ' ');
+    assert(!/\b24\b/.test(t2) && /\b12\b/.test(t2), `Show Measurement Value for Dominant Markup Only shows the first member's area instead (${t2.slice(0, 100)})`);
+    await prefs('Markups List', () => pd.getByLabel('Show measurement value for dominant markup only').uncheck());
+    const summaryText = async () => {
+      await page.locator('.ml-columns button', { hasText: 'Summary' }).click();
+      await page.getByRole('button', { name: 'Summary…' }).click();
+      const sd = page.getByRole('dialog', { name: 'Markup Summary' });
+      await sd.waitFor();
+      const t = await sd.getByText(/markups, \d+ columns/).innerText();
+      await sd.getByRole('button', { name: 'Cancel' }).click().catch(() => page.keyboard.press('Escape'));
+      await sd.waitFor({ state: 'hidden' });
+      return t;
+    };
+    await page.locator('.ml-filter').fill('zzzz-nothing');
+    await page.waitForTimeout(300);
+    const off = await summaryText();
+    await prefs('Markups List', () => pd.getByLabel('Exclude filtered markups on export').check());
+    const on = await summaryText();
+    assert(/^0 of 0 /.test(on) && !/^0 of 0 /.test(off), `Exclude Filtered Markups on Export leaves the filtered-out markups out of the Summary ("${off}" -> "${on}")`);
+    await prefs('Markups List', () => pd.getByLabel('Exclude filtered markups on export').uncheck());
+    await page.locator('.ml-filter').fill('');
+    await page.waitForTimeout(300);
+    await page.keyboard.press('Escape');
+    await dragFt([28, 32], [42, 25]);
+    await page.keyboard.press('Delete');
+    await page.waitForTimeout(200);
+    assert((await ids()).length === before.length, 'the two areas are deleted again');
+  }
+  // Presentation: background colour, Loop after last page with Auto advance.
+  {
+    await prefs('Presentation', async () => { await pd.getByLabel('Loop after last page').check(); await pd.getByLabel('Auto advance seconds').fill('1'); await pd.getByLabel('Presentation background').fill('#102030'); });
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('End');
+    await page.waitForTimeout(500);
+    await page.keyboard.press('Control+Enter');
+    await page.locator('.presentation canvas[data-rendered]').waitFor({ timeout: 15000 });
+    const bg = await page.locator('.presentation').evaluate((el) => getComputedStyle(el).backgroundColor);
+    assert(bg === 'rgb(16, 32, 48)', `Presentation uses the background colour preference (${bg})`);
+    await page.waitForFunction(() => document.querySelector('.presentation-page-no')?.textContent?.trim().startsWith('1 /'), null, { timeout: 8000 });
+    assert(true, 'Auto advance with Loop after last page goes on to the first page');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    await prefs('Presentation', async () => { await pd.getByLabel('Loop after last page').uncheck(); await pd.getByLabel('Auto advance seconds').fill('0'); await pd.getByLabel('Presentation background').fill('#000000'); });
+    await page.keyboard.press('Home');
+  }
+  // Advanced: Dimmer Amount.
+  {
+    await prefs('Advanced', () => pd.getByLabel('Dimmer amount').fill('30'));
+    await page.locator('.menubar-item > button', { hasText: /^View$/ }).click();
+    await page.getByRole('menuitem', { name: /^Dimmer\b(?!.*%)/ }).click();
+    await page.locator('.dimmer').first().waitFor();
+    const op = await page.locator('.dimmer').first().evaluate((el) => el.style.opacity);
+    assert(Math.abs(Number(op) - 0.7) < 0.01, `Dimmer Amount 30 % fades the page to 70 % (${op})`);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+F5');
+    await page.waitForFunction(() => !document.querySelector('.dimmer'));
+    await prefs('Advanced', () => pd.getByLabel('Dimmer amount').fill('50'));
+  }
+}
+
 assert(errors.length === 0, `no page errors (${errors.join(' | ')})`);
 await browser.close();
 console.log('E2E PASSED');

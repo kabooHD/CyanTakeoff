@@ -7,6 +7,22 @@ export interface Prefs {
   tabTruncation: 'end' | 'start';
   /** Open the File Access panel when the app starts with no document. */
   showRecentOnStartup: boolean;
+  // File Access
+  /** Enable Recent Files: the File Access list is kept. */
+  recentEnabled: boolean;
+  /** Items in Recent (0-100). */
+  recentMax: number;
+  /** Recent history limit in days (0: no limit). */
+  recentDays: number;
+  // Presentation
+  /** Loop after last page. */
+  presLoop: boolean;
+  /** Auto advance every N seconds (0: off). */
+  presAdvance: number;
+  /** Background colour around the page. */
+  presBackground: string;
+  /** Mouse cursor: shown, hidden, or hidden after a pause. */
+  presCursor: 'show' | 'hide' | 'auto';
   /** Reopen Files from Last Session on Startup: the files open when the app was left open again (those needing file access wait for a click). */
   reopenLastSession: boolean;
   // Navigation
@@ -96,6 +112,10 @@ export interface Prefs {
   // Markups List
   /** Zoom to fit a markup when it is selected in the list. */
   zoomFitOnSelect: boolean;
+  /** Show Measurement Value for Dominant Markup Only: a Group item shows its first markup's values instead of the sums. */
+  dominantOnly: boolean;
+  /** Exclude Filtered Markups on Export: the Summary leaves out markups the filtered list does not show. */
+  excludeFilteredOnExport: boolean;
   wrapComments: boolean;
   /** How much markups filtered out of the list are dimmed on the page (0-100 %). */
   filteredDim: number;
@@ -117,6 +137,8 @@ export interface Prefs {
 
 export const DEFAULT_PREFS: Prefs = {
   tabTruncation: 'end', showRecentOnStartup: false, reopenLastSession: false,
+  recentEnabled: true, recentMax: 20, recentDays: 90,
+  presLoop: false, presAdvance: 0, presBackground: '#000000', presCursor: 'auto',
   wheelSingle: 'zoom', wheelContinuous: 'zoom', reverseWheel: false, wheelSensitivity: 5,
   dynamicDefaults: false, autosizeText: false, showAuthorDate: true, copyHighlightedText: true, textHighlighting: true, dragShapes: 'rect', snapshotDpi: 216, includeMarkupsInSnapshots: true,
   sketchRotation: 'page', ellipseMode: 'size',
@@ -127,7 +149,7 @@ export const DEFAULT_PREFS: Prefs = {
   maxZoom: 6400, defaultLayout: 'single', openDisplay: 'fitPage', rotateAllPages: false, rememberLastPage: false, saveMode: 'publish',
   reorderBookmarks: true, redirectOnSlipSheet: true, findHyperlinks: true, lockPanFitWidth: true, singleKeyInForms: false,
   scaleGroupProps: true, retainLayer: true, printPopups: false, popupOpacity: 85, splitCountBySpace: false,
-  zoomFitOnSelect: false, wrapComments: false, filteredDim: 75,
+  zoomFitOnSelect: false, dominantOnly: false, excludeFilteredOnExport: false, wrapComments: false, filteredDim: 75,
   hideChildLayers: true, layersOnPageOnly: false,
   spellUpperCase: false, customWords: '', spellCheck: true, spellColor: '#ff0000',
 };

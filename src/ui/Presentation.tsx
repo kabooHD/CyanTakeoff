@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { activeDoc, useApp, useActiveDoc } from '../model/store';
 import { MarkupShape } from './renderMarkup';
 import { markupShown, ocConfig } from './layersView';
+import { wrapPage } from '../model/presentation';
 
 export function Presentation() {
   const on = useApp((s) => s.presentation);
@@ -25,10 +26,28 @@ function PresentationView() {
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
   const pg = doc.loaded.pages[doc.page];
   const zoom = Math.min(size.w / pg.width, size.h / pg.height);
+  const prefs = useApp((s) => s.prefs);
+  // Loop after last page (Preferences > Presentation).
   const go = (n: number) => {
     const d = activeDoc();
-    if (d) useApp.getState().setPage(Math.max(0, Math.min(d.loaded.pages.length - 1, n)));
+    if (d) useApp.getState().setPage(wrapPage(n, d.loaded.pages.length, useApp.getState().prefs.presLoop));
   };
+  // Auto advance every N seconds.
+  useEffect(() => {
+    if (!(prefs.presAdvance > 0)) return;
+    const t = setInterval(() => { const d = activeDoc(); if (d) go(d.page + 1); }, prefs.presAdvance * 1000);
+    return () => clearInterval(t);
+  }, [prefs.presAdvance]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Mouse cursor: hidden, or hidden after two seconds without moving.
+  const [idle, setIdle] = useState(false);
+  useEffect(() => {
+    if (prefs.presCursor !== 'auto') return;
+    let t = window.setTimeout(() => setIdle(true), 2000);
+    const move = () => { setIdle(false); clearTimeout(t); t = window.setTimeout(() => setIdle(true), 2000); };
+    window.addEventListener('mousemove', move);
+    return () => { clearTimeout(t); window.removeEventListener('mousemove', move); };
+  }, [prefs.presCursor]);
+  const hideCursor = prefs.presCursor === 'hide' || (prefs.presCursor === 'auto' && idle);
 
   useEffect(() => {
     document.documentElement.requestFullscreen?.().catch(() => {});
@@ -85,7 +104,7 @@ function PresentationView() {
   const markups = doc.markups.filter((m) => m.page === doc.page && markupShown(doc, m, zoom));
   const w = pg.width * zoom, h = pg.height * zoom;
   return (
-    <div className="presentation" role="dialog" aria-label="Presentation"
+    <div className="presentation" role="dialog" aria-label="Presentation" style={{ background: prefs.presBackground, cursor: hideCursor ? 'none' : 'default' }}
       onClick={() => go(doc.page + 1)}
       onContextMenu={(e) => { e.preventDefault(); go(doc.page - 1); }}>
       <div className="presentation-page" style={{ width: w, height: h }}>

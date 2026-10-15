@@ -90,6 +90,7 @@ export function MarkupsList() {
     ? doc.markups.map((m) => ({ m, v: Object.fromEntries(defs.map((c) => [c.key, c.value(m, doc)])) as Record<string, string | number> }))
     : [], [doc, defs]);
 
+  const dominantOnly = useApp((st) => st.prefs.dominantOnly);
   const rows = useMemo((): Row[] => {
     const q = search.trim().toLowerCase();
     const active = Object.entries(filters).filter(([, v]) => v !== '');
@@ -119,12 +120,13 @@ export function MarkupsList() {
       const members = sorted.filter((x) => x.m.groupId === gid);
       if (members.length < 2) { out.push(r); continue; } // a group of one is just a markup
       const v: Record<string, string | number> = { ...r.v, subject: `Group (${members.length})` };
-      for (const c of defs) if (c.numeric && SUM_KEYS.has(c.key)) { const t = members.reduce((a, x) => a + num(x.v[c.key]), 0); v[c.key] = t ? Math.round(t * 100) / 100 : ''; }
+      // Show Measurement Value for Dominant Markup Only: the first member's values stay as they are.
+      if (!dominantOnly) for (const c of defs) if (c.numeric && SUM_KEYS.has(c.key)) { const t = members.reduce((a, x) => a + num(x.v[c.key]), 0); v[c.key] = t ? Math.round(t * 100) / 100 : ''; }
       out.push({ m: r.m, v, head: { gid, ids: members.map((x) => x.m.id) } });
       out.push(...members.map((x) => ({ ...x, member: gid })));
     }
     return out;
-  }, [all, sort, search, filters, custom]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [all, sort, search, filters, custom, dominantOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The page dims markups the filtered list leaves out (Revu).
   const filtering = search.trim() !== '' || Object.values(filters).some((v) => v !== '') || Object.values(custom).some((f) => f.conds.some((c) => c.value !== ''));

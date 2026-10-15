@@ -60,6 +60,7 @@ import { ManageStatusDialog } from './ui/StatusModels';
 import { DocToolsDialogs, emailDocument, publishCompressed, useDocTools } from './ui/DocTools';
 import { copyPageToSnapshot, copyText, selectAllText } from './ui/textCommands';
 import { clearSession, saveSession } from './model/session';
+import { setRecentLimits } from './model/recent';
 import { reopenLastSession } from './ui/FileAccess';
 import { autosizeTextBoxes, balanceSplit, closeAll, editAction, hideShowPanels, refreshDocument, removeSelectedFromGroup, saveAll, toggleFullScreen } from './ui/quickCommands';
 
@@ -79,6 +80,9 @@ export function App() {
   useEffect(() => { document.documentElement.dataset.theme = darkMode ? 'dark' : 'light'; }, [darkMode]);
   // Preferences > Show recent files on startup.
   useEffect(() => { const st = useApp.getState(); if (st.prefs.showRecentOnStartup && !st.docs.length) st.setPanels({ left: 'files' }); }, []);
+  // Preferences > File Access: the recent list's size and age limits.
+  const recentEnabled = useApp((st) => st.prefs.recentEnabled), recentMax = useApp((st) => st.prefs.recentMax), recentDays = useApp((st) => st.prefs.recentDays);
+  useEffect(() => { setRecentLimits({ enabled: recentEnabled, max: recentMax, days: recentDays }); }, [recentEnabled, recentMax, recentDays]);
   // Preferences > Reopen Files from Last Session on Startup.
   useEffect(() => { if (useApp.getState().prefs.reopenLastSession && !useApp.getState().docs.length) void reopenLastSession(); }, []);
   useEffect(() => {

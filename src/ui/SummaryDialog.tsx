@@ -66,10 +66,12 @@ function Form({ doc }: { doc: DocState }) {
   const [busy, setBusy] = useState(false);
   const close = () => useSummaryDialog.setState({ open: false });
 
-  const all: SummaryRow[] = useMemo(() => doc.markups.map((m) => ({
+  // Exclude Filtered Markups on Export (Preferences > Markups List): only what the filtered list shows.
+  const listVisible = useApp((st) => (st.prefs.excludeFilteredOnExport ? st.listVisible : null));
+  const all: SummaryRow[] = useMemo(() => doc.markups.filter((m) => !listVisible || listVisible.has(m.id)).map((m) => ({
     id: m.id, parent: m.groupId, page: m.page, replies: (m.replies ?? []).map((r) => ({ author: r.author, date: r.date, text: r.text })),
     v: Object.fromEntries(defs.map((c) => [c.key, c.value(m, doc)])) as Record<string, string | number>,
-  })), [doc, defs]);
+  })), [doc, defs, listVisible]);
   const rows = useMemo(() => sortRows(filterRows(all, filters), sorts), [all, filters, sorts]);
   const columns: SummaryColumn[] = chosen.map((k) => defs.find((c) => c.key === k)!).filter(Boolean)
     .filter((c) => showEmpty || rows.some((r) => String(r.v[c.key] ?? '') !== ''));

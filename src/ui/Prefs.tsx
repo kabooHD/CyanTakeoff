@@ -161,7 +161,7 @@ function ProfilesDialog() {
 
 // ---------- Preferences (Ctrl+K) ----------
 
-const SECTIONS = ['General', 'Document', 'Navigation', 'Grid & Snap', 'Markup', 'Measure', 'Sketch', 'Forms', 'Signature', 'Markups List', 'Layers', 'Spelling'] as const;
+const SECTIONS = ['General', 'Document', 'Navigation', 'Grid & Snap', 'Markup', 'Measure', 'Sketch', 'Forms', 'Signature', 'Markups List', 'Layers', 'Spelling', 'Presentation', 'Advanced'] as const;
 type Section = typeof SECTIONS[number];
 
 function PreferencesDialog() {
@@ -192,6 +192,10 @@ function PreferencesDialog() {
         {check('showRecentOnStartup', 'Show recent files on startup', 'Opens the File Access panel when no document is open')}
         {check('reopenLastSession', 'Reopen files from last session on startup', 'Files whose access is still granted open on their own; the others wait for a click in the File Access panel')}
         <label className="pref-row"><input type="checkbox" checked={!!s.toggles.crosshair} onChange={() => s.toggle('crosshair')} /> Show full-screen crosshair</label>
+        <p className="muted small">File Access</p>
+        {check('recentEnabled', 'Enable recent files')}
+        <label className="pref-row"><span>Items in recent</span><input aria-label="Items in recent" type="number" min={0} max={100} value={p.recentMax} onChange={(e) => set({ recentMax: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} /></label>
+        <label className="pref-row"><span>Recent history limit</span><input aria-label="Recent history limit" type="number" min={0} max={3650} value={p.recentDays} onChange={(e) => set({ recentDays: Math.max(0, Math.min(3650, Number(e.target.value) || 0)) })} /> days (0: no limit)</label>
       </>
     ),
     Document: (
@@ -221,6 +225,8 @@ function PreferencesDialog() {
     'Markups List': (
       <>
         {check('zoomFitOnSelect', 'Zoom fit markups when selected', 'Selecting a row zooms to the markup instead of only scrolling to it')}
+        {check('dominantOnly', 'Show measurement value for dominant markup only', 'A Group item shows its first markup\'s values instead of the sums')}
+        {check('excludeFilteredOnExport', 'Exclude filtered markups on export', 'The Summary leaves out markups the filtered list does not show')}
         {check('wrapComments', 'Wrap comment text')}
         <label className="pref-row" title="Markups the filtered list does not show are dimmed on the page"><span>Dim filtered markups</span><input aria-label="Dim filtered markups" type="number" min={0} max={100} step={5} value={p.filteredDim} onChange={(e) => set({ filteredDim: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} /> %</label>
       </>
@@ -291,6 +297,20 @@ function PreferencesDialog() {
         <label className="pref-row"><span>Highlight opacity</span><input aria-label="Field highlight opacity" type="range" min={0} max={100} value={p.fieldHighlightOpacity} onChange={(e) => set({ fieldHighlightOpacity: Number(e.target.value) })} /> {p.fieldHighlightOpacity}%</label>
         <label className="pref-row"><input type="checkbox" checked={!s.toggles.noFieldHighlight} onChange={() => s.toggle('noFieldHighlight')} /> Highlight fields</label>
         {check('singleKeyInForms', 'Enable single key shortcuts', 'A tool\'s one-key shortcut (R, A, L…) works while a form field has the focus')}
+      </>
+    ),
+    Presentation: (
+      <>
+        {check('presLoop', 'Loop after last page')}
+        <label className="pref-row"><span>Auto advance every</span><input aria-label="Auto advance seconds" type="number" min={0} max={600} value={p.presAdvance} onChange={(e) => set({ presAdvance: Math.max(0, Math.min(600, Number(e.target.value) || 0)) })} /> seconds (0: off)</label>
+        <label className="pref-row"><span>Background colour</span><input aria-label="Presentation background" type="color" value={p.presBackground} onChange={(e) => set({ presBackground: e.target.value })} /></label>
+        {select('presCursor', 'Mouse cursor', [['auto', 'Hide after a pause'], ['show', 'Always shown'], ['hide', 'Hidden']])}
+      </>
+    ),
+    Advanced: (
+      <>
+        <label className="pref-row" title="How strongly the page content still shows under the Dimmer (Ctrl+F5)"><span>Dimmer amount</span><input aria-label="Dimmer amount" type="number" min={5} max={95} step={5} value={s.dimLevel} onChange={(e) => s.setView({ dimLevel: Math.max(5, Math.min(95, Number(e.target.value) || 50)) })} /> %</label>
+        <p className="muted small">Rendering is the browser's (pdf.js); line weights can be disabled in the View menu.</p>
       </>
     ),
     Signature: (
