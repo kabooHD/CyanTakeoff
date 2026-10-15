@@ -3414,6 +3414,40 @@ for (const [file, expected] of [
   await page.screenshot({ path: `${OUT}/revu-${file.replace('.pdf', '')}.png` });
 }
 
+// Automatically Create Form Fields: a form-like sheet (boxes with labels, a check box, a signature line, radio circles) gets fields.
+{
+  const fdoc = await PDFDocument.create();
+  const fp = fdoc.addPage([612, 792]);
+  const helv = await fdoc.embedFont(StandardFonts.Helvetica);
+  const label = (t, x, y) => fp.drawText(t, { x, y, size: 11, font: helv });
+  const boxAt = (x, y, w, h) => fp.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(0, 0, 0), borderWidth: 1 });
+  label('Name:', 72, 704); boxAt(130, 698, 220, 20);
+  label('Date:', 72, 664); boxAt(130, 658, 120, 20);
+  label('Comments', 72, 630); boxAt(72, 560, 300, 60);
+  boxAt(72, 520, 12, 12); label('I agree', 90, 522);
+  label('Signature:', 72, 470); boxAt(140, 450, 220, 40);
+  label('Colour', 72, 420); fp.drawCircle({ x: 78, y: 400, size: 6, borderColor: rgb(0, 0, 0), borderWidth: 1 }); label('Red', 90, 396);
+  fp.drawCircle({ x: 78, y: 380, size: 6, borderColor: rgb(0, 0, 0), borderWidth: 1 }); label('Blue', 90, 376);
+  writeFileSync(`${OUT}/form-like.pdf`, await fdoc.save());
+  const tabs = await page.locator('.doc-tab').count();
+  const fc = await ctrlO();
+  await fc.setFiles(`${OUT}/form-like.pdf`);
+  await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs);
+  await page.waitForTimeout(800);
+  await page.locator('.menubar-item > button', { hasText: /^Tools$/ }).click();
+  await page.getByRole('menuitem', { name: 'Automatically Create Form Fields' }).click();
+  await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Automatically Create Form Fields:'), null, { timeout: 20000 });
+  const made = (await page.locator('.statusbar').innerText()).match(/Automatically Create Form Fields: (\d+) field/)?.[1];
+  assert(made === '7', `boxes, a check box, a signature line and two radio circles become 7 fields (${made})`);
+  const fe = page.getByRole('dialog', { name: 'Forms Editor' });
+  await fe.waitFor();
+  const names = await fe.locator('input[aria-label^="Name of "]').evaluateAll((els) => els.map((e) => e.value));
+  assert(names.includes('Name') && names.includes('Date') && names.includes('Comments') && names.includes('I agree') && names.includes('Signature') && names.includes('Colour'), `fields are named after their labels (${names.join(', ')})`);
+  await fe.getByRole('button', { name: 'Cancel' }).click().catch(() => page.keyboard.press('Escape'));
+  await page.waitForTimeout(300);
+  assert(await page.getByLabel('Name', { exact: true }).count() === 1 && await page.getByLabel('I agree', { exact: true }).count() === 1, 'the new fields show on the page');
+}
+
 assert(errors.length === 0, `no page errors (${errors.join(' | ')})`);
 await browser.close();
 console.log('E2E PASSED');

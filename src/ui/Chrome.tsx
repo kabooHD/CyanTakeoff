@@ -13,6 +13,7 @@ import { useUndoHistory } from './UndoHistory';
 import { useTemplateDialog } from './Templates';
 import { validateSignatures } from './DigitalSignature';
 import { exportFormData, importFormData, mergeFormData, migrateTypewrittenText, resetForm } from './FormData';
+import { autoCreateFormFields } from './autoFields';
 import { Icon } from './icons';
 import { MenuList, type MenuItem } from './ContextMenu';
 import { allColumns, exportSummaryCsv, exportSummaryPdf, exportSummaryXlsx, openFile, openSample, exportMarkupsXfdf, importMarkupsXfdf } from './actions';
@@ -235,6 +236,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
         label: toolById(id).name, checked: s.tool === id, disabled: noDoc, action: () => { s.setTool(id); s.setStatus(`${toolById(id).name}: click the first point, then type the sizes.`); },
       })),
       { sep: true },
+      { label: 'Automatically Create Form Fields', disabled: noDoc, action: () => void autoCreateFormFields() },
       ...toolItems('form'),
       { label: 'Forms Editor…', shortcut: 'Ctrl+Shift+F', disabled: noDoc, action: () => useFormsDialog.setState({ editor: true }) },
       { label: 'Import Form Data…', disabled: noDoc, action: () => importFormData() },

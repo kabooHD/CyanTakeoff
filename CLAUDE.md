@@ -137,7 +137,7 @@ Replace Checked (src/ui/Search.tsx); low-end machine pass (src/model/device.ts: 
 memory budget, cold undo snapshots, canvas limits; docs/perf.md); CyanTakeoff (=Revu)
 and Batch menus (batch over open documents: src/ui/filesRow.tsx Files option in the
 dialogs, Apply Stamp in src/ui/ApplyStamp.tsx); form filling (AcroForm inputs saved into the form) and
-field creation (Tools > field tools incl. Button, X = signature field, Forms Editor
+field creation (Tools > field tools incl. Button, X = signature field, Automatically Create Form Fields in src/model/autoFields.ts, Forms Editor
 Ctrl+Shift+F; form data import/export/merge/reset/migrate in src/model/formData.ts,
 src/ui/FormData.tsx), image
 signatures (draw/type, reusable), digital signatures (src/pdf/sign.ts:

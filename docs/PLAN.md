@@ -267,6 +267,7 @@ filling, image signatures, redaction and OCR.
 - [x] Select tool band direction (left-to-right inside, right-to-left
   touching); Set Scale > Pages > Selected from Thumbnails; Length caption
   leader line (Show Caption Leader Line)
+- [x] Tools > Form > Automatically Create Form Fields (src/model/autoFields.ts)
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

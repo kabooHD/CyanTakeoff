@@ -209,6 +209,16 @@ displayed value (in the markup's own unit when set), as Revu writes it.
   Box, Signature Field; Revu default shortcut X adds a signature field):
   drag the box, then name the field. Radio buttons sharing a name form one
   group. Forms Editor (Ctrl+Shift+F) renames, re-options and deletes fields.
+- Automatically Create Form Fields (Tools > Form): the content layer is
+  scanned and form-like areas become fields named from nearby text: text
+  boxes, check boxes (small squares), signature fields (a "Signature"
+  label), date fields, radio buttons (circles). Edit Form mode then opens
+  with the new fields for review; with nothing found, Revu offers OCR.
+  Ours: boxes come from stroked rectangles in the vector content, circles
+  from closed curves; a label is the text left of the box on the same line,
+  else just above it; check boxes take the text on their right; tall boxes
+  are multiline; areas with existing fields are skipped; the status bar
+  points to OCR when nothing is found.
 - Form data (Tools > Form): Import Data (FDF; ours also XFDF/XML and CSV),
   Export Data as FDF, XML (XFDF fields) or CSV, Merge Data (one CSV row per
   open document), Reset (clears every field), Highlight Fields (the blue
