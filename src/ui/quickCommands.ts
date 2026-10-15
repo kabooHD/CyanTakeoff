@@ -4,6 +4,12 @@ import { activeDoc, useApp, type LeftPanel, type RightPanel } from '../model/sto
 import { autosizedBox, withBox } from '../model/textBox';
 import { removeFromGroup } from '../model/arrange';
 
+/** File > Close All (Ctrl+Shift+W): every open document, asking about unsaved changes as Close does. */
+export function closeAll() {
+  const s = useApp.getState();
+  for (const d of [...s.docs]) s.closeDoc(d.id);
+}
+
 let measureCtx: CanvasRenderingContext2D | null = null;
 /** Width of a line of text in Helvetica at `size` points. */
 export function textWidth(text: string, size: number): number {

@@ -59,7 +59,7 @@ import { CameraDialog, useCamera } from './ui/Camera';
 import { ManageStatusDialog } from './ui/StatusModels';
 import { DocToolsDialogs, emailDocument, publishCompressed, useDocTools } from './ui/DocTools';
 import { copyPageToSnapshot, copyText, selectAllText } from './ui/textCommands';
-import { autosizeTextBoxes, balanceSplit, editAction, hideShowPanels, refreshDocument, removeSelectedFromGroup, saveAll, toggleFullScreen } from './ui/quickCommands';
+import { autosizeTextBoxes, balanceSplit, closeAll, editAction, hideShowPanels, refreshDocument, removeSelectedFromGroup, saveAll, toggleFullScreen } from './ui/quickCommands';
 
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
@@ -102,6 +102,7 @@ export function App() {
         case 'Ctrl+O': return run(openFile);
         case 'Ctrl+S': return run(() => s.save());
         case 'Ctrl+F2': return run(saveAll);
+        case 'Ctrl+Shift+W': return run(closeAll);
         case 'Ctrl+N': return run(() => useDocTools.setState({ open: 'new' }));
         case 'Ctrl+E': return run(() => d && emailDocument());
         case 'Ctrl+Shift+P': return run(() => d && publishCompressed());

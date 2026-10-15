@@ -136,6 +136,12 @@ displayed value (in the markup's own unit when set), as Revu writes it.
   (Ctrl+Shift+D), Extract (Ctrl+Shift+X, optionally deleting), Replace
   (Ctrl+Shift+Y), Rotate Pages (Ctrl+Shift+R; current page Shift+Alt+Plus/
   Minus), Flatten (Ctrl+Shift+M), thumbnails: drag to reorder, right-click.
+- Split Document: by Page Count (every N pages), Page Ranges ("1-3, 4":
+  a file per range, named after it), Top-Level Bookmarks (a file per
+  bookmark, named after it; pages before the first make their own) or
+  File Size (MB; ours estimates pages per file from the average page).
+  Batch > Split Documents runs it over the open files. File > Close All
+  (Ctrl+Shift+W) closes every tab, asking about unsaved changes.
 - CyanTakeoff writes pending changes into the PDF, applies the operation
   and reloads; undo history restarts after a page operation.
 - Replace Pages keeps the old page's markups, page scale and Spaces (the

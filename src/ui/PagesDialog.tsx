@@ -10,7 +10,7 @@ import { captureSummaryPdf } from './captureExport';
 import { serialize, useApp, useActiveDoc } from '../model/store';
 import { parsePageRange } from '../model/measure';
 import {
-  deletePages, extractPages, flattenPage, flattenedPages, unflattenPage, insertBlankPage, insertPages, replacePage, rotatePages, splitDocument, insertRevisedPage,
+  deletePages, extractPages, flattenPage, flattenedPages, unflattenPage, insertBlankPage, insertPages, replacePage, rotatePages, insertRevisedPage,
 } from '../pdf/pages';
 import { pickFile } from './toolActions';
 import { openPdf } from '../pdf/document';
@@ -19,6 +19,7 @@ import { FilesRow, batchHint, targets } from './filesRow';
 import { detectSheetNumbers } from './Sheets';
 import { slipPlan, slipReportRows, supersededIndex, type SlipMatch } from '../model/slipSheet';
 import { batchReportCsv } from '../model/batchPairs';
+import { partFileName, splitParts, type SplitMode } from '../model/split';
 import type { DocState } from '../model/store';
 import type { Markup, MarkupType } from '../model/types';
 import { toolById } from '../tools/tools';
@@ -73,6 +74,10 @@ function PagesForm({ op }: { op: PagesOp }) {
   const [delAfter, setDelAfter] = useState(false);
   const [keep, setKeep] = useState(true);
   const [every, setEvery] = useState('1');
+  // Split Document (Revu): by page count, page ranges, top-level bookmarks or file size.
+  const [splitMode, setSplitMode] = useState<SplitMode>('count');
+  const [splitRanges, setSplitRanges] = useState('');
+  const [splitMb, setSplitMb] = useState('10');
   const [langs, setLangs] = useState<string[]>(() => {
     try { const l = JSON.parse(localStorage.getItem('cyantakeoff:ocr-langs') ?? '[]'); return Array.isArray(l) && l.length ? l : ['eng']; } catch { return ['eng']; }
   });
@@ -234,10 +239,15 @@ function PagesForm({ op }: { op: PagesOp }) {
         break;
       }
       case 'split': {
-        const lib = await PDFDocument.load(await serialize(doc), { updateMetadata: false });
-        const parts = await splitDocument(lib, Math.max(1, Number(every) || 1));
-        for (let i = 0; i < parts.length; i++) download(await parts[i].save(), `${base(doc.name)} - part ${i + 1}.pdf`);
-        s.setStatus(`Split into ${parts.length} file(s)`);
+        let made = 0;
+        for (const t of targets(doc, all)) {
+          const bytes = await serialize(t);
+          const lib = await PDFDocument.load(bytes, { updateMetadata: false });
+          const parts = splitParts(lib.getPageCount(), { mode: splitMode, every: Math.max(1, Number(every) || 1), ranges: splitRanges, maxMb: Math.max(0.1, Number(splitMb) || 10) }, t.loaded.bookmarks, bytes.length);
+          for (const part of parts) download(await (await extractPages(lib, part.pages)).save(), partFileName(base(t.name), part));
+          made += parts.length;
+        }
+        s.setStatus(`Split into ${made} file(s)`);
         break;
       }
     }
@@ -273,7 +283,7 @@ function PagesForm({ op }: { op: PagesOp }) {
           {op === 'insert' && <>{fileRow}{position}</>}
           {op === 'insert-blank' && <>{position}<div className="form-row"><span>Count</span><input aria-label="Count" type="number" min={1} value={count} onChange={(e) => setCount(e.target.value)} style={{ width: 60 }} /></div></>}
           {(op === 'delete' || op === 'extract' || op === 'rotate' || op === 'flatten' || op === 'ocr') && range_}
-          {(op === 'rotate' || op === 'ocr') && <FilesRow all={all} setAll={setAll} />}
+          {(op === 'rotate' || op === 'ocr' || op === 'split') && <FilesRow all={all} setAll={setAll} />}
           {op === 'ocr' && (
             <>
               <div className="form-row ocr-langs"><span>Languages</span>
@@ -347,7 +357,18 @@ function PagesForm({ op }: { op: PagesOp }) {
             <div className="form-row"><label><input type="checkbox" checked={slipReport} onChange={(e) => setSlipReport(e.target.checked)} /> Save a report (CSV)</label></div>
             <div className="form-row"><label><input type="checkbox" checked={appendNew} onChange={(e) => setAppendNew(e.target.checked)} /> Add sheets that are not in this document</label></div>
             <p className="muted small">Each sheet of the new revision replaces the sheet with the same number (page label), keeping its markups, scale and Spaces.</p></>}
-          {op === 'split' && <div className="form-row"><span>Every</span><input aria-label="Pages per file" type="number" min={1} value={every} onChange={(e) => setEvery(e.target.value)} style={{ width: 60 }} /> page(s) per file</div>}
+          {op === 'split' && <>
+            <div className="form-row"><span>Split by</span>
+              <select aria-label="Split by" value={splitMode} onChange={(e) => setSplitMode(e.target.value as SplitMode)}>
+                <option value="count">Page Count</option><option value="ranges">Page Ranges</option><option value="bookmarks">Top-Level Bookmarks</option><option value="size">File Size</option>
+              </select>
+            </div>
+            {splitMode === 'count' && <div className="form-row"><span>Every</span><input aria-label="Pages per file" type="number" min={1} value={every} onChange={(e) => setEvery(e.target.value)} style={{ width: 60 }} /> page(s) per file</div>}
+            {splitMode === 'ranges' && <div className="form-row"><span>Ranges</span><input aria-label="Page ranges" placeholder="1-3, 4, 7-9" value={splitRanges} onChange={(e) => setSplitRanges(e.target.value)} /></div>}
+            {splitMode === 'size' && <div className="form-row"><span>Maximum</span><input aria-label="Maximum file size" type="number" min={0.1} step={0.5} value={splitMb} onChange={(e) => setSplitMb(e.target.value)} style={{ width: 60 }} /> MB per file (estimated from the average page)</div>}
+            {splitMode === 'bookmarks' && <p className="muted small">One file per top-level bookmark{doc.loaded.bookmarks.length ? '' : ' (this file has none: it stays whole)'}; pages before the first bookmark make a file of their own.</p>}
+            <p className="muted small">Each part is downloaded as "{base(doc.name)} - part N.pdf" (ranges and bookmarks name the parts).</p>
+          </>}
           <div className="modal-actions">
             <span className="spacer" />
             <button className="primary" disabled={!ready || (op === 'ocr' && !langs.length) || (op !== 'insert' && op !== 'insert-blank' && op !== 'split' && op !== 'slip-sheet' && !pages.length)} onClick={ok}>OK</button>

@@ -1178,6 +1178,20 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.getByRole('dialog', { name: 'Insert Blank Page' }).getByRole('button', { name: 'OK' }).click();
   await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n + 1})`), n0);
   assert(await pagesOf() === n0 + 1, 'Insert Blank Page adds a page');
+  {
+    // Split Document by page ranges: one download per range, named after it.
+    const dl = []; const onDl = (d) => dl.push(d.suggestedFilename()); page.on('download', onDl);
+    await page.locator('.menubar-item > button', { hasText: /^Document$/ }).click();
+    await page.getByRole('menuitem', { name: 'Split Document…' }).click();
+    const sd = page.getByRole('dialog', { name: 'Split Document' });
+    await sd.getByLabel('Split by').selectOption('ranges');
+    await sd.getByLabel('Page ranges').fill('1, 2-3');
+    await sd.getByRole('button', { name: 'OK' }).click();
+    await page.waitForFunction(() => /Split into 2 file/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 20000 });
+    await page.waitForTimeout(500);
+    page.off('download', onDl);
+    assert(dl.length === 2 && dl.some((n) => /pages 2-3\.pdf$/.test(n)), `Split Document by ranges downloads one file per range (${dl.join(', ')})`);
+  }
   // Thumbnails toolbar: Copy / Paste / Cut Pages, Labels > Page Scale, Re-Label.
   {
     const windowPanel = async (name) => { await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click(); await page.getByRole('menuitem', { name }).click(); };

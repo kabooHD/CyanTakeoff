@@ -304,6 +304,8 @@ filling, image signatures, redaction and OCR.
   Unflatten Markups
 - [x] Text Box > Add Leader (callout behaviour); a callout's last leader
   deleted makes it a text box
+- [x] Split Document by page count / ranges / top-level bookmarks / file
+  size (src/model/split.ts); Batch > Split Documents; File > Close All
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

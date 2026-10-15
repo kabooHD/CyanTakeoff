@@ -38,7 +38,7 @@ import { runApplyRedactions } from './redactUi';
 import { effectiveCombo } from './commands';
 import { arrangeItems } from './arrangeMenu';
 import { useCursor } from './cursor';
-import { balanceSplit, hideShowPanels, refreshDocument, saveAll, toggleFullScreen } from './quickCommands';
+import { balanceSplit, closeAll, hideShowPanels, refreshDocument, saveAll, toggleFullScreen } from './quickCommands';
 import { useDocProps } from './DocProperties';
 import { useCamera } from './Camera';
 import { useStampManager } from './Stamps';
@@ -90,6 +90,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Create › Layered PDF…', action: () => createLayeredPdf() },
       { label: 'Combine Files…', action: combineFiles },
       { label: 'Close', shortcut: 'Ctrl+F4', disabled: noDoc, action: () => doc && s.closeDoc(doc.id) },
+      { label: 'Close All', shortcut: 'Ctrl+Shift+W', disabled: noDoc, action: closeAll },
       { sep: true },
       { label: 'Save', shortcut: 'Ctrl+S', disabled: noDoc, action: () => s.save() },
       { label: 'Save As…', shortcut: 'Ctrl+Shift+S', disabled: noDoc, action: () => s.save(true) },
@@ -262,6 +263,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Apply Stamp…', disabled: noDoc, action: () => { batchHint.set(); useApplyStamp.setState({ open: true }); } },
       { label: 'Sign & Seal…', disabled: noDoc, action: () => { batchHint.set(); openSignDialog(); } },
       { label: 'Rotate Pages…', disabled: noDoc, action: () => { batchHint.set(); openPagesDialog('rotate'); } },
+      { label: 'Split Documents…', disabled: noDoc, action: () => { batchHint.set(); openPagesDialog('split'); } },
       { label: 'Crop Pages…', disabled: noDoc, action: () => { batchHint.set(); useDocTools.setState({ open: 'crop' }); } },
       { label: 'Page Setup…', disabled: noDoc, action: () => { batchHint.set(); usePageSetup.setState({ open: 'setup' }); } },
       { label: 'Security…', disabled: noDoc, action: () => { batchHint.set(); useSecurityDialog.setState({ open: true }); } },
