@@ -12,6 +12,7 @@ import { FileAccessPanel } from './FileAccess';
 import { layerIds } from '../pdf/layers';
 import { SignaturesPanel } from './DigitalSignature';
 import { useEffect, useRef, useState } from 'react';
+import { startOffset, useOffset } from './OffsetBar';
 import { create } from 'zustand';
 import { TOOLS } from '../tools/tools';
 import { applyToolProperties } from '../model/toolScale';
@@ -656,7 +657,7 @@ function Properties() {
 
 // ---------------- Tool Chest ----------------
 
-function ToolItem({ p, onRemove, onMenu, symbol }: { p: ToolPreset; onRemove?: () => void; onMenu?: (e: React.MouseEvent) => void; symbol?: boolean }) {
+function ToolItem({ p, onRemove, onMenu, symbol, hotkey }: { p: ToolPreset; onRemove?: () => void; onMenu?: (e: React.MouseEvent) => void; symbol?: boolean; /** My Tools: the digit that picks this tool (Revu). */ hotkey?: number }) {
   const s = useApp();
   const active = s.preset?.id === p.id;
   const use = (e: React.MouseEvent) => {
@@ -676,6 +677,7 @@ function ToolItem({ p, onRemove, onMenu, symbol }: { p: ToolPreset; onRemove?: (
       onContextMenu={(e) => { e.preventDefault(); onMenu?.(e); }}>
       <span className="tool-swatch" style={{ borderColor: p.style.color, background: p.style.fill ?? 'transparent' }}><Icon name={p.type} size={16} /></span>
       {!symbol && <span className="tool-name">{p.name}</span>}
+      {hotkey !== undefined && <span className="tool-key" title={`Hot key ${hotkey}`}>{hotkey}</span>}
       {p.mode === 'drawing' && <span className="tool-mode" title="Drawing mode">D</span>}
       {p.sequence && <span className="tool-mode" title="Sequence">#</span>}
       {onRemove && <button className="tool-remove" title="Remove" onClick={(e) => { e.stopPropagation(); onRemove(); }}><Icon name="close" size={10} /></button>}
@@ -746,8 +748,17 @@ function ToolChest() {
       s.setStatus(`${tool.name} added to ${set.name}`);
     } }] : []),
     { label: 'Rename…', action: () => { const n = prompt('Tool name', p.name); if (n) update(set.id, (t) => ({ ...t, tools: t.tools.map((x) => (x.id === p.id ? { ...x, name: n } : x)) })); } },
+    { label: 'Duplicate', action: () => update(set.id, (t) => { const i = t.tools.findIndex((x) => x.id === p.id); const copy = { ...p, id: crypto.randomUUID() }; return { ...t, tools: [...t.tools.slice(0, i + 1), copy, ...t.tools.slice(i + 1)] }; }) },
+    { label: 'Change Colors…', action: () => setRecolor({ setId: set.id, tool: p }) },
+    // Offset as (Revu): the selected markup's offset is drawn as this tool's type.
+    { label: 'Offset as', disabled: (s.docs.find((x) => x.id === s.activeId)?.selection.length ?? 0) !== 1, action: () => { useOffset.setState({ as: p.type }); startOffset(); } },
     { label: 'Remove', action: () => s.removeFromToolChest(p.id) },
   ] });
+  // Recent Tools items: keep one for good in My Tools (Revu: Add Item to My Tools).
+  const recentItemMenu = (e: React.MouseEvent, p: ToolPreset) => setMenu({ x: e.clientX, y: e.clientY, items: [
+    { label: 'Add Item to My Tools', disabled: !sets[0], action: () => { update(sets[0].id, (t) => ({ ...t, tools: [...t.tools, { ...p, id: crypto.randomUUID() }] })); s.setStatus(`Added "${p.name}" to ${sets[0].name}`); } },
+  ] });
+  const [recolor, setRecolor] = useState<{ setId: string; tool: ToolPreset } | null>(null);
   const tc = s.toolChest;
   const chestMenu = (e: React.MouseEvent) => setMenu({ x: e.clientX, y: e.clientY, items: [
     ...sets.map((t) => ({ label: t.name, checked: !t.hidden, action: () => update(t.id, (x) => ({ ...x, hidden: !x.hidden })) })),
@@ -775,7 +786,7 @@ function ToolChest() {
       {!s.recentHidden && (
         <details open>
           <summary onContextMenu={(e) => { e.preventDefault(); recentMenu(e); }}>Recent Tools<button className="toolset-gear" title="Recent Tools options" onClick={(e) => { e.preventDefault(); recentMenu(e); }}>⚙</button></summary>
-          {s.recentTools.length ? s.recentTools.map((p) => <ToolItem key={p.id} p={p} />) : <p className="muted pad">Markups you create appear here.</p>}
+          {s.recentTools.length ? s.recentTools.map((p) => <ToolItem key={p.id} p={p} onMenu={(e) => recentItemMenu(e, p)} />) : <p className="muted pad">Markups you create appear here.</p>}
         </details>
       )}
       {sets.filter((t) => !t.hidden).map((set, i) => (
@@ -785,12 +796,35 @@ function ToolChest() {
             <button className="toolset-gear" title="Tool set options" onClick={(e) => { e.preventDefault(); setMenuFor(e, set); }}>⚙</button>
           </summary>
           {set.view === 'symbol'
-            ? <div className="tool-symbols">{set.tools.map((p) => <ToolItem key={p.id} p={p} symbol onRemove={() => s.removeFromToolChest(p.id)} onMenu={(e) => toolMenuFor(e, set, p)} />)}</div>
-            : set.tools.map((p) => <ToolItem key={p.id} p={p} onRemove={() => s.removeFromToolChest(p.id)} onMenu={(e) => toolMenuFor(e, set, p)} />)}
+            ? <div className="tool-symbols">{set.tools.map((p, i) => <ToolItem key={p.id} p={p} symbol hotkey={set.id === sets[0]?.id && i < 9 ? i + 1 : undefined} onRemove={() => s.removeFromToolChest(p.id)} onMenu={(e) => toolMenuFor(e, set, p)} />)}</div>
+            : set.tools.map((p, i) => <ToolItem key={p.id} p={p} hotkey={set.id === sets[0]?.id && i < 9 ? i + 1 : undefined} onRemove={() => s.removeFromToolChest(p.id)} onMenu={(e) => toolMenuFor(e, set, p)} />)}
           {i === 0 && <p className="muted pad small">Right-click a markup and choose “Add to My Tools” to save it here. Right-click a tool for Drawing mode.</p>}
         </details>
       ))}
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
+      {recolor && <ChangeColors tool={recolor.tool} onClose={() => setRecolor(null)}
+        onApply={(st) => { update(recolor.setId, (t) => ({ ...t, tools: t.tools.map((x) => (x.id === recolor.tool.id ? { ...x, style: { ...x.style, ...st }, markup: x.markup ? { ...x.markup, style: { ...x.markup.style, ...st } } : x.markup } : x)) })); setRecolor(null); }} />}
+    </div>
+  );
+}
+
+/** Change Colors (Revu's Change Multiple Colors): each colour the tool uses, with the colour it becomes. */
+function ChangeColors({ tool, onClose, onApply }: { tool: ToolPreset; onClose: () => void; onApply: (st: Partial<MarkupStyle>) => void }) {
+  const st = tool.style;
+  const [color, setColor] = useState(st.color);
+  const [fill, setFill] = useState(st.fill ?? '');
+  const [text, setText] = useState(st.textColor ?? '');
+  const hasFill = st.fill != null, hasText = st.textColor != null;
+  const ok = () => onApply({ color, ...(hasFill ? { fill: fill || st.fill } : {}), ...(hasText ? { textColor: text || st.textColor } : {}) });
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" role="dialog" aria-label="Change Colors" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') onClose(); if (e.key === 'Enter') ok(); }}>
+        <div className="modal-title">Change Colors: {tool.name}</div>
+        <div className="form-row"><span>Line</span><span className="swatch" style={{ background: st.color }} /> → <input type="color" aria-label="Line color" value={color} onChange={(e) => setColor(e.target.value)} /></div>
+        {hasFill && <div className="form-row"><span>Fill</span><span className="swatch" style={{ background: st.fill ?? undefined }} /> → <input type="color" aria-label="Fill color" value={fill || '#ffffff'} onChange={(e) => setFill(e.target.value)} /></div>}
+        {hasText && <div className="form-row"><span>Text</span><span className="swatch" style={{ background: st.textColor ?? undefined }} /> → <input type="color" aria-label="Text color" value={text || '#000000'} onChange={(e) => setText(e.target.value)} /></div>}
+        <div className="modal-actions"><span className="spacer" /><button className="primary" onClick={ok}>OK</button><button onClick={onClose}>Cancel</button></div>
+      </div>
     </div>
   );
 }

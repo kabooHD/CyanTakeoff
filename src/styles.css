@@ -351,6 +351,7 @@ kbd { background: var(--chrome); border: 1px solid var(--border); border-radius:
 .set-sheet:hover { background: var(--hover); }
 .set-sheet.active { background: var(--accent-soft); }
 .labels-list { max-height: 50vh; overflow: auto; }
+.tool-key { font-size: 9px; color: var(--muted); border: 1px solid var(--border); border-radius: 2px; padding: 0 3px; margin-left: 4px; }
 .tool-mode { font-size: 9px; font-weight: bold; color: var(--accent); border: 1px solid var(--accent); border-radius: 2px; padding: 0 2px; margin-left: 4px; }
 .toolset-gear { float: right; border: 0; background: none; cursor: pointer; color: var(--muted); padding: 0 4px; }
 

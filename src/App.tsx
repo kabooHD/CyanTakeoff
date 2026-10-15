@@ -86,6 +86,11 @@ export function App() {
       const d = activeDoc();
       const combo = resolveCombo(comboFromEvent(e), useApp.getState().customKeys);
       if (!combo) return;
+      // My Tools hot keys (Revu): 1-9 pick the tool at that position.
+      if (/^[1-9]$/.test(combo) && d) {
+        const p = s.toolSets[0]?.tools[Number(combo) - 1];
+        if (p) { e.preventDefault(); s.setTool(p.type, { preset: p }); return; }
+      }
       if (combo.startsWith('tool:')) {
         const id = combo.slice(5) as ToolId;
         if (d) { e.preventDefault(); s.setTool(id === 'radius' ? s.radiusTool : id); }

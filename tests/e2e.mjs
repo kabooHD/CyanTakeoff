@@ -812,6 +812,27 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await click(70, 30);
     assert(await stamps() === n0 + 1, 'a Drawing-mode tool places a copy of the saved markup');
     await page.keyboard.press('Control+Z');
+    // Duplicate, Change Colors, hot keys (Revu's My Tools commands).
+    const items = page.locator('.toolchest details').nth(1).locator('.tool-item');
+    const nTools = await items.count();
+    await tool.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Duplicate' }).click();
+    assert(await items.count() === nTools + 1, 'Duplicate adds a copy of the tool to the set');
+    await items.last().click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Change Colors…' }).click();
+    const cc = page.getByRole('dialog', { name: 'Change Colors' });
+    await cc.getByLabel('Line color').fill('#ff0000');
+    await cc.getByRole('button', { name: 'OK' }).click();
+    assert((await items.last().locator('.tool-swatch').evaluate((el) => getComputedStyle(el).borderColor)) === 'rgb(255, 0, 0)', 'Change Colors recolours the tool');
+    assert((await items.first().locator('.tool-key').innerText()) === '1', 'My Tools items show their hot key');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('1');
+    await page.waitForTimeout(200);
+    assert(await items.first().evaluate((el) => el.classList.contains('active')), 'pressing 1 picks the first My Tools tool');
+    await page.keyboard.press('Escape');
+    await items.last().click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Remove', exact: true }).click();
+    assert(await items.count() === nTools, 'Remove takes the duplicate out again');
     await page.locator('.side-right button[title="Measurements"]').click();
   }
   // Spaces (Alt+S): name the Conference room; markups inside report it in the Space column.

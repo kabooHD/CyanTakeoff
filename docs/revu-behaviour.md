@@ -202,7 +202,11 @@ displayed value (in the markup's own unit when set), as Revu writes it.
 ## Tool Chest, shortcuts, profiles
 - Tool Chest: tool sets (gear menu: rename, export, delete, Legend), My
   Tools first. Right-click a tool: Properties Mode (draw a new markup with
-  its properties) or Drawing Mode (place a copy of the saved markup).
+  its properties) or Drawing Mode (place a copy of the saved markup),
+  Duplicate, Change Colors (each colour the tool uses and what it
+  becomes), Offset as (the selected markup's offset drawn as this tool's
+  type), Rename, Remove. Recent Tools items: Add Item to My Tools. My
+  Tools items carry hot keys 1-9 (the digit picks the tool).
   Revu's .btx tool set format is not documented, so CyanTakeoff uses its own
   JSON (.cttools.json) for import/export.
 - Revu > Keyboard Shortcuts: every command and tool can be reassigned;
