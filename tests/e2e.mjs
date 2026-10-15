@@ -3458,6 +3458,46 @@ for (const [file, expected] of [
   assert(await page.getByLabel('Name', { exact: true }).count() === 1 && await page.getByLabel('I agree', { exact: true }).count() === 1, 'the new fields show on the page');
 }
 
+// Sets: revisions detected from file names (A-101 / A-101 R2), Select Latest Revisions, Superseded stamp, Options.
+{
+  const mkSheet = async (name, text) => { const d = await PDFDocument.create(); const pg = d.addPage([612, 792]); pg.drawText(text, { x: 72, y: 700, size: 24, font: await d.embedFont(StandardFonts.Helvetica) }); writeFileSync(`${OUT}/${name}`, await d.save()); };
+  await mkSheet('A-101.pdf', 'Plan, first issue'); await mkSheet('A-101 R2.pdf', 'Plan, revision 2');
+  const tabs = await page.locator('.doc-tab').count();
+  const fc = await ctrlO();
+  await fc.setFiles([`${OUT}/A-101.pdf`, `${OUT}/A-101 R2.pdf`]);
+  await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 2, tabs, { timeout: 20000 });
+  await page.waitForTimeout(500);
+  if (!(await page.locator('.sets-panel').count())) await page.keyboard.press('Alt+2');
+  await page.locator('.sets-panel').waitFor();
+  await page.getByRole('button', { name: 'Sets ▾' }).click();
+  await page.getByRole('menuitem', { name: 'Options…' }).click();
+  const so = page.getByRole('dialog', { name: 'Set Options' });
+  await so.getByLabel('Show', { exact: true }).selectOption('filename');
+  await so.getByRole('button', { name: 'Close' }).click();
+  const stack = page.locator('.set-stack', { has: page.locator('.set-sheet', { hasText: 'A-101 R2' }) });
+  assert(await stack.locator('.set-stack-toggle', { hasText: '1 previous revision' }).count() === 1, `A-101 and A-101 R2 stack as one sheet with a previous revision (sheets: ${(await page.locator('.set-sheet').allInnerTexts()).join(' | ')}; toggles: ${(await page.locator('.set-stack-toggle').allInnerTexts()).join(' | ')})`);
+  await page.getByRole('button', { name: 'Sets ▾' }).click();
+  await page.getByRole('menuitem', { name: 'Select Latest Revisions' }).click();
+  const latestNames = await page.locator('.set-sheet.selected').allInnerTexts();
+  assert(latestNames.includes('A-101 R2') && !latestNames.includes('A-101'), `Select Latest Revisions picks the newest sheet of each stack (${latestNames.join(', ')})`);
+  await page.getByRole('button', { name: 'Sets ▾' }).click();
+  await page.getByRole('menuitem', { name: 'Stamp Previous Revisions "Superseded"' }).click();
+  await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Superseded stamp added to 1 sheet'));
+  await page.locator('.doc-tab', { hasText: /^A-101\.pdf/ }).click();
+  await page.waitForTimeout(400);
+  assert((await page.locator('.ml-table tbody').innerText()).includes('SUPERSEDED'), 'the previous revision got a SUPERSEDED stamp');
+  await page.getByRole('button', { name: 'Sets ▾' }).click();
+  await page.getByRole('menuitem', { name: 'Options…' }).click();
+  await so.getByLabel('Previous Revisions').selectOption('hide');
+  await so.getByRole('button', { name: 'Close' }).click();
+  assert(await page.locator('.set-sheet', { hasText: /^A-101$/ }).count() === 0 && await page.locator('.set-sheet', { hasText: 'A-101 R2' }).count() === 1, 'Previous Revisions: Hide lists only the latest revision');
+  await page.getByRole('button', { name: 'Sets ▾' }).click();
+  await page.getByRole('menuitem', { name: 'Options…' }).click();
+  await so.getByLabel('Previous Revisions').selectOption('gray');
+  await so.getByLabel('Show', { exact: true }).selectOption('label');
+  await so.getByRole('button', { name: 'Close' }).click();
+}
+
 assert(errors.length === 0, `no page errors (${errors.join(' | ')})`);
 await browser.close();
 console.log('E2E PASSED');

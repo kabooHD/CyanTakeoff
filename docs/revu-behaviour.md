@@ -144,6 +144,18 @@ displayed value (in the markup's own unit when set), as Revu writes it.
 ## Sets, Batch Link, Slip Sheet
 - Sets (Alt+2): several PDFs browsed as one set of sheets. CyanTakeoff:
   the open documents, listed by page label, with a filter.
+- Sets menu: Select All / Select Latest Revisions / Select Previous
+  Revisions, Options (Sorting: Show = file name, page label, sheet name or
+  number; Sort By = page label, file name + page label, file name + page
+  index; Sort Order alphabetic/alphanumeric asc/desc; Revision Filter Auto
+  (from the names), Wildcard (* any, # number, ? letter, ; separates, \
+  escapes) or Off; Previous Revisions hidden / grayed / crossed out /
+  shown; Current Revisions highlighted or stacked with an arrow), Stamp
+  previous revisions "Superseded", Print Set, Search Set (Search panel on
+  the current Set), Tags, Export Drawing Log. Ours: options kept in the
+  browser; revisions are read from file names ("A-101 R2", "A-101_B",
+  "Plan (2)") or page labels when sorting by label; the Superseded stamp
+  is a stamp markup in the middle of each previous sheet.
 - Tags (Sets panel > Tags…): values per sheet. Standard tags: Sheet
   Number, Sheet Name, Discipline, Revision (on by default), Drawing
   Number, Revision Number, Sheet Type; custom tags with a type (text,

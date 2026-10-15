@@ -85,7 +85,7 @@ blank, delete, extract, replace keeping markups, rotate, reorder by
 thumbnail drag, split, combine) and Flatten; Compare Documents (clouds
 differences, visual or vector, alignment points) and Overlay Pages (two-colour overlay PDF); Page Labels from
 title-block sheet numbers, Batch Link (incl. across open files), Sets panel
-(open files as one set), Slip Sheet (by sheet number, markups carried);
+(open files as one set; revision stacks and Set Options in src/model/revisions.ts), Slip Sheet (by sheet number, markups carried);
 Tool Chest tool sets (new/rename/export/import, Properties vs Drawing mode,
 Symbol/Detail view, set scale, hide, Comment Persistence, Update on Reuse:
 src/model/toolScale.ts),

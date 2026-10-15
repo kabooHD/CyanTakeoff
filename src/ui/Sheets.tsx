@@ -7,7 +7,12 @@ import { findSheetNumber, sheetReferences } from '../model/sheets';
 import { writePageLabels } from '../pdf/pages';
 import { pageText } from './toolActions';
 import { inRect } from '../model/measure';
-import { useTagDialogs } from './Tags';
+import { setSheets, useTagDialogs, useTags } from './Tags';
+import { ContextMenu, type MenuItem } from './ContextMenu';
+import { openPrint } from './Print';
+import { DEFAULT_SET_OPTIONS, displayName, latestRevisions, previousRevisions, sortSheets, stackRevisions, type SetOptions, type SetSheet } from '../model/revisions';
+import { toolById } from '../tools/tools';
+import type { Markup } from '../model/types';
 
 export const useSheetsDialog = create<{ open: 'labels' | 'batch-link' | null }>(() => ({ open: null }));
 
@@ -137,26 +142,124 @@ function BatchLinkForm({ doc }: { doc: DocState }) {
 
 // ---------------- Sets panel (Alt+2) ----------------
 
-/** Revu Sets: several PDFs browsed as one set of sheets. Here: the open documents. */
+const SET_OPTIONS_KEY = 'cyantakeoff:set-options';
+const loadSetOptions = (): SetOptions => {
+  try { return { ...DEFAULT_SET_OPTIONS, ...(JSON.parse(localStorage.getItem(SET_OPTIONS_KEY) ?? 'null') ?? {}) }; } catch { return DEFAULT_SET_OPTIONS; }
+};
+/** Set options (Revu: Sets > Options: Sorting tab), kept in the browser. */
+export const useSetOptions = create<{ o: SetOptions; set: (p: Partial<SetOptions>) => void }>((set, get) => ({
+  o: typeof localStorage === 'undefined' ? DEFAULT_SET_OPTIONS : loadSetOptions(),
+  set: (p) => { const o = { ...get().o, ...p }; set({ o }); try { localStorage.setItem(SET_OPTIONS_KEY, JSON.stringify(o)); } catch { /* private mode */ } },
+}));
+
+/** Stamp Previous Revisions "Superseded" (Revu): a stamp in the middle of every previous revision sheet. */
+function stampSuperseded(sheets: SetSheet[]) {
+  const s = useApp.getState();
+  const now = new Date().toISOString();
+  let n = 0;
+  for (const d of s.docs) {
+    const ms: Markup[] = sheets.filter((sh) => sh.docId === d.id).map((sh) => {
+      const info = d.loaded.pages[sh.page];
+      return { id: crypto.randomUUID(), type: 'stamp', page: sh.page, points: [{ x: info.width / 2, y: info.height / 2 }], style: s.toolDefaults.stamp, subject: toolById('stamp').subject, text: 'SUPERSEDED', author: s.author, created: now, modified: now, status: 'None', label: '', comment: '' };
+    });
+    if (ms.length) { s.addMarkups(ms, d.id); n += ms.length; }
+  }
+  s.setStatus(`Superseded stamp added to ${n} sheet${n === 1 ? '' : 's'}.`);
+}
+
+function SetOptionsDialog({ onClose }: { onClose: () => void }) {
+  const { o, set } = useSetOptions();
+  const Sel = <K extends keyof SetOptions>({ k, label, items }: { k: K; label: string; items: [SetOptions[K] & string, string][] }) => (
+    <div className="form-row"><span>{label}</span>
+      <select aria-label={label} value={o[k] as string} onChange={(e) => set({ [k]: e.target.value } as Partial<SetOptions>)}>{items.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+    </div>
+  );
+  return (
+    <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal" role="dialog" aria-label="Set Options" onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') onClose(); }}>
+        <div className="modal-title">Set Options</div>
+        <div className="scale-dialog">
+          <div className="prop-section">Sorting</div>
+          <Sel k="show" label="Show" items={[['label', 'Page Label'], ['filename', 'File Name'], ['name-label', 'File Name and Page Label'], ['sheetNumber', 'Sheet Number'], ['sheetName', 'Sheet Number and Name']]} />
+          <Sel k="sortBy" label="Sort By" items={[['label', 'Page Label'], ['name-label', 'File Name, Page Label'], ['name-index', 'File Name, Page Index']]} />
+          <Sel k="order" label="Sort Order" items={[['alnum-asc', 'Alphanumeric ascending'], ['alnum-desc', 'Alphanumeric descending'], ['alpha-asc', 'Alphabetic ascending'], ['alpha-desc', 'Alphabetic descending']]} />
+          <div className="prop-section">Revisions</div>
+          <Sel k="filter" label="Revision Filter" items={[['auto', 'Auto'], ['wildcard', 'Wildcard'], ['off', 'Off']]} />
+          {o.filter === 'wildcard' && <div className="form-row"><span>Wildcard</span><input aria-label="Revision wildcard" placeholder="e.g. R#  (* any, # number, ? letter, ; separates)" value={o.pattern} onChange={(e) => set({ pattern: e.target.value })} /></div>}
+          <Sel k="previous" label="Previous Revisions" items={[['hide', 'Hide'], ['gray', 'Gray out'], ['strike', 'Cross out'], ['show', 'Show']]} />
+          <div className="form-row"><label><input type="checkbox" checked={o.stack} onChange={(e) => set({ stack: e.target.checked })} /> Stack revisions (arrow shows the previous ones)</label></div>
+          <div className="modal-actions"><span className="spacer" /><button className="primary" onClick={onClose}>Close</button></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Revu Sets: several PDFs browsed as one set of sheets. Here: the open documents, with revision stacks and the Set options. */
 export function SetsPanel() {
   const s = useApp();
+  const { o } = useSetOptions();
+  const tagState = useTags();
   const [q, setQ] = useState('');
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const [options, setOptions] = useState(false);
   const docs = s.docs;
   const match = (t: string) => !q || t.toLowerCase().includes(q.toLowerCase());
+  const tagged = setSheets(docs, tagState.values, tagState.tags);
+  const sheets: SetSheet[] = sortSheets(docs.flatMap((d) => d.loaded.pages.map((p) => {
+    const t = tagged.find((x) => x.docName === d.name && x.page === p.index)?.values ?? {};
+    return { key: `${d.name}#${p.index}`, docId: d.id, docName: d.name, page: p.index, label: p.label, sheetNumber: t['Sheet Number'], sheetName: t['Sheet Name'] };
+  })), o);
+  const stacks = stackRevisions(sheets, o);
+  const previous = previousRevisions(stacks), latest = latestRevisions(stacks);
+  const pick = (keys: Iterable<string>, what: string) => { const k = new Set(keys); setSel(k); s.setStatus(`Selected ${k.size} ${what}.`); };
+  const items: MenuItem[] = [
+    { label: 'Select All', action: () => pick(sheets.map((x) => x.key), 'sheets') },
+    { label: 'Select Latest Revisions', action: () => pick(latest, 'latest revisions') },
+    { label: 'Select Previous Revisions', disabled: !previous.size, action: () => pick(previous, 'previous revisions') },
+    { sep: true },
+    { label: 'Options…', action: () => setOptions(true) },
+    { label: 'Stamp Previous Revisions "Superseded"', disabled: !previous.size, action: () => stampSuperseded(sheets.filter((x) => previous.has(x.key))) },
+    { sep: true },
+    { label: 'Print Set…', disabled: !docs.length, action: () => openPrint() },
+    { label: 'Search Set', disabled: !docs.length, action: () => s.setPanels({ left: 'search' }) },
+    { label: 'Tags…', disabled: !docs.length, action: () => useTagDialogs.setState({ open: 'tags' }) },
+    { label: 'Export Drawing Log…', disabled: !docs.length, action: () => useTagDialogs.setState({ open: 'log' }) },
+  ];
+  const go = (sh: SetSheet, e: React.MouseEvent) => {
+    if (e.ctrlKey || e.metaKey) { const k = new Set(sel); if (k.has(sh.key)) k.delete(sh.key); else k.add(sh.key); setSel(k); return; }
+    setSel(new Set([sh.key]));
+    s.setActive(sh.docId); s.setPage(sh.page);
+  };
+  const row = (sh: SetSheet, prev: boolean) => (
+    <button key={sh.key} className={`set-sheet ${sh.docId === s.activeId && docs.find((d) => d.id === sh.docId)?.page === sh.page ? 'active' : ''} ${sel.has(sh.key) ? 'selected' : ''} ${prev ? `prev-${o.previous}` : ''}`}
+      aria-label={`Sheet ${displayName(sh, o.show)}${prev ? ' (previous revision)' : ''}`} onClick={(e) => go(sh, e)}>
+      {displayName(sh, o.show)}
+    </button>
+  );
+  const shown = stacks.filter((st) => st.sheets.some((sh) => match(displayName(sh, o.show)) || match(sh.docName)));
   return (
     <div className="sets-panel">
-      <input aria-label="Filter sheets" placeholder="Filter sheets" value={q} onChange={(e) => setQ(e.target.value)} />
-      {docs.map((d) => (
-        <div key={d.id} className="set-doc">
-          <div className="set-doc-name">{d.name}</div>
-          {d.loaded.pages.filter((p) => match(p.label) || match(d.name)).map((p) => (
-            <button key={p.index} className={`set-sheet ${d.id === s.activeId && d.page === p.index ? 'active' : ''}`}
-              onClick={() => { s.setActive(d.id); s.setPage(p.index); }}>
-              {p.label}
-            </button>
-          ))}
-        </div>
-      ))}
+      <div className="layers-toolbar">
+        <button onClick={(e) => setMenu({ x: e.clientX, y: e.clientY, items })}>Sets ▾</button>
+        <input aria-label="Filter sheets" placeholder="Filter sheets" value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
+      {shown.map((st) => {
+        const prevs = st.sheets.filter((sh) => sh !== st.latest);
+        const open = expanded.has(st.base);
+        return (
+          <div key={st.base + st.latest.key} className="set-stack">
+            {row(st.latest, false)}
+            {prevs.length > 0 && o.previous !== 'hide' && o.stack && (
+              <button className="set-stack-toggle" aria-label={`${open ? 'Hide' : 'Show'} previous revisions of ${st.base}`} aria-expanded={open}
+                onClick={() => { const k = new Set(expanded); if (open) k.delete(st.base); else k.add(st.base); setExpanded(k); }}>{open ? '▾' : '▸'} {prevs.length} previous revision{prevs.length === 1 ? '' : 's'}</button>
+            )}
+            {o.previous !== 'hide' && (!o.stack || open) && prevs.map((sh) => row(sh, true))}
+          </div>
+        );
+      })}
       {!docs.length && <p className="muted small">Open several PDFs (Ctrl+O, choose many) to browse them as one set.</p>}
       <div className="prop-actions">
         <button disabled={docs.length < 1} onClick={() => useSheetsDialog.setState({ open: 'batch-link' })}>Batch Link…</button>
@@ -164,6 +267,8 @@ export function SetsPanel() {
         <button disabled={!docs.length} onClick={() => useTagDialogs.setState({ open: 'tags' })}>Tags…</button>
         <button disabled={!docs.length} onClick={() => useTagDialogs.setState({ open: 'log' })}>Export Drawing Log…</button>
       </div>
+      {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
+      {options && <SetOptionsDialog onClose={() => setOptions(false)} />}
     </div>
   );
 }
