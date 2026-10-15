@@ -4076,6 +4076,133 @@ for (const [file, expected] of [
   if (leftTitle) await windowMenu(leftTitle);
 }
 
+// Preferences: Find Hyperlinks in PDF Content, Lock Panning in Fit Width, Automatically Reorder Bookmarks,
+// Enable Single Key Shortcuts (forms), Enable Spell Check.
+{
+  const pd = page.getByRole('dialog', { name: 'Preferences' });
+  const prefs = async (tab, fn) => { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press('Control+k'); await pd.waitFor(); await pd.getByRole('tab', { name: tab }).click(); await fn(); await pd.getByRole('button', { name: 'Close' }).click(); await pd.waitFor({ state: 'hidden' }); };
+  const wm = async (item) => { await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click(); await page.getByRole('menuitem', { name: item }).click(); };
+  const tabs0 = await page.locator('.doc-tab').count();
+  const openFile = async (f) => { const fc = await ctrlO(); await fc.setFiles(f); await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs0); await page.waitForTimeout(600); };
+  const closeActive = async () => {
+    const ok = (d) => d.accept().catch(() => {}); // the unsaved-changes prompt, when there is one
+    page.on('dialog', ok);
+    await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+    await page.getByRole('menuitem', { name: /^Close\b/ }).first().click();
+    await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n, tabs0);
+    page.off('dialog', ok);
+  };
+  // A portrait page whose text holds an address.
+  {
+    const ld = await PDFDocument.create();
+    const pg = ld.addPage([612, 792]);
+    const font = await ld.embedFont(StandardFonts.Helvetica);
+    pg.drawText('Visit http://localhost:4173/?from=pdf for the app', { x: 72, y: 700, size: 14, font });
+    writeFileSync(`${OUT}/urltext.pdf`, await ld.save());
+    await openFile(`${OUT}/urltext.pdf`);
+    await page.keyboard.press('Escape');
+    const box = await svg.boundingBox();
+    const z = box.width / 612;
+    const at = { x: box.x + 150 * z, y: box.y + (792 - 705) * z };
+    await page.mouse.move(at.x - 3, at.y);
+    await page.waitForTimeout(500);
+    await page.mouse.move(at.x, at.y);
+    await page.waitForTimeout(200);
+    assert(await svg.evaluate((el) => el.style.cursor) === 'pointer', 'Find Hyperlinks in PDF Content: the pointer becomes a hand over an address in the page text');
+    await page.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(String(u)); return null; }; });
+    await page.mouse.click(at.x, at.y);
+    await page.waitForTimeout(300);
+    const opened = await page.evaluate(() => window.__opened);
+    assert(opened.length === 1 && opened[0].includes('from=pdf'), `clicking the address opens it in a new tab (${opened.join(', ')}; ${(await page.locator('.statusbar').innerText()).split('\n')[0]})`);
+    await page.mouse.move(at.x + 400 * z, at.y + 200 * z);
+    await page.waitForTimeout(200);
+    assert(await svg.evaluate((el) => el.style.cursor) !== 'pointer', 'beside the address the cursor is the normal one');
+    await prefs('Document', () => pd.getByLabel('Find hyperlinks in PDF content').uncheck());
+    await page.mouse.move(at.x - 3, at.y);
+    await page.waitForTimeout(300);
+    await page.mouse.move(at.x, at.y);
+    await page.waitForTimeout(200);
+    assert(await svg.evaluate((el) => el.style.cursor) !== 'pointer', 'with the preference off the address is plain text');
+    await prefs('Document', () => pd.getByLabel('Find hyperlinks in PDF content').check());
+    // Lock Panning in Fit Width: at the fit-width zoom the Pan tool only scrolls vertically; zoomed in, it pans sideways too.
+    const viewer = page.locator('.viewer').first();
+    await page.locator('.menubar-item > button', { hasText: /^View$/ }).click();
+    await page.getByRole('menuitem', { name: /^Fit Width/ }).click();
+    await page.waitForTimeout(300);
+    await page.keyboard.press('Shift+V');
+    const vb = await viewer.boundingBox();
+    const pan = async () => {
+      await page.mouse.move(vb.x + vb.width / 2, vb.y + vb.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(vb.x + vb.width / 2 - 120, vb.y + vb.height / 2 - 120, { steps: 6 });
+      await page.mouse.up();
+      await page.waitForTimeout(200);
+      return viewer.evaluate((el) => [el.scrollLeft, el.scrollTop]);
+    };
+    const [l1, t1] = await pan();
+    assert(l1 === 0 && t1 > 0, `Lock Panning in Fit Width: the page only moves vertically at the fit-width zoom (${l1}, ${t1})`);
+    await page.keyboard.press('Control+=');
+    await page.waitForTimeout(300);
+    const [l2] = await pan();
+    assert(l2 > 0, `zoomed in, the Pan tool moves the page sideways too (${l2})`);
+    await page.keyboard.press('Escape');
+    await closeActive();
+  }
+  // Automatically Reorder Bookmarks: dragging page 1 to the end moves its bookmark after the others.
+  {
+    await openFile(`${OUT}/bookmarks.pdf`);
+    if (!(await page.locator('.bookmark-row').count())) await wm('Bookmarks');
+    const titles = () => page.locator('.bookmark-row .bm-title').allInnerTexts();
+    await page.locator('.bookmark-row').first().waitFor();
+    assert((await titles()).slice(0, 2).join('|') === 'Floor Plan|Site Plan', `the saved bookmarks open in file order (${(await titles()).join('|')})`);
+    await wm('Thumbnails');
+    await page.locator('.thumb').first().waitFor();
+    const thumbs = page.locator('.thumb');
+    const n = await thumbs.count();
+    await thumbs.first().dragTo(thumbs.nth(n - 1));
+    await page.waitForFunction(() => /Moved page 1 to/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 20000 });
+    await page.waitForFunction(() => !document.querySelector('.busy-overlay'), null, { timeout: 20000 });
+    await wm('Bookmarks');
+    await page.locator('.bookmark-row').first().waitFor();
+    assert((await titles()).slice(0, 2).join('|') === 'Site Plan|Floor Plan', `Automatically Reorder Bookmarks puts the moved page's bookmark after the others (${(await titles()).join('|')})`);
+    await closeActive();
+  }
+  // Enable Single Key Shortcuts: off, R types into a form field; on, it picks the Rectangle tool.
+  {
+    await openFile('tests/fixtures/form.pdf');
+    const field = page.locator('input.form-field:not([type=checkbox]):not([type=radio])').first();
+    await field.waitFor();
+    await field.click();
+    await page.keyboard.press('r');
+    assert((await field.inputValue()).endsWith('r'), 'single key shortcuts off: R types into the field');
+    await prefs('Forms', () => pd.getByLabel('Enable single key shortcuts').check());
+    await field.click();
+    await page.keyboard.press('r');
+    await page.waitForTimeout(200);
+    assert(await page.locator('.tb-btn.active[title^="Rectangle"]').count() === 1, 'Enable Single Key Shortcuts: R in a form field picks the Rectangle tool');
+    assert(!(await field.inputValue()).endsWith('rr'), 'the key is not typed into the field');
+    await prefs('Forms', () => pd.getByLabel('Enable single key shortcuts').uncheck());
+    await page.keyboard.press('Escape');
+    await closeActive();
+  }
+  // Enable Spell Check off: comment boxes stop underlining.
+  {
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('r');
+    const a = await toScreen(30, 30), b = await toScreen(34, 26);
+    await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 4 }); await page.mouse.up();
+    await page.waitForTimeout(300);
+    if (!(await page.locator('.props').count())) await page.locator('.side-right button[title="Properties"]').click();
+    await page.locator('.props textarea').first().waitFor();
+    assert(await page.locator('.props textarea').first().getAttribute('spellcheck') === 'true', 'comment boxes are spell checked by default');
+    await prefs('Spelling', () => pd.getByLabel('Enable spell check').uncheck());
+    assert(await page.locator('.props textarea').first().getAttribute('spellcheck') === 'false', 'Enable Spell Check off turns the underline off in comment boxes');
+    await prefs('Spelling', () => pd.getByLabel('Enable spell check').check());
+    await page.keyboard.press('Delete');
+    await page.keyboard.press('Escape');
+  }
+}
+
 assert(errors.length === 0, `no page errors (${errors.join(' | ')})`);
 await browser.close();
 console.log('E2E PASSED');

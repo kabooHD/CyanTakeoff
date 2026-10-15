@@ -32,6 +32,8 @@ import { toolById } from '../tools/tools';
 import { CURVABLE, arcSegment, bezierAt, closedType, flatPoints, hasCurves, insertHandle, removeHandle, segments, toggleCurve, type Handles } from '../model/curves';
 import { MarkupShape, handlePoints } from './renderMarkup';
 import { cutoutAt, hitTest, markupBounds, outline } from './hit';
+import { urlAt, urlRects, type UrlRect } from '../model/urls';
+import { singleKeyInField } from './toolShortcut';
 import { ROTATION_FIELD, angleAbout, canRotate, normDeg, rotateHandle, rotated, rotationCenter, snapRotation, unrotatePt } from '../model/rotate';
 import { aspectCorner, hasScaleHandles, oppositeCorner, scaleAbout, scaleFactor, scaleHandles } from '../model/scale';
 import { bandOf, inBand } from '../model/select';
@@ -156,6 +158,11 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const detailRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [pdfPage, setPdfPage] = useState<PDFPageProxy | null>(null);
+  // Find Hyperlinks in PDF Content: the addresses in the page's text, and the one under the pointer.
+  const urlBoxes = useRef<UrlRect[]>([]);
+  const [urlHit, setUrlHit] = useState<UrlRect | null>(null);
+  // The zoom Fit Width set, for Lock Panning in Fit Width.
+  const fitWidthZoom = useRef(-1);
   const renderedPage = useRef<PDFPageProxy | null>(null);
   const [renderedIdx, setRenderedIdx] = useState(-1);
   const [baseScale, setBaseScale] = useState(0);
@@ -257,6 +264,15 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     const t = setTimeout(() => { snapGeometry(pdfPage, page.viewport).then((g) => alive && setGeom(g)).catch(() => {}); }, 300);
     return () => { alive = false; clearTimeout(t); };
   }, [pdfPage, page.viewport, wantGeom]);
+  const findHyperlinks = s.prefs.findHyperlinks;
+  useEffect(() => {
+    urlBoxes.current = [];
+    setUrlHit(null);
+    if (!pdfPage || !findHyperlinks) return;
+    let alive = true;
+    pageText(pdfPage, page.viewport).then((boxes) => { if (alive) urlBoxes.current = urlRects(boxes); }).catch(() => {});
+    return () => { alive = false; };
+  }, [pdfPage, page.viewport, findHyperlinks]);
 
   // ----- fit / zoom helpers -----
   const fitPage = useCallback(() => {
@@ -266,7 +282,9 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   }, [page, s]);
   const fitWidth = useCallback(() => {
     const el = scrollRef.current!;
-    s.setViewZoom(pane, (el.clientWidth - PAD * 2) / rotatedSize(page.width, page.height, s.viewRotation).w);
+    const z = (el.clientWidth - PAD * 2) / rotatedSize(page.width, page.height, s.viewRotation).w;
+    fitWidthZoom.current = z;
+    s.setViewZoom(pane, z);
   }, [page, s]);
   const zoomAt = useCallback((factor: number, cx?: number, cy?: number) => {
     const el = scrollRef.current!;
@@ -882,6 +900,12 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
 
     if (tool === 'select') {
       const tol = (e.pointerType === 'touch' ? 14 : 5) / zoom;
+      // Find Hyperlinks in PDF Content: an address in the page's text opens on click (a markup on top of it wins).
+      if (urlHit && !markups.some((m) => hitTest(m, raw, tol))) {
+        window.open(urlHit.uri, '_blank', 'noopener');
+        s.setStatus(`Opened ${urlHit.uri}`);
+        return;
+      }
       // The viewport highlighted in the Measurements panel: drag its edge to move, a corner to resize.
       const av = viewports.find((v) => v.id === s.activeViewport);
       if (av) {
@@ -1221,13 +1245,18 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     const raw = toPage(e);
     if (longPress.current && Math.hypot(e.clientX - longPress.current.x, e.clientY - longPress.current.y) > 8) cancelLongPress();
     setCursor(raw, scaleFor(raw));
+    if (urlBoxes.current.length && !drag && (tool === 'select' || tool === 'pan')) {
+      const u = urlAt(urlBoxes.current, raw, 2 / zoom);
+      if (u !== urlHit) setUrlHit(u);
+    } else if (urlHit) setUrlHit(null);
     if (s.offsetOp) setOffsetCur(raw);
     if (s.tool === 'dynamic-fill') { fillMove(raw); setFillCursor(raw); }
     if (s.tool === 'eraser') { setFillCursor(raw); if (eraseSnapshot.current) { eraseAt(raw); return; } }
     if (drag) {
       if (drag.kind === 'pan') {
         const el = scrollRef.current!;
-        el.scrollLeft = drag.left - (e.clientX - drag.sx);
+        // Lock Panning in Fit Width: at the fit-width zoom the page only moves vertically.
+        if (!(s.prefs.lockPanFitWidth && Math.abs(zoom - fitWidthZoom.current) < 1e-9)) el.scrollLeft = drag.left - (e.clientX - drag.sx);
         el.scrollTop = drag.top - (e.clientY - drag.sy);
       } else if (drag.kind === 'move') {
         const dx = raw.x - drag.start.x, dy = raw.y - drag.start.y;
@@ -1747,7 +1776,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   }
 
   const editingMarkup = editing ? doc.markups.find((m) => m.id === editing) : null;
-  const cursor = align ? 'crosshair' : tool === 'pan' ? (drag?.kind === 'pan' ? 'grabbing' : 'grab')
+  const cursor = align ? 'crosshair' : urlHit && !drag && (tool === 'select' || tool === 'pan') ? 'pointer' : tool === 'pan' ? (drag?.kind === 'pan' ? 'grabbing' : 'grab')
     : tool === 'select' ? 'default' : tool === 'zoom' ? 'zoom-in' : 'crosshair';
 
   return (
@@ -2100,12 +2129,13 @@ function MeasurePreview({ markup }: { markup: Markup | null }) {
 
 function TextEditor({ m, zoom, onDone }: { m: Markup; zoom: number; onDone: (t: string) => void }) {
   const [text, setText] = useState(m.text ?? '');
+  const spell = useApp((x) => x.prefs.spellCheck);
   const box = m.type === 'callout' ? [m.points[1], m.points[2]] : m.type === 'cloudplus' ? [m.points[2], m.points[3]]
     : m.type === 'typewriter' ? typewriterBox(m.points[0], text, m.style.fontSize) : [m.points[0], m.points[1]];
   const x = Math.min(box[0].x, box[1].x), y = Math.min(box[0].y, box[1].y);
   const w = Math.abs(box[1].x - box[0].x), h = Math.abs(box[1].y - box[0].y);
   return (
-    <textarea className="text-editor" spellCheck lang="en" autoFocus value={text}
+    <textarea className="text-editor" spellCheck={spell} lang="en" autoFocus value={text}
       style={{ left: x * zoom, top: y * zoom, width: w * zoom, height: h * zoom, fontSize: m.style.fontSize * zoom, color: m.style.textColor ?? m.style.color, fontFamily: cssFamily(textStyleOf(m.style).font), fontWeight: m.style.bold ? 'bold' : undefined, fontStyle: m.style.italic ? 'italic' : undefined, textAlign: m.style.align, lineHeight: textStyleOf(m.style).lineHeight }}
       onChange={(e) => setText(e.target.value)}
       onBlur={() => onDone(text)}
@@ -2128,7 +2158,10 @@ function FormLayer({ doc, pageIdx, zoom, interactive }: { doc: DocState; pageIdx
         const value = f.name in doc.formValues ? doc.formValues[f.name] : f.value;
         const set = (v: string | boolean) => s.setFieldValue(f.name, v);
         const key = `${f.name}:${i}`;
-        const stop = { onPointerDown: (e: React.PointerEvent) => e.stopPropagation(), onKeyDown: (e: React.KeyboardEvent) => e.stopPropagation() };
+        const stop = {
+          onPointerDown: (e: React.PointerEvent) => e.stopPropagation(),
+          onKeyDown: (e: React.KeyboardEvent) => { e.stopPropagation(); if (singleKeyInField(e.nativeEvent)) { e.preventDefault(); (e.target as HTMLElement).blur(); } },
+        };
         switch (f.type) {
           case 'text':
             return f.multiline

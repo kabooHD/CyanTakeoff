@@ -1045,17 +1045,26 @@ folders, manual correlation and saved .bcx batches).
   display when opening (Fit Page, Fit Width, Actual Size), maximum zoom,
   Rotate all pages by default (Shift+Alt+Plus / Minus turn every page),
   Remember last page (a file reopens on the page it was closed at; off by
-  default here, kept in the browser by file name).
+  default here, kept in the browser by file name), Automatically Reorder
+  Bookmarks (after a thumbnail drag, top-level bookmarks are put in the
+  order of their pages; others keep their place), Redirect Links and
+  Bookmarks when Inserting Pages with Slip Sheet (off: they stay on the
+  superseded page), Find Hyperlinks in PDF Content (an address in the
+  page's text shows a hand cursor and opens in a new tab on click; a
+  markup on top of it wins).
 - Navigation: what the mouse wheel does in single page and in continuous
   mode (zoom or scroll; Ctrl+wheel always zooms, Shift+wheel always
-  scrolls), reverse wheel, sensitivity.
+  scrolls), reverse wheel, sensitivity, Lock Panning in Fit Width (at the
+  zoom Fit Width set, dragging the page only moves it vertically).
 - Markup: Dynamically set as default (a property changed on a markup
   becomes the tool's default), Reuse tools, Autosize text box and callout
   markups after typing, author and date on hover, Copy highlighted text
   into markup comment, snapshot resolution, Include markups in snapshots.
 - Sketch: rotation input relative to the page or to the connected line;
   ellipse by width/height or by radius.
-- Forms: field highlight colour and opacity, Highlight fields.
+- Forms: field highlight colour and opacity, Highlight fields, Enable
+  Single Key Shortcuts (off by default: a tool's one-key shortcut such as R
+  or L then works while a form field has the focus; the field loses it).
 - Signature: digest algorithm (SHA-256 default, SHA-384, SHA-512).
 - Document: Page Layout when opening (Single Page, Continuous, by page
   size: pages under 14 in open Continuous), Maximum Zoom; Revu also has
@@ -1067,9 +1076,10 @@ folders, manual correlation and saved .bcx batches).
   on Export, rich text comments, dominant-markup value, dim percent.
 - Layers: Hide Child Layers when Hiding Parent Layers, Show Layers on Page
   Only (how the panel opens).
-- Spelling: Include Upper Case Words (all-caps words are skipped unless
-  on), Custom Words; Revu also has auto-complete lists and dictionary
-  imports.
+- Spelling: Enable Spell Check (the browser's underline while typing),
+  Include Upper Case Words (all-caps words are skipped unless on), Spell
+  Check Color (the default squiggly colour of Markup Spelling Mistakes),
+  Custom Words; Revu also has auto-complete lists and dictionary imports.
 - Not ours: language, startup mode, 3D mouse, keyboard accelerators,
   scrollbars, digital ID folders (browsers choose files per signature).
 

@@ -216,7 +216,7 @@ function PagesForm({ op }: { op: PagesOp }) {
         const done = await s.transformDoc(async (lib) => {
           if (insert) {
             // Front to back from the end, so the positions still to come stay valid.
-            for (const { src, at: i } of [...matched].sort((a, b) => b.at - a.at)) await insertRevisedPage(lib, i, file.doc, src, slipCopy);
+            for (const { src, at: i } of [...matched].sort((a, b) => b.at - a.at)) await insertRevisedPage(lib, i, file.doc, src, slipCopy, s.prefs.redirectOnSlipSheet);
           } else for (const { src, at: i } of matched) await replacePage(lib, i, file.doc, src, slipCopy);
           if (appendNew && extra.length) await insertPages(lib, file.doc, lib.getPageCount(), extra);
         }, `Slip Sheet: ${matched.length} sheet(s) ${insert ? 'inserted in front of the current ones' : 'replaced'}${slipCopy ? ' with markups carried forward' : ''}${appendNew && extra.length ? `, ${extra.length} new sheet(s) added` : ''}`);

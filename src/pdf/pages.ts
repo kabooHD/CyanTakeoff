@@ -75,9 +75,10 @@ export async function replacePage(doc: PDFDocument, at: number, src: PDFDocument
 /**
  * Insert page `srcIndex` of `src` in front of page `at` (Slip Sheet: Insert
  * Revised Pages before Current Pages), optionally with copies of the
- * current page's markups; links and bookmarks move to the new page.
+ * current page's markups; links and bookmarks move to the new page unless
+ * `redirect` is off (Preferences > Document > Redirect Links and Bookmarks).
  */
-export async function insertRevisedPage(doc: PDFDocument, at: number, src: PDFDocument, srcIndex: number, copyMarkups = true) {
+export async function insertRevisedPage(doc: PDFDocument, at: number, src: PDFDocument, srcIndex: number, copyMarkups = true, redirect = true) {
   const old = doc.getPage(at);
   const [fresh] = await doc.copyPages(src, [srcIndex]);
   fresh.node.delete(N('Annots'));
@@ -100,7 +101,7 @@ export async function insertRevisedPage(doc: PDFDocument, at: number, src: PDFDo
     }
   }
   doc.insertPage(at, fresh);
-  retargetPage(doc, old.ref, fresh.ref);
+  if (redirect) retargetPage(doc, old.ref, fresh.ref);
 }
 
 /** Point links and bookmarks that went to page `from` at page `to` instead. */

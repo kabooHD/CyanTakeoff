@@ -41,6 +41,8 @@ import { pickFile } from './toolActions';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { openPagesDialog } from './PagesDialog';
 import { deletePages, extractPages, movePage, rotatePages, writePageLabels } from '../pdf/pages';
+import { readBookmarks, writeBookmarks } from '../pdf/bookmarks';
+import { isPageOrdered, reorderByPage } from '../model/bookmarkOrder';
 import { PDFDocument } from 'pdf-lib';
 import { serialize } from '../model/store';
 import { copyPages, hasPageClipboard, pastePages } from './pageClipboard';
@@ -270,7 +272,11 @@ function Thumbnails({ doc }: { doc: DocState }) {
           onDrop={(e) => {
             e.preventDefault(); e.stopPropagation();
             const from = drag; setDrag(null);
-            if (from !== null && from !== p.index) s.transformDoc((lib) => movePage(lib, from, p.index), `Moved page ${from + 1} to ${p.index + 1}`, p.index);
+            if (from !== null && from !== p.index) s.transformDoc((lib) => {
+              movePage(lib, from, p.index);
+              // Preferences > Document > Automatically Reorder Bookmarks: top-level bookmarks follow their pages.
+              if (s.prefs.reorderBookmarks) { const list = readBookmarks(lib); if (!isPageOrdered(list)) writeBookmarks(lib, reorderByPage(list)); }
+            }, `Moved page ${from + 1} to ${p.index + 1}`, p.index);
           }}
           onDragEnd={() => setDrag(null)}
           onContextMenu={(e) => onMenu(e, p.index)}>
@@ -513,9 +519,9 @@ function Properties() {
       <div className="prop-section">General</div>
       <Row label="Subject"><input value={m.subject} onChange={(e) => upd(() => ({ subject: e.target.value }))} /></Row>
       <Row label="Label"><input value={m.label} onChange={(e) => upd(() => ({ label: e.target.value }))} /></Row>
-      <Row label="Comments"><textarea rows={3} spellCheck lang="en" value={m.comment} onChange={(e) => upd(() => ({ comment: e.target.value }))} /></Row>
+      <Row label="Comments"><textarea rows={3} spellCheck={s.prefs.spellCheck} lang="en" value={m.comment} onChange={(e) => upd(() => ({ comment: e.target.value }))} /></Row>
       {(m.type === 'textbox' || m.type === 'callout') && sel.length === 1 && (
-        <Row label="Text"><textarea rows={3} spellCheck lang="en" value={m.text ?? ''} onChange={(e) => upd(() => ({ text: e.target.value }))} /></Row>
+        <Row label="Text"><textarea rows={3} spellCheck={s.prefs.spellCheck} lang="en" value={m.text ?? ''} onChange={(e) => upd(() => ({ text: e.target.value }))} /></Row>
       )}
       <Row label="Status">
         <StatusSelect m={m} ids={sel.map((x) => x.id)} />

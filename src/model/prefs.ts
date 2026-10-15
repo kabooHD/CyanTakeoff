@@ -65,6 +65,18 @@ export interface Prefs {
   rotateAllPages: boolean;
   /** Remember Last Page: a file reopens on the page it was closed at. */
   rememberLastPage: boolean;
+  /** Automatically Reorder Bookmarks: top-level bookmarks follow their pages when thumbnails are reordered. */
+  reorderBookmarks: boolean;
+  /** Redirect Links and Bookmarks when Inserting Pages with Slip Sheet: they point at the revised page. */
+  redirectOnSlipSheet: boolean;
+  /** Find Hyperlinks in PDF Content: web addresses in the page's text are clickable. */
+  findHyperlinks: boolean;
+  // Navigation
+  /** Lock Panning in Fit Width: dragging the page at the fit-width zoom only moves it vertically. */
+  lockPanFitWidth: boolean;
+  // Forms
+  /** Enable Single Key Shortcuts: a tool's one-key shortcut works while a form field has the focus. */
+  singleKeyInForms: boolean;
   // Markups List
   /** Zoom to fit a markup when it is selected in the list. */
   zoomFitOnSelect: boolean;
@@ -81,6 +93,10 @@ export interface Prefs {
   spellUpperCase: boolean;
   /** Custom words (one per line) the spell checker accepts. */
   customWords: string;
+  /** Enable Spell Check: text being typed is underlined by the browser's checker. */
+  spellCheck: boolean;
+  /** Spell Check Color: the squiggly colour of Markup Spelling Mistakes. */
+  spellColor: string;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -93,9 +109,10 @@ export const DEFAULT_PREFS: Prefs = {
   fillSize: 2, fillBoundarySize: 2, fillColor: '#00a0ff', fillBoundaryColor: '#ff4d00', fillSpeed: 'Medium', fillSensitivity: 'Medium', fillHideMarkups: false,
   gridSpacing: 12, snapSensitivity: 10, snapColor: '#3a7bd5',
   maxZoom: 6400, defaultLayout: 'single', openDisplay: 'fitPage', rotateAllPages: false, rememberLastPage: false,
+  reorderBookmarks: true, redirectOnSlipSheet: true, findHyperlinks: true, lockPanFitWidth: true, singleKeyInForms: false,
   zoomFitOnSelect: false, wrapComments: false, filteredDim: 75,
   hideChildLayers: true, layersOnPageOnly: false,
-  spellUpperCase: false, customWords: '',
+  spellUpperCase: false, customWords: '', spellCheck: true, spellColor: '#ff0000',
 };
 
 /** Fill in defaults for a saved (possibly older) preferences object. */

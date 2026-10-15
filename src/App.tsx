@@ -79,7 +79,7 @@ export function App() {
   useEffect(() => { const st = useApp.getState(); if (st.prefs.showRecentOnStartup && !st.docs.length) st.setPanels({ left: 'files' }); }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isEditable(e.target)) return;
+      if (isEditable(e.target)) return; // form fields: see singleKeyInField (Viewer's form layer)
       const s = useApp.getState();
       // Saving or a page operation is in progress: edits now would be lost when it finishes.
       if (s.busy) { e.preventDefault(); return; }

@@ -322,6 +322,9 @@ filling, image signatures, redaction and OCR.
   Markup > Drag Behavior for Shapes; required form fields tinted red
 - [x] Preferences > Document: display when opening, Rotate all pages by
   default, Remember last page
+- [x] Preferences: Find Hyperlinks in PDF Content, Automatically Reorder
+  Bookmarks, Redirect Links on Slip Sheet, Lock Panning in Fit Width, Enable
+  Single Key Shortcuts (forms), Enable Spell Check and its colour
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

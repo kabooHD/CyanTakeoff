@@ -199,6 +199,9 @@ function PreferencesDialog() {
         {select('openDisplay', 'Display when opening', [['fitPage', 'Fit Page'], ['fitWidth', 'Fit Width'], ['actual', 'Actual Size']])}
         {check('rotateAllPages', 'Rotate all pages by default', 'Rotate Clockwise / Counterclockwise (Shift+Alt+Plus / Minus) turn every page')}
         {check('rememberLastPage', 'Remember last page', 'A file reopens on the page it was closed at')}
+        {check('reorderBookmarks', 'Automatically reorder bookmarks', 'Top-level bookmarks follow their pages when thumbnails are reordered')}
+        {check('redirectOnSlipSheet', 'Redirect links and bookmarks when inserting pages with Slip Sheet')}
+        {check('findHyperlinks', 'Find hyperlinks in PDF content', 'Web addresses in the page text open on click')}
         <label className="pref-row"><span>Maximum zoom</span><input aria-label="Maximum zoom" type="number" min={400} max={6400} step={100} value={p.maxZoom} onChange={(e) => set({ maxZoom: Math.max(400, Math.min(6400, Number(e.target.value) || 6400)) })} /> %</label>
       </>
     ),
@@ -228,7 +231,9 @@ function PreferencesDialog() {
     ),
     Spelling: (
       <>
+        {check('spellCheck', 'Enable spell check', 'Text being typed is underlined by the browser\'s checker')}
         {check('spellUpperCase', 'Include upper case words')}
+        <label className="pref-row"><span>Spell check colour</span><input aria-label="Spell check colour" type="color" value={p.spellColor} onChange={(e) => set({ spellColor: e.target.value })} /></label>
         <label className="pref-row pref-col"><span>Custom words (one per line)</span><textarea aria-label="Custom words" rows={5} value={p.customWords} onChange={(e) => set({ customWords: e.target.value })} /></label>
       </>
     ),
@@ -237,6 +242,7 @@ function PreferencesDialog() {
         {select('wheelSingle', 'Single page mode: mouse wheel', [['zoom', 'Zooms'], ['scroll', 'Scrolls']])}
         {select('wheelContinuous', 'Continuous mode: mouse wheel', [['zoom', 'Zooms'], ['scroll', 'Scrolls']])}
         {check('reverseWheel', 'Reverse mouse wheel when zooming')}
+        {check('lockPanFitWidth', 'Lock panning in Fit Width', 'At the fit-width zoom, dragging the page only moves it vertically')}
         <label className="pref-row"><span>Sensitivity</span><input aria-label="Wheel sensitivity" type="range" min={1} max={10} value={p.wheelSensitivity} onChange={(e) => set({ wheelSensitivity: Number(e.target.value) })} /> {p.wheelSensitivity}</label>
         <p className="muted small">Ctrl+wheel always zooms and Shift+wheel always scrolls. Synchronize Views is in the View menu.</p>
       </>
@@ -277,6 +283,7 @@ function PreferencesDialog() {
         <label className="pref-row"><span>Highlight colour</span><input aria-label="Field highlight colour" type="color" value={p.fieldHighlightColor} onChange={(e) => set({ fieldHighlightColor: e.target.value })} /></label>
         <label className="pref-row"><span>Highlight opacity</span><input aria-label="Field highlight opacity" type="range" min={0} max={100} value={p.fieldHighlightOpacity} onChange={(e) => set({ fieldHighlightOpacity: Number(e.target.value) })} /> {p.fieldHighlightOpacity}%</label>
         <label className="pref-row"><input type="checkbox" checked={!s.toggles.noFieldHighlight} onChange={() => s.toggle('noFieldHighlight')} /> Highlight fields</label>
+        {check('singleKeyInForms', 'Enable single key shortcuts', 'A tool\'s one-key shortcut (R, A, L…) works while a form field has the focus')}
       </>
     ),
     Signature: (

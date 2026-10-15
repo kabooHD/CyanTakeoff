@@ -249,7 +249,7 @@ export async function markSpellingMistakes(d: DocState, pages: number[], color: 
 export function SpellContentDialog() {
   const open = useSpellContent((x) => x.open);
   const d = useApp((s) => s.docs.find((x) => x.id === s.activeId));
-  const [color, setColor] = useState('#ff0000');
+  const [color, setColor] = useState(() => useApp.getState().prefs.spellColor);
   const [sugg, setSugg] = useState(true);
   const [range, setRange] = useState<'all' | 'current' | 'custom'>('all');
   const [custom, setCustom] = useState('1');
