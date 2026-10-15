@@ -1213,6 +1213,47 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const pd = page.getByRole('dialog', { name: 'Preferences' });
   await pd.waitFor();
   assert(await pd.getByLabel('User').inputValue() !== '', 'Preferences > General shows the user name');
+  // Document: Rotate all pages by default; Remember last page; display when opening.
+  await pd.getByRole('tab', { name: 'Document' }).click();
+  await pd.getByLabel('Rotate all pages by default').check();
+  await pd.getByRole('button', { name: 'Close' }).click();
+  await pd.waitFor({ state: 'hidden' });
+  await page.keyboard.press('Shift+Alt+=');
+  await page.waitForFunction(() => /Rotated clockwise \(all pages\)/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 20000 });
+  assert(true, 'Rotate all pages by default turns every page with Shift+Alt+Plus');
+  await page.keyboard.press('Shift+Alt+-');
+  await page.waitForFunction(() => /Rotated counterclockwise \(all pages\)/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 20000 });
+  await page.keyboard.press('Control+k');
+  await pd.waitFor();
+  await pd.getByRole('tab', { name: 'Document' }).click();
+  await pd.getByLabel('Rotate all pages by default').uncheck();
+  await pd.getByLabel('Remember last page').check();
+  await pd.getByLabel('Display when opening').selectOption('fitWidth');
+  await pd.getByRole('button', { name: 'Close' }).click();
+  await pd.waitFor({ state: 'hidden' });
+  {
+    const tabs0 = await page.locator('.doc-tab').count();
+    const openSaved = async () => { const fc = await ctrlO(); await fc.setFiles(`${OUT}/saved.pdf`); await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs0); await page.waitForTimeout(600); };
+    const closeActive = async () => { await page.locator('.menubar-item > button', { hasText: /^File$/ }).click(); await page.getByRole('menuitem', { name: /^Close\b/ }).first().click(); await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n, tabs0); };
+    await openSaved();
+    const zoomOpened = await zoomOf();
+    await page.locator('.menubar-item > button', { hasText: /^View$/ }).click();
+    await page.getByRole('menuitem', { name: /^Fit Width/ }).click();
+    await page.waitForTimeout(300);
+    assert(Math.abs(await zoomOf() - zoomOpened) <= 1, `Display when opening = Fit Width opens at the fit-width zoom (${zoomOpened}% vs ${await zoomOf()}%)`);
+    await page.keyboard.press('End');
+    await page.waitForFunction(() => /\(2 of 2\)/.test(document.querySelector('.statusbar')?.textContent ?? ''));
+    await closeActive();
+    await openSaved();
+    assert((await page.locator('.statusbar').innerText()).includes('(2 of 2)'), 'Remember last page reopens the file on the page it was closed at');
+    await closeActive();
+  }
+  await page.keyboard.press('Control+k');
+  await pd.waitFor();
+  await pd.getByRole('tab', { name: 'Document' }).click();
+  await pd.getByLabel('Remember last page').uncheck();
+  await pd.getByLabel('Display when opening').selectOption('fitPage');
+  await pd.getByRole('tab', { name: 'General' }).click();
   // Grid & Snap: the grid spacing drives the drawn grid; Markups List: Zoom Fit Markups when selected.
   await pd.getByRole('tab', { name: 'Grid & Snap' }).click();
   await pd.getByLabel('Grid spacing').fill('24');
@@ -1363,7 +1404,8 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.locator('.thumbs-toolbar input[type=range]').fill('130');
     // Undo the cut, the relabel and the paste so the page-operation checks below see the document as before.
     await page.evaluate(() => document.activeElement?.blur?.());
-    for (let i = 0; i < 3; i++) { await page.keyboard.press('Control+z'); await page.waitForTimeout(400); }
+    // Each undo of a page operation reloads the file: wait for the busy overlay to clear before the next one.
+    for (let i = 0; i < 3; i++) { await page.keyboard.press('Control+z'); await page.waitForTimeout(200); await page.waitForFunction(() => !document.querySelector('.busy-overlay'), null, { timeout: 20000 }); await page.waitForTimeout(200); }
     await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n})`), n1);
     assert(!(await page.locator('.thumb-label').allInnerTexts()).some((t) => t.startsWith('X-1')), 'undo reverts the thumbnail page commands');
     // Cut Pages on the first page (the one with the legend) and Undo must bring its markups back.

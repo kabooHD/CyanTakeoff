@@ -1041,6 +1041,11 @@ folders, manual correlation and saved .bcx batches).
 - General: User (author of new markups), Theme (Light/Dark), tab
   truncation (end or start of long names), Show recent files on startup
   (File Access panel), full-screen crosshair.
+- Document: page layout when opening (Single, Continuous, by page size),
+  display when opening (Fit Page, Fit Width, Actual Size), maximum zoom,
+  Rotate all pages by default (Shift+Alt+Plus / Minus turn every page),
+  Remember last page (a file reopens on the page it was closed at; off by
+  default here, kept in the browser by file name).
 - Navigation: what the mouse wheel does in single page and in continuous
   mode (zoom or scroll; Ctrl+wheel always zooms, Shift+wheel always
   scrolls), reverse wheel, sensitivity.

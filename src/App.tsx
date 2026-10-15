@@ -216,8 +216,9 @@ export function App() {
         case 'Ctrl+Shift+R': return run(() => d && openPagesDialog('rotate'));
         case 'Ctrl+Shift+M': return run(() => d && openPagesDialog('flatten'));
         case 'Ctrl+Shift+U': return run(() => d && unflattenMarkups());
-        case 'Shift+Alt++': case 'Shift+Alt+=': return run(() => d && s.transformDoc((lib) => rotatePages(lib, [d.page], 90), 'Rotated clockwise'));
-        case 'Shift+Alt+-': case 'Shift+Alt+_': return run(() => d && s.transformDoc((lib) => rotatePages(lib, [d.page], -90), 'Rotated counterclockwise'));
+        // Rotate all Pages by Default (Preferences > Document): every page turns, not only the current one.
+        case 'Shift+Alt++': case 'Shift+Alt+=': return run(() => d && s.transformDoc((lib) => rotatePages(lib, s.prefs.rotateAllPages ? d.loaded.pages.map((p) => p.index) : [d.page], 90), `Rotated clockwise${s.prefs.rotateAllPages ? ' (all pages)' : ''}`));
+        case 'Shift+Alt+-': case 'Shift+Alt+_': return run(() => d && s.transformDoc((lib) => rotatePages(lib, s.prefs.rotateAllPages ? d.loaded.pages.map((p) => p.index) : [d.page], -90), `Rotated counterclockwise${s.prefs.rotateAllPages ? ' (all pages)' : ''}`));
         case 'Ctrl+H': return run(() => s.splitView('h'));
         case 'Ctrl+2': return run(() => s.splitView('v'));
         case 'Ctrl+Shift+2': case 'Ctrl+Shift+@': return run(s.unsplit);

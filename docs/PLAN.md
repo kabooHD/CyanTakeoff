@@ -320,6 +320,8 @@ filling, image signatures, redaction and OCR.
 - [x] Image tool: drag a rectangle to fit the picture
 - [x] Shape tools: drag draws a rectangle (Shift: square); Preferences >
   Markup > Drag Behavior for Shapes; required form fields tinted red
+- [x] Preferences > Document: display when opening, Rotate all pages by
+  default, Remember last page
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

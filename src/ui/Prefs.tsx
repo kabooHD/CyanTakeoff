@@ -196,6 +196,9 @@ function PreferencesDialog() {
     Document: (
       <>
         {select('defaultLayout', 'Page layout when opening', [['single', 'Single Page'], ['continuous', 'Continuous'], ['auto', 'By page size (under 14 in: Continuous)']])}
+        {select('openDisplay', 'Display when opening', [['fitPage', 'Fit Page'], ['fitWidth', 'Fit Width'], ['actual', 'Actual Size']])}
+        {check('rotateAllPages', 'Rotate all pages by default', 'Rotate Clockwise / Counterclockwise (Shift+Alt+Plus / Minus) turn every page')}
+        {check('rememberLastPage', 'Remember last page', 'A file reopens on the page it was closed at')}
         <label className="pref-row"><span>Maximum zoom</span><input aria-label="Maximum zoom" type="number" min={400} max={6400} step={100} value={p.maxZoom} onChange={(e) => set({ maxZoom: Math.max(400, Math.min(6400, Number(e.target.value) || 6400)) })} /> %</label>
       </>
     ),

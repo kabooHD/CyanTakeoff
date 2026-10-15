@@ -59,6 +59,12 @@ export interface Prefs {
   maxZoom: number;
   /** Page layout a document opens in: single, continuous, or by page size (pages under 14 in: continuous). */
   defaultLayout: 'single' | 'continuous' | 'auto';
+  /** How a document shows when opened: fit the page, fit its width, or 100 %. */
+  openDisplay: 'fitPage' | 'fitWidth' | 'actual';
+  /** Rotate all Pages by Default: Rotate Clockwise / Counterclockwise turn every page, not only the current one. */
+  rotateAllPages: boolean;
+  /** Remember Last Page: a file reopens on the page it was closed at. */
+  rememberLastPage: boolean;
   // Markups List
   /** Zoom to fit a markup when it is selected in the list. */
   zoomFitOnSelect: boolean;
@@ -86,7 +92,7 @@ export const DEFAULT_PREFS: Prefs = {
   hashAlgorithm: 'sha256',
   fillSize: 2, fillBoundarySize: 2, fillColor: '#00a0ff', fillBoundaryColor: '#ff4d00', fillSpeed: 'Medium', fillSensitivity: 'Medium', fillHideMarkups: false,
   gridSpacing: 12, snapSensitivity: 10, snapColor: '#3a7bd5',
-  maxZoom: 6400, defaultLayout: 'single',
+  maxZoom: 6400, defaultLayout: 'single', openDisplay: 'fitPage', rotateAllPages: false, rememberLastPage: false,
   zoomFitOnSelect: false, wrapComments: false, filteredDim: 75,
   hideChildLayers: true, layersOnPageOnly: false,
   spellUpperCase: false, customWords: '',
@@ -130,4 +136,17 @@ export function rgbaOf(hex: string, opacity: number): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
   const n = m ? parseInt(m[1], 16) : 0xcce0ff;
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${Math.max(0, Math.min(100, opacity)) / 100})`;
+}
+
+// Remember Last Page (Preferences > Document): the page each file was closed at, kept in the browser.
+const LAST_PAGES = 'cyantakeoff:last-pages';
+const lastPages = (): Record<string, number> => { try { return JSON.parse(localStorage.getItem(LAST_PAGES) ?? '{}'); } catch { return {}; } };
+export const lastPageOf = (name: string): number => lastPages()[name] ?? 0;
+export function rememberLastPage(name: string, page: number) {
+  try {
+    const m = lastPages();
+    delete m[name];
+    const entries = [...Object.entries(m), [name, page] as [string, number]].slice(-200);
+    localStorage.setItem(LAST_PAGES, JSON.stringify(Object.fromEntries(entries)));
+  } catch { /* storage unavailable */ }
 }

@@ -1,4 +1,4 @@
-import { layoutForPage, withDefaults, type Prefs } from './prefs';
+import { layoutForPage, withDefaults, type Prefs, lastPageOf, rememberLastPage } from './prefs';
 import { profileColumns } from './columns';
 import { create } from 'zustand';
 import { useStatusModels } from './statusModels';
@@ -507,7 +507,10 @@ export const useApp = create<AppState>((set, get) => {
           columns: loaded.columns.length ? loaded.columns : profileColumns(),
           dirtyColumns: !loaded.columns.length && profileColumns().length > 0,
           formValues: {},
-          page: 0, zoom: 0, selection: [], undo: [], redo: [], dirty: false,
+          // Preferences > Document: the page it was closed at (Remember Last Page) and the display on opening (zoom 0: fit page, -1: fit width).
+          page: get().prefs.rememberLastPage ? Math.max(0, Math.min(lastPageOf(name), loaded.pages.length - 1)) : 0,
+          zoom: get().prefs.openDisplay === 'actual' ? 1 : get().prefs.openDisplay === 'fitWidth' ? -1 : 0,
+          selection: [], undo: [], redo: [], dirty: false,
           ...layerState(loaded), bookmarks: loaded.bookmarks, dirtyBookmarks: false,
           security, securityChange: null,
         };
@@ -530,6 +533,7 @@ export const useApp = create<AppState>((set, get) => {
       const sp = get().split;
       if (sp && (sp.docId === id || sp.mainDocId === id)) set({ split: null, activePane: 0 });
       d?.loaded.pdf.loadingTask.destroy();
+      if (d && get().prefs.rememberLastPage) rememberLastPage(d.name, d.page);
       if (d) dropEntries([...d.undo, ...d.redo], d);
       set((s) => {
         const docs = s.docs.filter((x) => x.id !== id);

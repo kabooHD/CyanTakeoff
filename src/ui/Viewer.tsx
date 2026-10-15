@@ -148,7 +148,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   const zoomRaw = pane === 1 && split ? split.zoom : doc.zoom;
   const isActivePane = !split || s.activePane === pane;
   const page = doc.loaded.pages[Math.min(pageIdx, doc.loaded.pages.length - 1)];
-  const zoom = zoomRaw || 1;
+  const zoom = zoomRaw > 0 ? zoomRaw : 1;
   const scrollRef = useRef<HTMLDivElement>(null);
   // Synchronize Page: the active pane's scroll position is mirrored to the other pane.
   useEffect(() => { const el = scrollRef.current; paneScrollers[pane] = el; return () => { if (paneScrollers[pane] === el) paneScrollers[pane] = null; }; }, [pane]);
@@ -314,7 +314,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitPage, fitWidth, zoomAt, left, top, zoom, isActivePane, rot]);
 
-  useEffect(() => { if (!zoomRaw) fitPage(); }, [zoomRaw, fitPage]);
+  // Zoom 0 means fit page (the default on opening), -1 fit width (Preferences > Document).
+  useEffect(() => { if (!zoomRaw) fitPage(); else if (zoomRaw === -1) fitWidth(); }, [zoomRaw, fitPage, fitWidth]);
 
   useLayoutEffect(() => {
     const a = anchor.current;
