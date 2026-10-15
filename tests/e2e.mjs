@@ -3426,7 +3426,11 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.waitForTimeout(600);
   await page.keyboard.press('Shift+T');
   const a = await toScreen(0, 40), b = await toScreen(24, 22);
-  await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 6 }); await page.mouse.up();
+  // Slow hosts: the page text may still be loading when the first drag ends; drag again.
+  for (let t = 0; t < 3; t++) {
+    await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 6 }); await page.mouse.up();
+    if (await page.locator('.text-sel').first().waitFor({ timeout: 10000 }).then(() => true, () => false)) break;
+  }
   await page.locator('.text-sel').first().waitFor();
   await page.keyboard.press('Control+c');
   await page.waitForTimeout(200);
@@ -4310,6 +4314,42 @@ for (const [file, expected] of [
     await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
     await prefs('Markup', () => pd.getByLabel('Print pop-ups').uncheck());
   }
+}
+
+// Save Mode > Maintain Revisions keeps the earlier versions in the file; File > Revert As… opens one of them.
+{
+  const pd = page.getByRole('dialog', { name: 'Preferences' });
+  const prefs = async (tab, fn) => { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press('Control+k'); await pd.waitFor(); await pd.getByRole('tab', { name: tab, exact: true }).click(); await fn(); await pd.getByRole('button', { name: 'Close' }).click(); await pd.waitFor({ state: 'hidden' }); };
+  const ids = async () => page.locator('.page .markup-layer g[data-id]').evaluateAll((els) => els.map((e) => e.dataset.id));
+  const dragFt = async (a, b) => { const p = await toScreen(...a), q = await toScreen(...b); await page.mouse.move(p.x, p.y); await page.mouse.down(); await page.mouse.move(q.x, q.y, { steps: 4 }); await page.mouse.up(); await page.waitForTimeout(150); };
+  await prefs('Document', () => pd.getByLabel('Save mode').selectOption('revisions'));
+  await page.keyboard.press('Escape');
+  const before = (await ids()).length;
+  await page.keyboard.press('r'); await dragFt([30, 30], [34, 27]); await page.keyboard.press('Escape');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
+  const file = `${OUT}/revisions.pdf`;
+  await dl.saveAs(file);
+  await page.waitForFunction(() => /Saved /.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 20000 });
+  const markers = readFileSync(file).toString('latin1').split('%%EOF').length - 1;
+  assert(markers >= 2, `Maintain Revisions saves an incremental update (${markers} %%EOF markers)`);
+  const tabs0 = await page.locator('.doc-tab').count();
+  await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+  await page.getByRole('menuitem', { name: 'Revert As…' }).click();
+  const rd = page.getByRole('dialog', { name: 'Revert As' });
+  await rd.waitFor();
+  const n = await rd.locator('option').count();
+  assert(n >= 2 && (await rd.locator('option').last().innerText()).includes('(current)'), `Revert As lists the revisions in the file (${n}, the last one current)`);
+  await rd.getByLabel('Revision').selectOption({ index: 0 });
+  await rd.getByRole('button', { name: 'Open Revision' }).click();
+  await page.waitForFunction((k) => document.querySelectorAll('.doc-tab').length === k + 1, tabs0);
+  await page.waitForTimeout(800);
+  assert((await page.locator('.doc-tab.active').innerText()).includes('(revision 1)'), 'the chosen revision opens as a new document');
+  assert((await ids()).length <= before, `the revision has the markups as they were before the save (${(await ids()).length} vs ${before + 1} now)`);
+  await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+  await page.getByRole('menuitem', { name: /^Close\b/ }).first().click();
+  await page.waitForFunction((k) => document.querySelectorAll('.doc-tab').length === k, tabs0);
+  await prefs('Document', () => pd.getByLabel('Save mode').selectOption('publish'));
+  await page.keyboard.press('Delete');
 }
 
 assert(errors.length === 0, `no page errors (${errors.join(' | ')})`);

@@ -65,6 +65,8 @@ export interface Prefs {
   rotateAllPages: boolean;
   /** Remember Last Page: a file reopens on the page it was closed at. */
   rememberLastPage: boolean;
+  /** Save Mode: Maintain Revisions (incremental update, earlier versions stay in the file), Publish Without Revisions (rewrite), Publish Compressed (object streams). */
+  saveMode: 'revisions' | 'publish' | 'compressed';
   /** Automatically Reorder Bookmarks: top-level bookmarks follow their pages when thumbnails are reordered. */
   reorderBookmarks: boolean;
   /** Redirect Links and Bookmarks when Inserting Pages with Slip Sheet: they point at the revised page. */
@@ -120,7 +122,7 @@ export const DEFAULT_PREFS: Prefs = {
   hashAlgorithm: 'sha256',
   fillSize: 2, fillBoundarySize: 2, fillColor: '#00a0ff', fillBoundaryColor: '#ff4d00', fillSpeed: 'Medium', fillSensitivity: 'Medium', fillHideMarkups: false,
   gridSpacing: 12, snapSensitivity: 10, snapColor: '#3a7bd5',
-  maxZoom: 6400, defaultLayout: 'single', openDisplay: 'fitPage', rotateAllPages: false, rememberLastPage: false,
+  maxZoom: 6400, defaultLayout: 'single', openDisplay: 'fitPage', rotateAllPages: false, rememberLastPage: false, saveMode: 'publish',
   reorderBookmarks: true, redirectOnSlipSheet: true, findHyperlinks: true, lockPanFitWidth: true, singleKeyInForms: false,
   scaleGroupProps: true, retainLayer: true, printPopups: false, popupOpacity: 85, splitCountBySpace: false,
   zoomFitOnSelect: false, wrapComments: false, filteredDim: 75,

@@ -374,6 +374,7 @@ export function serialize(d: DocState): Promise<Uint8Array> {
     formValues: d.formValues,
     layers: d.dirtyLayers ? d.layers : undefined,
     bookmarks: d.dirtyBookmarks ? d.bookmarks : undefined,
+    saveMode: useApp.getState().prefs.saveMode,
   });
 }
 

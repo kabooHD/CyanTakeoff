@@ -13,12 +13,13 @@ import { estimateSkew } from '../model/deskew';
 import { PAPER, blankPdf, cropPages, imagesToPdf, rotateContent } from '../pdf/docTools';
 import { pickFiles } from './toolActions';
 import { hasSignatures } from '../pdf/incremental';
+import { fileRevisions, revisionBytes } from '../pdf/fileRevisions';
 import { DEFAULT_REDUCE } from '../pdf/reduce';
 import { reduceLib } from './ReduceSize';
 import { pickRect } from './pickRect';
 import type { Pt } from '../model/types';
 
-export const useDocTools = create<{ open: 'new' | 'crop' | 'deskew' | null; cropRect?: { page: number; a: Pt; b: Pt } }>(() => ({ open: null }));
+export const useDocTools = create<{ open: 'new' | 'crop' | 'deskew' | 'revert' | null; cropRect?: { page: number; a: Pt; b: Pt } }>(() => ({ open: null }));
 
 const base = (name: string) => name.replace(/\.pdf$/i, '');
 function download(bytes: Uint8Array, name: string) {
@@ -59,7 +60,50 @@ export function DocToolsDialogs() {
   if (!d) return null;
   if (open === 'crop') return <CropDialog d={d} />;
   if (open === 'deskew') return <DeskewDialog d={d} />;
+  if (open === 'revert') return <RevertAsDialog d={d} />;
   return null;
+}
+
+// ---------- Revert As ----------
+
+/**
+ * File > Revert As (Revu): the earlier versions a file saved with Maintain
+ * Revisions still holds (each incremental update keeps the one before).
+ * The chosen revision opens as a document of its own, to look at or save.
+ */
+function RevertAsDialog({ d }: { d: DocState }) {
+  const s = useApp();
+  const revs = fileRevisions(d.bytes);
+  const [pick, setPick] = useState(Math.max(0, revs.length - 2));
+  const close = () => useDocTools.setState({ open: null });
+  const kb = (n: number) => `${Math.max(1, Math.round(n / 1024))} KB`;
+  const ok = async () => {
+    const r = revs[pick];
+    if (!r) return;
+    close();
+    const name = d.name.replace(/\.pdf$/i, '') + ` (revision ${r.n}).pdf`;
+    await s.openBytes(revisionBytes(d.bytes, r), name);
+    s.setStatus(`Revert As: opened ${name}${d.dirty ? ' (the unsaved changes stay in the original)' : ''}`);
+  };
+  return (
+    <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>
+      <div className="modal" role="dialog" aria-label="Revert As" onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') close(); }}>
+        <div className="modal-title">Revert As</div>
+        {revs.length < 2
+          ? <p className="muted">{d.name} holds no earlier revision. Files saved with Preferences &gt; Document &gt; Save Mode &gt; Maintain Revisions keep every saved version.</p>
+          : <>
+            <p className="muted small">Revisions in {d.name}, oldest first. The chosen one opens as a new document.</p>
+            <select aria-label="Revision" size={Math.min(8, revs.length)} value={pick} onChange={(e) => setPick(Number(e.target.value))} style={{ width: '100%' }}>
+              {revs.map((r, i) => <option key={r.n} value={i}>Revision {r.n}{i === revs.length - 1 ? ' (current)' : ''} — {kb(r.end)}</option>)}
+            </select>
+          </>}
+        <div className="modal-actions">
+          <button onClick={close}>Cancel</button>
+          <button className="primary" disabled={revs.length < 2 || pick === revs.length - 1} onClick={ok}>Open Revision</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ---------- New PDF ----------

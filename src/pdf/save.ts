@@ -896,6 +896,8 @@ export interface SaveInput {
   layers?: LayerSet | null;
   /** Bookmarks, when they changed. */
   bookmarks?: Bookmark[];
+  /** Save Mode (Preferences > Document): 'revisions' appends an incremental update, 'compressed' uses object streams; default a plain rewrite. */
+  saveMode?: 'revisions' | 'publish' | 'compressed';
 }
 
 /** A Revu-style /NM: 16 random capital letters. */
@@ -1062,5 +1064,10 @@ export async function savePdf(input: SaveInput): Promise<Uint8Array> {
     if (entries.length) page.node.set(N('VP'), ctx.obj(entries));
     else page.node.delete(N('VP'));
   }
-  return signed ? incrementalUpdate(input.original, doc) : doc.save({ useObjectStreams: false });
+  if (signed) return incrementalUpdate(input.original, doc);
+  if (input.saveMode === 'revisions') {
+    // Maintain Revisions: the earlier versions stay in the file (File > Revert As). Encrypted files cannot: rewritten instead.
+    try { return await incrementalUpdate(input.original, doc); } catch { /* falls through to a rewrite */ }
+  }
+  return doc.save({ useObjectStreams: input.saveMode === 'compressed' });
 }

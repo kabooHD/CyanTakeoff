@@ -94,6 +94,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { sep: true },
       { label: 'Save', shortcut: 'Ctrl+S', disabled: noDoc, action: () => s.save() },
       { label: 'Save As…', shortcut: 'Ctrl+Shift+S', disabled: noDoc, action: () => s.save(true) },
+      { label: 'Revert As…', disabled: noDoc, action: () => useDocTools.setState({ open: 'revert' }) },
       { label: 'Save All', shortcut: 'Ctrl+F2', disabled: !s.docs.some((x) => x.dirty), action: saveAll },
       { label: 'Refresh', shortcut: 'F5', disabled: !doc?.fileHandle, action: refreshDocument },
       { sep: true },

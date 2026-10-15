@@ -197,6 +197,7 @@ function PreferencesDialog() {
       <>
         {select('defaultLayout', 'Page layout when opening', [['single', 'Single Page'], ['continuous', 'Continuous'], ['auto', 'By page size (under 14 in: Continuous)']])}
         {select('openDisplay', 'Display when opening', [['fitPage', 'Fit Page'], ['fitWidth', 'Fit Width'], ['actual', 'Actual Size']])}
+        {select('saveMode', 'Save mode', [['publish', 'Publish Without Revisions (rewrite the file)'], ['revisions', 'Maintain Revisions (earlier versions stay in the file)'], ['compressed', 'Publish Compressed (object streams)']])}
         {check('rotateAllPages', 'Rotate all pages by default', 'Rotate Clockwise / Counterclockwise (Shift+Alt+Plus / Minus) turn every page')}
         {check('rememberLastPage', 'Remember last page', 'A file reopens on the page it was closed at')}
         {check('reorderBookmarks', 'Automatically reorder bookmarks', 'Top-level bookmarks follow their pages when thumbnails are reordered')}

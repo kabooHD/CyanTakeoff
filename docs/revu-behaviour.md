@@ -1073,8 +1073,12 @@ folders, manual correlation and saved .bcx batches).
   or L then works while a form field has the focus; the field loses it).
 - Signature: digest algorithm (SHA-256 default, SHA-384, SHA-512).
 - Document: Page Layout when opening (Single Page, Continuous, by page
-  size: pages under 14 in open Continuous), Maximum Zoom; Revu also has
-  Save Mode, document recovery, Remember Last Page.
+  size: pages under 14 in open Continuous), Maximum Zoom, Save Mode:
+  Publish Without Revisions (default: the file is rewritten), Maintain
+  Revisions (each save is an incremental update, so every earlier version
+  stays in the file and File > Revert As… lists them; the chosen revision
+  opens as a document of its own), Publish Compressed (object streams).
+  Encrypted files are always rewritten. Revu also has document recovery.
 - Grid & Snap: grid spacing, snap sensitivity (5-25 px), snap colour,
   Show Grid, Snap to Grid / Content / Markup (also on the status bar).
 - Markups List: Zoom Fit Markups when selected (selecting a row zooms to
