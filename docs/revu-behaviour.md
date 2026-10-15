@@ -156,9 +156,14 @@ displayed value (in the markup's own unit when set), as Revu writes it.
   index; Sort Order alphabetic/alphanumeric asc/desc; Revision Filter Auto
   (from the names), Wildcard (* any, # number, ? letter, ; separates, \
   escapes) or Off; Previous Revisions hidden / grayed / crossed out /
-  shown; Current Revisions highlighted or stacked with an arrow), Stamp
+  shown; Current Revisions highlighted or stacked with an arrow; Stack
+  Multi-Page Documents folds a file's pages under its first page), Stamp
   previous revisions "Superseded", Print Set, Search Set (Search panel on
-  the current Set), Tags, Export Drawing Log. Ours: options kept in the
+  the current Set), Tags, Export Drawing Log; New Set / Open Set / Save
+  Set / Close Set (Revu: .bex; ours: a JSON .ctset.json with the file
+  names and options, and Open Set asks for the PDFs, naming the missing
+  ones); Publish: Combine (one PDF of every sheet in the Set's order) and
+  Package (a cover sheet with every file attached). Ours: options kept in the
   browser; revisions are read from file names ("A-101 R2", "A-101_B",
   "Plan (2)") or page labels when sorting by label; the Superseded stamp
   is a stamp markup in the middle of each previous sheet.

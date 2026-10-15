@@ -84,7 +84,7 @@ continuous side by side: Ctrl+4..7) and Rotate View (Ctrl+Shift+Plus/Minus); pag
 blank, delete, extract, replace keeping markups, rotate, reorder by
 thumbnail drag, split, combine) and Flatten (per-type; All / Exclude Filtered / selection scope; Overlay Text on the assigned layer; Capture summary attachment); Compare Documents (clouds
 differences, visual or vector, alignment points) and Overlay Pages (two-colour overlay PDF); Page Labels from
-title-block sheet numbers, Batch Link (incl. across open files; terms, appearance, overlap and report in src/model/batchLink.ts), Sets panel
+title-block sheet numbers, Batch Link (incl. across open files; terms, appearance, overlap and report in src/model/batchLink.ts), Sets panel (set files src/model/setFile.ts, Publish Combine/Package, multi-page stacks)
 (open files as one set; revision stacks and Set Options in src/model/revisions.ts), Slip Sheet (by sheet number or index with a wildcard filter, replace or insert before, markups carried, Superseded stamp, CSV report; src/model/slipSheet.ts);
 Tool Chest tool sets (new/rename/export/import, Properties vs Drawing mode,
 Symbol/Detail view, set scale, hide, Comment Persistence, Update on Reuse:

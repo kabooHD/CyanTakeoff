@@ -15,6 +15,8 @@ export interface SetOptions {
   previous: 'hide' | 'gray' | 'strike' | 'show';
   /** Stack previous revisions under the current one (expand with the arrow). */
   stack: boolean;
+  /** Stack Multi-Page Documents: a file's pages under its first page (spec books), by index. */
+  stackMultiPage?: boolean;
 }
 
 export const DEFAULT_SET_OPTIONS: SetOptions = { show: 'label', sortBy: 'name-label', order: 'alnum-asc', filter: 'auto', pattern: '', previous: 'gray', stack: true };
@@ -62,7 +64,7 @@ export function compareRevisions(a: string | null, b: string | null): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 }
 
-export interface RevisionStack { base: string; sheets: SetSheet[]; latest: SetSheet }
+export interface RevisionStack { base: string; sheets: SetSheet[]; latest: SetSheet; /** A multi-page document stacked by page, not revisions. */ pages?: boolean }
 
 /** The text revisions are read from: the page label, or the file name. */
 const identity = (s: SetSheet, o: SetOptions) => (o.sortBy === 'label' ? s.label : s.docName);
@@ -74,23 +76,40 @@ const identity = (s: SetSheet, o: SetOptions) => (o.sortBy === 'label' ? s.label
  */
 export function stackRevisions(sheets: SetSheet[], o: SetOptions): RevisionStack[] {
   const groups = new Map<string, { base: string; items: { s: SetSheet; rev: string | null }[] }>();
-  for (const s of sheets) {
+  // Stack Multi-Page Documents: every page of a multi-page file under its first page, in page order.
+  const multi: RevisionStack[] = [];
+  let rest = sheets;
+  if (o.stackMultiPage) {
+    const byDoc = new Map<string, SetSheet[]>();
+    for (const s of sheets) byDoc.set(s.docName, [...(byDoc.get(s.docName) ?? []), s]);
+    rest = [];
+    for (const [docName, pages] of byDoc) {
+      if (pages.length < 2) { rest.push(...pages); continue; }
+      const ordered = pages.slice().sort((a, b) => a.page - b.page);
+      multi.push({ base: docName, sheets: ordered, latest: ordered[0], pages: true });
+    }
+  }
+  for (const s of rest) {
     const { base, rev } = splitRevision(identity(s, o), o);
     const k = base.toLowerCase() + (o.sortBy === 'label' ? '' : `#${s.page}`);
     if (!groups.has(k)) groups.set(k, { base, items: [] });
     groups.get(k)!.items.push({ s, rev });
   }
   // Sheets that share a name without any revision suffix (the same file opened twice) are not revisions of each other.
-  return [...groups.values()].flatMap((g) => {
+  const stacks = [...groups.values()].flatMap((g) => {
     if (g.items.every((i) => i.rev === null)) return g.items.map((i) => ({ base: g.base, sheets: [i.s], latest: i.s }));
     const items = g.items.slice().sort((p, q) => compareRevisions(p.rev, q.rev));
     const sheets = items.map((i) => i.s);
     return [{ base: g.base, sheets, latest: sheets[sheets.length - 1] }];
   });
+  if (!multi.length) return stacks;
+  // Keep the set's order: each stack sits where its top sheet is.
+  const pos = new Map(sheets.map((s, i) => [s.key, i]));
+  return [...stacks, ...multi].sort((a, b) => (pos.get(a.latest.key) ?? 0) - (pos.get(b.latest.key) ?? 0));
 }
 
 /** Keys of the previous revisions (everything but the latest of each stack). */
-export const previousRevisions = (stacks: RevisionStack[]) => new Set(stacks.flatMap((st) => st.sheets.filter((s) => s !== st.latest).map((s) => s.key)));
+export const previousRevisions = (stacks: RevisionStack[]) => new Set(stacks.filter((st) => !st.pages).flatMap((st) => st.sheets.filter((s) => s !== st.latest).map((s) => s.key)));
 export const latestRevisions = (stacks: RevisionStack[]) => new Set(stacks.map((st) => st.latest.key));
 
 const cmp = (a: string, b: string, o: SetOptions) => {

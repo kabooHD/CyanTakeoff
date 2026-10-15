@@ -3810,6 +3810,48 @@ for (const [file, expected] of [
     const stampsAfter = (await page.locator('.ml-table tbody').innerText()).split('SUPERSEDED').length - 1;
     assert(stampsAfter === stampsBefore + 1, `Insert Revised Pages keeps the current page and stamps it Superseded (${stampsBefore} -> ${stampsAfter})`);
   }
+  // Save Set / Open Set (our JSON set file), Publish: Combine / Package, Stack Multi-Page Documents.
+  {
+    const setsMenu = async (name) => { await page.getByRole('button', { name: 'Sets ▾' }).click(); await page.getByRole('menuitem', { name }).click(); };
+    page.once('dialog', (dl) => dl.accept('Tower'));
+    const [sdl] = await Promise.all([page.waitForEvent('download'), setsMenu('Save Set…')]);
+    assert(sdl.suggestedFilename() === 'Tower.ctset.json', `Save Set downloads a set file (${sdl.suggestedFilename()})`);
+    await sdl.saveAs(`${OUT}/Tower.ctset.json`);
+    const setFile = JSON.parse(readFileSync(`${OUT}/Tower.ctset.json`, 'utf8'));
+    assert(setFile.format === 'cyantakeoff-set' && setFile.files.includes('A-101 R2.pdf') && setFile.options.show === 'label', 'the set file lists the open files and the Set options');
+    const docCount = await page.locator('.doc-tab').count();
+    const [cdl] = await Promise.all([page.waitForEvent('download'), setsMenu('Publish: Combine…')]);
+    await cdl.saveAs(`${OUT}/Set.pdf`);
+    const combined = await PDFDocument.load(readFileSync(`${OUT}/Set.pdf`));
+    assert(combined.getPageCount() >= docCount && (await page.locator('.statusbar').innerText()).includes(`Combined ${combined.getPageCount()} page`), `Publish: Combine joins every sheet of the Set (${combined.getPageCount()} pages)`);
+    const [pdl] = await Promise.all([page.waitForEvent('download'), setsMenu('Publish: Package…')]);
+    await pdl.saveAs(`${OUT}/Set package.pdf`);
+    const pkg = await PDFDocument.load(readFileSync(`${OUT}/Set package.pdf`));
+    const names = pkg.catalog.lookup(PDFName.of('Names')).lookup(PDFName.of('EmbeddedFiles')).lookup(PDFName.of('Names')).asArray();
+    assert(names.length / 2 === docCount, `Publish: Package attaches every file of the Set (${names.length / 2} of ${docCount})`);
+    // Open Set: the set file, then its PDFs; files not picked are reported missing.
+    const [fc1] = await Promise.all([page.waitForEvent('filechooser'), setsMenu('Open Set…')]);
+    const fc2p = page.waitForEvent('filechooser');
+    await fc1.setFiles(`${OUT}/Tower.ctset.json`);
+    const fc2 = await fc2p;
+    await fc2.setFiles(`${OUT}/A-101 R2.pdf`);
+    await page.waitForFunction(() => /Set "Tower" opened/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 20000 });
+    const openStatus = await page.locator('.statusbar').innerText();
+    assert(/opened: 1 of \d+ file/.test(openStatus) && /(^|[ ,])A-101\.pdf/.test(openStatus.split('missing:')[1] ?? ''), `Open Set opens the picked files and names the missing ones (${openStatus.match(/Set "Tower"[^\n]*/)?.[0]})`);
+    await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, docCount);
+    await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+    await page.getByRole('menuitem', { name: /^Close\b/ }).first().click();
+    await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n, docCount);
+    // Stack Multi-Page Documents: a multi-page file's pages fold under its first page.
+    await setsMenu('Options…');
+    const so2 = page.getByRole('dialog', { name: 'Set Options' });
+    await so2.getByLabel('Stack Multi-Page Documents').check();
+    await so2.getByRole('button', { name: 'Close' }).click();
+    assert(await page.locator('.set-stack-toggle', { hasText: /more page/ }).count() >= 1, 'Stack Multi-Page Documents folds a multi-page file under its first page');
+    await setsMenu('Options…');
+    await so2.getByLabel('Stack Multi-Page Documents').uncheck();
+    await so2.getByRole('button', { name: 'Close' }).click();
+  }
 }
 
 // File > Create > From File: an image becomes a one-page PDF; Window > Hide/Show Panels puts every panel away and back.

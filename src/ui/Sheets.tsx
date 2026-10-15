@@ -2,7 +2,14 @@
 // (hyperlink sheet references across the open documents) and the Sets panel.
 import { useState } from 'react';
 import { create } from 'zustand';
-import { useApp, type DocState } from '../model/store';
+import { serialize, useApp, type DocState } from '../model/store';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { insertPages } from '../pdf/pages';
+import { attachFile } from '../pdf/docInfo';
+import { openFileObject } from './actions';
+import { pickFiles } from './toolActions';
+import { closeAll } from './quickCommands';
+import { SET_EXT, matchSetFiles, parseSetFile, setFileFrom } from '../model/setFile';
 import { findSheetNumber, sheetReferences } from '../model/sheets';
 import { writePageLabels } from '../pdf/pages';
 import { pageText } from './toolActions';
@@ -220,6 +227,7 @@ function SetOptionsDialog({ onClose }: { onClose: () => void }) {
           {o.filter === 'wildcard' && <div className="form-row"><span>Wildcard</span><input aria-label="Revision wildcard" placeholder="e.g. R#  (* any, # number, ? letter, ; separates)" value={o.pattern} onChange={(e) => set({ pattern: e.target.value })} /></div>}
           <Sel k="previous" label="Previous Revisions" items={[['hide', 'Hide'], ['gray', 'Gray out'], ['strike', 'Cross out'], ['show', 'Show']]} />
           <div className="form-row"><label><input type="checkbox" checked={o.stack} onChange={(e) => set({ stack: e.target.checked })} /> Stack revisions (arrow shows the previous ones)</label></div>
+          <div className="form-row"><label><input type="checkbox" checked={!!o.stackMultiPage} onChange={(e) => set({ stackMultiPage: e.target.checked })} /> Stack Multi-Page Documents (a file's pages under its first page)</label></div>
           <div className="modal-actions"><span className="spacer" /><button className="primary" onClick={onClose}>Close</button></div>
         </div>
       </div>
@@ -247,7 +255,60 @@ export function SetsPanel() {
   const stacks = stackRevisions(sheets, o);
   const previous = previousRevisions(stacks), latest = latestRevisions(stacks);
   const pick = (keys: Iterable<string>, what: string) => { const k = new Set(keys); setSel(k); s.setStatus(`Selected ${k.size} ${what}.`); };
+  const download = (bytes: Uint8Array | string, name: string, type: string) => {
+    const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type }));
+    Object.assign(document.createElement('a'), { href: url, download: name }).click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  };
+  // Sets as files (Revu's .bex is undocumented; ours is JSON): the file names and the options.
+  const saveSet = () => {
+    const name = prompt('Set name', docs[0]?.name.replace(/\.pdf$/i, '') ?? 'Set');
+    if (!name) return;
+    download(JSON.stringify(setFileFrom(name, docs.map((d) => d.name), o), null, 2), `${name}${SET_EXT}`, 'application/json');
+    s.setStatus(`Set saved: ${docs.length} file(s), ${name}${SET_EXT}`);
+  };
+  const openSet = async () => {
+    const [f] = await pickFiles(SET_EXT + ',.json,application/json', false);
+    if (!f) return;
+    const set = parseSetFile(await f.text());
+    if (!set) { s.setStatus('Open Set: that is not a CyanTakeoff Set file.'); return; }
+    s.setStatus(`Set "${set.name}": choose its ${set.files.length} PDF file(s) (${set.files.join(', ')}).`);
+    const picked = await pickFiles('.pdf,application/pdf', true);
+    if (!picked.length) return;
+    const { found, missing } = matchSetFiles(set, picked);
+    for (const file of found) await openFileObject(file);
+    useSetOptions.getState().set(set.options);
+    s.setStatus(`Set "${set.name}" opened: ${found.length} of ${set.files.length} file(s)${missing.length ? `; missing: ${missing.join(', ')}` : ''}.`);
+  };
+  const newSet = async () => { for (const f of await pickFiles('.pdf,application/pdf', true)) await openFileObject(f); };
+  // Publish: the Set's sheets combined into one PDF in the Set's order, or a package (every file attached to a cover sheet).
+  const combineSet = async () => {
+    const out = await PDFDocument.create();
+    const libs = new Map<string, PDFDocument>();
+    for (const sh of sheets) {
+      const d = docs.find((x) => x.id === sh.docId); if (!d) continue;
+      if (!libs.has(d.id)) libs.set(d.id, await PDFDocument.load(await serialize(d), { updateMetadata: false }));
+      await insertPages(out, libs.get(d.id)!, out.getPageCount(), [sh.page]);
+    }
+    download(await out.save(), 'Set.pdf', 'application/pdf');
+    s.setStatus(`Combined ${out.getPageCount()} page(s) of the Set into Set.pdf`);
+  };
+  const packageSet = async () => {
+    const out = await PDFDocument.create();
+    const font = await out.embedFont(StandardFonts.Helvetica);
+    const pg = out.addPage([612, 792]);
+    pg.drawText('Set package', { x: 72, y: 720, size: 18, font });
+    docs.forEach((d, i) => pg.drawText(`${i + 1}. ${d.name} (${d.loaded.pages.length} page${d.loaded.pages.length === 1 ? '' : 's'})`, { x: 72, y: 690 - i * 16, size: 11, font }));
+    for (const d of docs) await attachFile(out, d.name, await serialize(d), 'application/pdf');
+    download(await out.save(), 'Set package.pdf', 'application/pdf');
+    s.setStatus(`Packaged ${docs.length} file(s) into Set package.pdf`);
+  };
   const items: MenuItem[] = [
+    { label: 'New Set…', action: () => void newSet() },
+    { label: 'Open Set…', action: () => void openSet() },
+    { label: 'Save Set…', disabled: !docs.length, action: saveSet },
+    { label: 'Close Set', disabled: !docs.length, action: closeAll },
+    { sep: true },
     { label: 'Select All', action: () => pick(sheets.map((x) => x.key), 'sheets') },
     { label: 'Select Latest Revisions', action: () => pick(latest, 'latest revisions') },
     { label: 'Select Previous Revisions', disabled: !previous.size, action: () => pick(previous, 'previous revisions') },
@@ -255,6 +316,8 @@ export function SetsPanel() {
     { label: 'Options…', action: () => setOptions(true) },
     { label: 'Stamp Previous Revisions "Superseded"', disabled: !previous.size, action: () => stampSuperseded(sheets.filter((x) => previous.has(x.key))) },
     { sep: true },
+    { label: 'Publish: Combine…', disabled: !docs.length, action: () => void combineSet() },
+    { label: 'Publish: Package…', disabled: !docs.length, action: () => void packageSet() },
     { label: 'Print Set…', disabled: !docs.length, action: () => openPrint() },
     { label: 'Search Set', disabled: !docs.length, action: () => s.setPanels({ left: 'search' }) },
     { label: 'Tags…', disabled: !docs.length, action: () => useTagDialogs.setState({ open: 'tags' }) },
@@ -284,11 +347,22 @@ export function SetsPanel() {
         return (
           <div key={st.base + st.latest.key} className="set-stack">
             {row(st.latest, false)}
-            {prevs.length > 0 && o.previous !== 'hide' && o.stack && (
-              <button className="set-stack-toggle" aria-label={`${open ? 'Hide' : 'Show'} previous revisions of ${st.base}`} aria-expanded={open}
-                onClick={() => { const k = new Set(expanded); if (open) k.delete(st.base); else k.add(st.base); setExpanded(k); }}>{open ? '▾' : '▸'} {prevs.length} previous revision{prevs.length === 1 ? '' : 's'}</button>
+            {st.pages ? (
+              // A multi-page document stacked under its first page (Stack Multi-Page Documents).
+              <>
+                <button className="set-stack-toggle" aria-label={`${open ? 'Hide' : 'Show'} pages of ${st.base}`} aria-expanded={open}
+                  onClick={() => { const k = new Set(expanded); if (open) k.delete(st.base); else k.add(st.base); setExpanded(k); }}>{open ? '▾' : '▸'} {prevs.length} more page{prevs.length === 1 ? '' : 's'}</button>
+                {open && prevs.map((sh) => row(sh, false))}
+              </>
+            ) : (
+              <>
+                {prevs.length > 0 && o.previous !== 'hide' && o.stack && (
+                  <button className="set-stack-toggle" aria-label={`${open ? 'Hide' : 'Show'} previous revisions of ${st.base}`} aria-expanded={open}
+                    onClick={() => { const k = new Set(expanded); if (open) k.delete(st.base); else k.add(st.base); setExpanded(k); }}>{open ? '▾' : '▸'} {prevs.length} previous revision{prevs.length === 1 ? '' : 's'}</button>
+                )}
+                {o.previous !== 'hide' && (!o.stack || open) && prevs.map((sh) => row(sh, true))}
+              </>
             )}
-            {o.previous !== 'hide' && (!o.stack || open) && prevs.map((sh) => row(sh, true))}
           </div>
         );
       })}

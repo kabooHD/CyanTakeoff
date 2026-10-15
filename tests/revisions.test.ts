@@ -27,6 +27,15 @@ describe('Set revisions', () => {
     expect([...latestRevisions(stacks)]).toEqual(['A-101 R2.pdf#0', 'A-102.pdf#0']);
     // The pages of one file are sheets of their own, not revisions of each other.
     expect(stackRevisions([sheet('A-1.pdf', 0, '1'), sheet('A-1.pdf', 1, '2'), sheet('A-1 R2.pdf', 1, '2')], DEFAULT_SET_OPTIONS).map((s) => s.sheets.length)).toEqual([1, 2]);
+  });
+  it('stacks multi-page documents under their first page when asked', () => {
+    const sheets = [sheet('Specs.pdf', 1, '2'), sheet('Specs.pdf', 0, '1'), sheet('A-1.pdf', 0, 'A-1'), sheet('A-1 R2.pdf', 0, 'A-1')];
+    const stacks = stackRevisions(sheets, { ...DEFAULT_SET_OPTIONS, stackMultiPage: true });
+    const specs = stacks.find((s) => s.pages)!;
+    expect(specs.sheets.map((s) => s.page)).toEqual([0, 1]);
+    expect(specs.latest.page).toBe(0);
+    expect(previousRevisions(stacks).has('Specs.pdf#1')).toBe(false); // pages are not previous revisions
+    expect(previousRevisions(stacks).has('A-1.pdf#0')).toBe(true);
     // The same file opened twice is two sheets, not two revisions.
     expect(stackRevisions([sheet('A-1.pdf', 0, '1'), sheet('A-1.pdf', 0, '1')], DEFAULT_SET_OPTIONS)).toHaveLength(2);
     // By label: revisions come from the page labels instead.
