@@ -10,7 +10,7 @@ import { PDFDocument, PDFName } from 'pdf-lib';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { serialize, useApp, type DocState } from '../model/store';
 import { parsePageRange } from '../model/measure';
-import { DEFAULT_PRINT, PAPER_SIZES, layoutSheets, printOrder, renderScale, type PrintOptions, type Sheet, filterPages, type PageFilter } from '../model/print';
+import { DEFAULT_PRINT, PAPER_SIZES, layoutSheets, printOrder, renderScale, type PrintOptions, type Sheet, filterPages, type PageFilter, popupLayout } from '../model/print';
 import { loadForRender } from '../pdf/document';
 import { layerShown } from './layersView';
 import { PERM, allowed } from '../pdf/crypt';
@@ -95,16 +95,40 @@ async function renderPage(d: DocState, src: Sources, page: number, scale: number
     }
     return c;
   };
+  // Print Pop-Ups (Preferences > Markup): each Note's comment in a box beside it, at the Pop-Up Opacity.
+  const withPopups = (c: HTMLCanvasElement) => {
+    const prefs = useApp.getState().prefs;
+    if (!prefs.printPopups) return c;
+    const info = d.loaded.pages[page];
+    const turned = rotate % 180 !== 0;
+    const ctx = c.getContext('2d')!;
+    for (const m of d.markups) {
+      if (m.page !== page || m.type !== 'note' || !m.comment.trim()) continue;
+      const at = rotateOut(m.points[0].x, m.points[0].y, info.width, info.height, rotate as ViewRotation);
+      const box = popupLayout(at, m.comment, turned ? { w: info.height, h: info.width } : { w: info.width, h: info.height });
+      ctx.save();
+      ctx.scale(scale, scale);
+      ctx.globalAlpha = Math.max(0, Math.min(1, prefs.popupOpacity / 100));
+      ctx.fillStyle = '#fff8b0'; ctx.strokeStyle = m.style.color; ctx.lineWidth = 1;
+      ctx.fillRect(box.x, box.y, box.w, box.h); ctx.strokeRect(box.x, box.y, box.w, box.h);
+      ctx.fillStyle = '#000'; ctx.font = 'bold 10px Helvetica, Arial, sans-serif';
+      ctx.fillText(`${m.author}  ${m.created.slice(0, 10)}`, box.x + 4, box.y + 12);
+      ctx.font = '10px Helvetica, Arial, sans-serif';
+      box.lines.forEach((l, i) => ctx.fillText(l, box.x + 4, box.y + 12 + 13 * (i + 1)));
+      ctx.restore();
+    }
+    return c;
+  };
   if (o.content === 'document') return withSpaces(await draw(src.full, false));
-  if (o.content === 'markups') return withSpaces(await draw(src.markupsOnly!, true));
-  if (!o.dim) return withSpaces(await draw(src.full, true));
+  if (o.content === 'markups') return withSpaces(withPopups(await draw(src.markupsOnly!, true)));
+  if (!o.dim) return withSpaces(withPopups(await draw(src.full, true)));
   // Dim Page Content: faded page, markups at full strength on top.
   const base = await draw(src.full, false), top = await draw(src.markupsOnly!, true, true);
   const ctx = base.getContext('2d')!;
   ctx.globalAlpha = 0.65; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, base.width, base.height);
   ctx.globalAlpha = 1; ctx.drawImage(top, 0, 0);
   top.width = top.height = 0;
-  return withSpaces(base);
+  return withSpaces(withPopups(base));
 }
 
 export function pagesToPrint(d: DocState, range: Range, custom: string): number[] {

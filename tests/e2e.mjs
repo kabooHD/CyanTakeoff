@@ -4080,7 +4080,7 @@ for (const [file, expected] of [
 // Enable Single Key Shortcuts (forms), Enable Spell Check.
 {
   const pd = page.getByRole('dialog', { name: 'Preferences' });
-  const prefs = async (tab, fn) => { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press('Control+k'); await pd.waitFor(); await pd.getByRole('tab', { name: tab }).click(); await fn(); await pd.getByRole('button', { name: 'Close' }).click(); await pd.waitFor({ state: 'hidden' }); };
+  const prefs = async (tab, fn) => { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press('Control+k'); await pd.waitFor(); await pd.getByRole('tab', { name: tab, exact: true }).click(); await fn(); await pd.getByRole('button', { name: 'Close' }).click(); await pd.waitFor({ state: 'hidden' }); };
   const wm = async (item) => { await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click(); await page.getByRole('menuitem', { name: item }).click(); };
   const tabs0 = await page.locator('.doc-tab').count();
   const openFile = async (f) => { const fc = await ctrlO(); await fc.setFiles(f); await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs0); await page.waitForTimeout(600); };
@@ -4200,6 +4200,115 @@ for (const [file, expected] of [
     await prefs('Spelling', () => pd.getByLabel('Enable spell check').check());
     await page.keyboard.press('Delete');
     await page.keyboard.press('Escape');
+  }
+}
+
+// Preferences > Markup / Measure: purple handles around a multi-selection (a Group scales its line widths too),
+// Retain Layer information when copying, Print Pop-Ups; Automatically Split Count Measurements by Space.
+{
+  const pd = page.getByRole('dialog', { name: 'Preferences' });
+  const prefs = async (tab, fn) => { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press('Control+k'); await pd.waitFor(); await pd.getByRole('tab', { name: tab, exact: true }).click(); await fn(); await pd.getByRole('button', { name: 'Close' }).click(); await pd.waitFor({ state: 'hidden' }); };
+  const wm = async (item) => { await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click(); await page.getByRole('menuitem', { name: item }).click(); };
+  const openFile = async (f, n) => { const fc = await ctrlO(); await fc.setFiles(f); await page.waitForFunction((k) => document.querySelectorAll('.doc-tab').length === k, n); await page.waitForTimeout(600); };
+  const closeActive = async (n) => {
+    const ok = (d) => d.accept().catch(() => {});
+    page.on('dialog', ok);
+    await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+    await page.getByRole('menuitem', { name: /^Close\b/ }).first().click();
+    await page.waitForFunction((k) => document.querySelectorAll('.doc-tab').length === k, n);
+    page.off('dialog', ok);
+  };
+  const ids = async () => page.locator('.page .markup-layer g[data-id]').evaluateAll((els) => els.map((e) => e.dataset.id));
+  const geom = async (id) => page.locator(`.page .markup-layer g[data-id="${id}"]`).evaluate((el) => ({ w: el.getBBox().width, sw: Math.max(0, ...[...el.querySelectorAll('[stroke-width]')].map((e) => Number(e.getAttribute('stroke-width')) || 0)) }));
+  const dragFt = async (a, b) => { const p = await toScreen(...a), q = await toScreen(...b); await page.mouse.move(p.x, p.y); await page.mouse.down(); await page.mouse.move(q.x, q.y, { steps: 4 }); await page.mouse.up(); await page.waitForTimeout(150); };
+  const undoTo = async (n) => { for (let i = 0; i < 6 && (await ids()).length > n; i++) { await page.keyboard.press('Control+z'); await page.waitForTimeout(150); } };
+  // Two rectangles, grouped: the purple handles scale both and their line widths follow (on by default).
+  {
+    await page.keyboard.press('Escape');
+    const before = await ids();
+    await page.keyboard.press('r'); await dragFt([30, 30], [34, 27]); await page.keyboard.press('Escape');
+    await page.keyboard.press('r'); await dragFt([36, 30], [40, 27]); await page.keyboard.press('Escape');
+    const made = (await ids()).filter((id) => !before.includes(id));
+    assert(made.length === 2, `two rectangles drawn (${made.length})`);
+    await dragFt([28, 32], [42, 25]); // band, left to right: both fully inside
+    assert(await page.locator('.scale-handle').count() === 4, 'a multi-selection shows four purple scale handles');
+    await page.keyboard.press('Control+g');
+    await page.waitForTimeout(200);
+    const pull = async () => { const hb = await page.locator('.scale-handle').nth(2).boundingBox(); const cx = hb.x + hb.width / 2, cy = hb.y + hb.height / 2; await page.mouse.move(cx, cy); await page.mouse.down(); await page.mouse.move(cx + 80, cy + 80, { steps: 5 }); await page.mouse.up(); await page.waitForTimeout(200); };
+    const g0 = await geom(made[0]);
+    await pull();
+    const g1 = await geom(made[0]);
+    assert(g1.w > g0.w * 1.2, `dragging a purple handle scales the whole selection (${g0.w.toFixed(1)} -> ${g1.w.toFixed(1)})`);
+    assert(g1.sw > g0.sw * 1.1, `Scale Appearance Properties for Grouped Markups: the line width follows (${g0.sw} -> ${g1.sw})`);
+    await prefs('Markup', () => pd.getByLabel('Scale appearance properties for grouped markups').uncheck());
+    await pull();
+    const g2 = await geom(made[0]);
+    assert(g2.w > g1.w * 1.1 && g2.sw === g1.sw, `with the preference off only the geometry scales (${g1.w.toFixed(1)} -> ${g2.w.toFixed(1)}, width ${g2.sw})`);
+    await prefs('Markup', () => pd.getByLabel('Scale appearance properties for grouped markups').check());
+    await page.keyboard.press('Delete');
+    await page.waitForTimeout(200);
+    assert((await ids()).length === before.length, 'the two rectangles are deleted again');
+  }
+  // Retain Layer information when copying markups: pasted into another file, the layer is created there.
+  {
+    const tabs0 = await page.locator('.doc-tab').count();
+    await openFile(`${OUT}/layered-saved.pdf`, tabs0 + 1); // its rectangle is on layer "Markups"
+    await page.keyboard.press('Escape'); await page.keyboard.press('Control+a'); await page.keyboard.press('Control+c');
+    await openFile(`${OUT}/urltext.pdf`, tabs0 + 2);
+    await page.keyboard.press('Control+v');
+    await page.waitForTimeout(300);
+    const lp = page.getByRole('tree', { name: 'Layers' });
+    if (!(await lp.count())) await wm('Layers');
+    assert(await lp.getByRole('treeitem', { name: 'Layer Markups' }).count() === 1, 'Retain Layer information: pasting into another file creates the markup\'s layer there');
+    await closeActive(tabs0 + 1);
+    await prefs('Markup', () => pd.getByLabel('Retain layer information when copying markups').uncheck());
+    await openFile(`${OUT}/urltext.pdf`, tabs0 + 2);
+    await page.keyboard.press('Control+v');
+    await page.waitForTimeout(300);
+    if (!(await lp.count())) await wm('Layers');
+    assert(await lp.getByRole('treeitem', { name: 'Layer Markups' }).count() === 0 && (await ids()).length >= 1, 'with the preference off the pasted markup has no layer');
+    await prefs('Markup', () => pd.getByLabel('Retain layer information when copying markups').check());
+    await closeActive(tabs0 + 1);
+    await closeActive(tabs0);
+  }
+  // Automatically Split Count Measurements by Space: a Space "Count Room", a count started inside and continued outside.
+  {
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Alt+S');
+    await page.getByRole('button', { name: 'Add Space' }).click();
+    await dragFt([60, 34], [70, 26]);
+    const sd = page.getByRole('dialog', { name: 'Add Space' });
+    await sd.getByLabel('Space name').fill('Count Room');
+    await sd.getByRole('button', { name: 'OK' }).click();
+    await page.keyboard.press('Alt+S');
+    const n0 = (await ids()).length;
+    const clicks = async () => { for (const [x, y] of [[65, 30], [76, 30]]) { const p = await toScreen(x, y); await page.mouse.click(p.x, p.y); await page.waitForTimeout(150); } };
+    await prefs('Measure', () => pd.getByLabel('Automatically split count measurements by Space').check());
+    await page.keyboard.press('Shift+Alt+C');
+    await clicks();
+    await page.keyboard.press('Escape');
+    assert((await ids()).length === n0 + 2, `Automatically Split Count Measurements by Space: a count continued outside the Space starts a new count (${(await ids()).length - n0} counts)`);
+    await undoTo(n0);
+    await prefs('Measure', () => pd.getByLabel('Automatically split count measurements by Space').uncheck());
+    await page.keyboard.press('Shift+Alt+C');
+    await clicks();
+    await page.keyboard.press('Escape');
+    assert((await ids()).length === n0 + 1, 'with the preference off the clicks continue one count');
+    await undoTo(n0);
+  }
+  // Print Pop-Ups: the current page prints with the preference on.
+  {
+    await prefs('Markup', () => pd.getByLabel('Print pop-ups').check());
+    const printed = await page.evaluate(() => { window.__printed = window.__printed ?? 0; window.print = () => { window.__printed++; }; return window.__printed; });
+    await page.keyboard.press('Control+p');
+    const dlg = page.locator('[role=dialog][aria-label="Print"]');
+    await dlg.waitFor();
+    await dlg.locator('[aria-label="Page range"]').selectOption('current');
+    await dlg.getByRole('button', { name: 'Print', exact: true }).click();
+    await page.waitForFunction((n) => window.__printed === n + 1, printed, { timeout: 60000 });
+    assert(await page.locator('#print-root .print-sheet img').count() >= 1, 'Print Pop-Ups: the sheet renders with the pop-ups on');
+    await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+    await prefs('Markup', () => pd.getByLabel('Print pop-ups').uncheck());
   }
 }
 

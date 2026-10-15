@@ -51,3 +51,17 @@ export function aspectCorner(fixed: Pt, orig: Pt, p: Pt): Pt {
   const k = Math.max(0.02, ((p.x - fixed.x) * w + (p.y - fixed.y) * h) / (w * w + h * h));
   return { x: fixed.x + w * k, y: fixed.y + h * k };
 }
+
+/** The four corners of the box around several markups' points (same order as `scaleHandles`), pushed `out` outward. */
+export function selectionCorners(ms: Pick<Markup, 'points'>[], out = 0): Pt[] {
+  return scaleHandles({ points: ms.flatMap((m) => m.points) }, out);
+}
+
+/** True when the markups are all members of one Group. */
+export const oneGroup = (ms: Pick<Markup, 'groupId'>[]) => ms.length > 1 && !!ms[0].groupId && ms.every((m) => m.groupId === ms[0].groupId);
+
+/** Scale Appearance Properties for Grouped Markups (Revu): the line width and font size follow the scale factor. */
+export function scaledStyle<S extends { width: number; fontSize: number }>(style: S, k: number): S {
+  const r = (v: number) => Math.round(v * k * 100) / 100;
+  return { ...style, width: r(style.width), fontSize: Math.max(1, r(style.fontSize)) };
+}

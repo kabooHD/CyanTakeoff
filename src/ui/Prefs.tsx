@@ -252,6 +252,10 @@ function PreferencesDialog() {
         {check('dynamicDefaults', 'Dynamically set as default properties', 'A property changed on a markup becomes the default of its tool')}
         <label className="pref-row"><input type="checkbox" checked={!!s.toggles.reuse} onChange={() => s.toggle('reuse')} /> Reuse tools</label>
         {check('autosizeText', 'Autosize text box and callout markups')}
+        {check('scaleGroupProps', 'Scale appearance properties for grouped markups', 'Scaling a Group with its purple handles scales line widths and text sizes too')}
+        {check('retainLayer', 'Retain layer information when copying markups', 'A markup pasted into another file keeps its layer; the layer is created there when missing')}
+        {check('printPopups', 'Print pop-ups', 'Note comments print in a box beside the note')}
+        <label className="pref-row"><span>Pop-up opacity</span><input aria-label="Pop-up opacity" type="number" min={0} max={100} step={5} disabled={!p.printPopups} value={p.popupOpacity} onChange={(e) => set({ popupOpacity: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} /> %</label>
         {check('showAuthorDate', 'Show author and date when hovering a markup')}
         {select('dragShapes', 'Drag behavior for shapes', [['rect', 'Drag Rectangle (Ctrl+drag: curve)'], ['curves', 'Drag Curves (Ctrl+drag: rectangle)']])}
         {check('textHighlighting', 'Enable Text Highlighting', 'The Highlight tool marks the text it is dragged over; Ctrl+drag draws a free highlight. Off: always a free highlight')}
@@ -262,6 +266,7 @@ function PreferencesDialog() {
     ),
     Measure: (
       <>
+        {check('splitCountBySpace', 'Automatically split count measurements by Space', 'A count continued in another Space starts a new count (same style and subject)')}
         <p className="muted small">Dynamic Fill defaults (the tool's Settings change them for the session).</p>
         <label className="pref-row"><span>Fill size</span><input aria-label="Fill size" type="number" min={1} max={40} value={p.fillSize} onChange={(e) => set({ fillSize: Math.max(1, Number(e.target.value)) })} /> pt</label>
         <label className="pref-row"><span>Fill colour</span><input aria-label="Fill colour" type="color" value={p.fillColor} onChange={(e) => set({ fillColor: e.target.value })} /></label>

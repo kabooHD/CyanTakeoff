@@ -1058,7 +1058,13 @@ folders, manual correlation and saved .bcx batches).
   zoom Fit Width set, dragging the page only moves it vertically).
 - Markup: Dynamically set as default (a property changed on a markup
   becomes the tool's default), Reuse tools, Autosize text box and callout
-  markups after typing, author and date on hover, Copy highlighted text
+  markups after typing, Scale Appearance Properties for Grouped Markups
+  (purple handles around a multi-selection scale it about the opposite
+  corner; for a Group the line widths and text sizes follow), Retain Layer
+  information when copying Markups (a markup pasted into another file
+  keeps its layer, matched by name or created there; off: no layer),
+  Print Pop-Ups with Pop-Up Opacity (Note comments print in a box beside
+  the note), author and date on hover, Copy highlighted text
   into markup comment, snapshot resolution, Include markups in snapshots.
 - Sketch: rotation input relative to the page or to the connected line;
   ellipse by width/height or by radius.
@@ -1084,6 +1090,9 @@ folders, manual correlation and saved .bcx batches).
   scrollbars, digital ID folders (browsers choose files per signature).
 
 ## Preferences (Measure)
+- Automatically Split Count Measurements by Space (off here): a count
+  continued in another Space starts a new count with the same style and
+  subject; off, the first click's Space labels the whole count.
 - Automatically split Count measurements by Space; Dynamic Fill settings
   (DPI, fill/boundary size, speed, colours, edge sensitivity); legacy
   persist behaviour for Subject/Label.

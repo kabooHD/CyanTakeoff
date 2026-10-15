@@ -35,7 +35,8 @@ import { cutoutAt, hitTest, markupBounds, outline } from './hit';
 import { urlAt, urlRects, type UrlRect } from '../model/urls';
 import { singleKeyInField } from './toolShortcut';
 import { ROTATION_FIELD, angleAbout, canRotate, normDeg, rotateHandle, rotated, rotationCenter, snapRotation, unrotatePt } from '../model/rotate';
-import { aspectCorner, hasScaleHandles, oppositeCorner, scaleAbout, scaleFactor, scaleHandles } from '../model/scale';
+import { aspectCorner, hasScaleHandles, oneGroup, oppositeCorner, scaleAbout, scaleFactor, scaleHandles, scaledStyle, selectionCorners } from '../model/scale';
+import { anchorOf, spaceAt } from '../model/spaces';
 import { bandOf, inBand } from '../model/select';
 import { fitZoom } from '../model/prefs';
 import { selectText } from '../model/textSelect';
@@ -124,6 +125,8 @@ type Drag =
   | { kind: 'rotate'; id: string; center: Pt; start: number; orig: Markup; snapshot: Markup[]; moved: boolean; deg: number }
   /** A purple corner handle scales the markup about the opposite corner (Shift: each axis on its own). */
   | { kind: 'scale'; id: string; fixed: Pt; corner: Pt; grab: Pt; orig: Markup; snapshot: Markup[]; moved: boolean }
+  /** Purple handles around several selected markups scale them together; `props`: line widths and font sizes follow (a Group, Scale Appearance Properties on). */
+  | { kind: 'scaleMany'; ids: string[]; fixed: Pt; corner: Pt; grab: Pt; origs: Markup[]; snapshot: Markup[]; moved: boolean; props: boolean }
   | { kind: 'band'; start: Pt; cur: Pt; add: boolean; right?: { x: number; y: number } }
   /** Image tool: a dragged rectangle the picture is fitted into (a click places it at its own size). */
   | { kind: 'imageBox'; start: Pt; cur: Pt }
@@ -917,6 +920,20 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
           return;
         }
       }
+      // Purple handles around several selected markups scale them together.
+      if (doc.selection.length > 1) {
+        const sel = markups.filter((m) => selected.has(m.id) && !m.locked && m.points.length);
+        if (sel.length > 1) {
+          const sh = selectionCorners(sel, SCALE_OUT / zoom), corners = selectionCorners(sel);
+          const k = sh.findIndex((h) => dist(h, raw) <= 6 / zoom);
+          if (k >= 0) {
+            setDrag({ kind: 'scaleMany', ids: sel.map((m) => m.id), fixed: oppositeCorner(corners, k), corner: corners[k], grab: { x: raw.x - corners[k].x, y: raw.y - corners[k].y },
+              origs: sel, snapshot: doc.markups, moved: false, props: s.prefs.scaleGroupProps && oneGroup(sel) });
+            capture(e);
+            return;
+          }
+        }
+      }
       // vertex handles of a single selected markup
       if (doc.selection.length === 1) {
         const m = markups.find((x) => x.id === doc.selection[0]);
@@ -1138,12 +1155,14 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       }
       case 'count': {
         const cur = countId.current && doc.markups.find((m) => m.id === countId.current);
-        if (cur) s.updateMarkups([cur.id], (m) => ({ points: [...m.points, p] }));
+        // Automatically Split Count Measurements by Space (Revu): a count continued in another Space starts a new count.
+        const sameSpace = !cur || !s.prefs.splitCountBySpace || spaceAt(doc.spaces[pageIdx], p)?.id === spaceAt(doc.spaces[cur.page], anchorOf(cur))?.id;
+        if (cur && sameSpace) s.updateMarkups([cur.id], (m) => ({ points: [...m.points, p] }));
         else {
           const m = s.addMarkup({
             type: 'count', page: pageIdx, points: [p],
-            style: s.preset?.style ?? s.toolDefaults.count,
-            subject: s.preset?.subject ?? def.subject,
+            style: cur ? { ...cur.style } : s.preset?.style ?? s.toolDefaults.count,
+            subject: cur ? cur.subject : s.preset?.subject ?? def.subject,
           });
           countId.current = m.id;
         }
@@ -1298,6 +1317,13 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         s.updateMarkups([drag.id], () => scaleAbout(drag.orig, drag.fixed, kx, ky), { history: false });
         s.setStatus(`Scale: ${Math.round(kx * 100)}%${e.shiftKey ? ` × ${Math.round(ky * 100)}%` : ''} (Shift: width and height on their own)`);
         if (!drag.moved) setDrag({ ...drag, moved: true });
+      } else if (drag.kind === 'scaleMany') {
+        const { kx, ky } = scaleFactor(drag.fixed, drag.corner, { x: raw.x - drag.grab.x, y: raw.y - drag.grab.y }, e.shiftKey);
+        const orig = new Map(drag.origs.map((m) => [m.id, m]));
+        const k = (kx + ky) / 2;
+        s.updateMarkups(drag.ids, (m) => { const o = orig.get(m.id)!; return { ...scaleAbout(o, drag.fixed, kx, ky), ...(drag.props ? { style: scaledStyle(o.style, k) } : {}) }; }, { history: false });
+        s.setStatus(`Scale: ${Math.round(kx * 100)}%${e.shiftKey ? ` × ${Math.round(ky * 100)}%` : ''}${drag.props ? ', line widths and text sizes follow' : ''} (Shift: width and height on their own)`);
+        if (!drag.moved) setDrag({ ...drag, moved: true });
       } else if (drag.kind === 'rotate') {
         const d = angleAbout(drag.center, raw) - drag.start;
         const base = ROTATION_FIELD.has(drag.orig.type) ? drag.orig.rotation ?? 0 : 0;
@@ -1400,7 +1426,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     }
     if (s.tool === 'dynamic-fill') fillUp();
     if (drag) {
-      if ((drag.kind === 'move' || drag.kind === 'vertex' || drag.kind === 'leader' || drag.kind === 'caption' || drag.kind === 'captionRotate' || drag.kind === 'rotate' || drag.kind === 'scale') && drag.moved) s.pushUndo(drag.snapshot);
+      if ((drag.kind === 'move' || drag.kind === 'vertex' || drag.kind === 'leader' || drag.kind === 'caption' || drag.kind === 'captionRotate' || drag.kind === 'rotate' || drag.kind === 'scale' || drag.kind === 'scaleMany') && drag.moved) s.pushUndo(drag.snapshot);
       if (drag.kind === 'bezier') s.pushUndo(drag.snapshot);
       if (drag.kind === 'band') selectInBand(drag);
       if (drag.kind === 'imageBox') { const moved = dist(drag.start, drag.cur) * zoom > 4; void placeImage(drag.start, moved ? drag.cur : undefined); }
@@ -1916,6 +1942,14 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
                 <path d={`M${q.x - 10 / zoom} ${q.y}H${q.x + 10 / zoom}M${q.x} ${q.y - 10 / zoom}V${q.y + 10 / zoom}`} />
               </g>
             ))}
+            {doc.selection.length > 1 && tool === 'select' && (() => {
+              const sel = markups.filter((m) => selected.has(m.id) && !m.locked && m.points.length);
+              if (sel.length < 2) return null;
+              return selectionCorners(sel, SCALE_OUT / zoom).map((h, i) => (
+                <rect key={`msc${i}`} className="scale-handle" x={h.x - 4 / zoom} y={h.y - 4 / zoom} width={8 / zoom} height={8 / zoom} rx={1.5 / zoom}
+                  fill="#a64dff" stroke="#fff" strokeWidth={1 / zoom}><title>Drag to scale the selection (keeps the proportions; Shift: free)</title></rect>
+              ));
+            })()}
             {snapPt && (
               <rect x={snapPt.x - 5 / zoom} y={snapPt.y - 5 / zoom} width={10 / zoom} height={10 / zoom}
                 fill="none" stroke="#00b050" strokeWidth={1.5 / zoom} pointerEvents="none" />

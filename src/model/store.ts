@@ -16,6 +16,7 @@ import { columnDefaults } from './columns';
 import type { RulerUnit } from './rulers';
 import type { HatchDef, LineStyleDef } from './lineStyles';
 import type { LayerSet } from '../pdf/layers';
+import { pasteLayers } from './pasteLayers';
 import type { Bookmark } from '../pdf/bookmarks';
 import { PERM, PasswordRequired, allowed, encryptPdf, looksEncrypted, openEncrypted, type NewSecurity, type Security } from '../pdf/crypt';
 import { askPassword } from './prompts';
@@ -187,6 +188,9 @@ interface AppState {
   status: string;
   busy: boolean;
   clipboard: Markup[];
+  /** The document the clipboard was copied from, and its layer names by id (Retain Layer information when copying). */
+  clipboardFrom: string | null;
+  clipboardLayers: Record<string, string>;
 
   openBytes(bytes: Uint8Array, name: string, handle?: FileSystemFileHandle): Promise<void>;
   closeDoc(id: string): void;
@@ -411,6 +415,9 @@ function rescoped(d: DocState, pages: number[], calibrations: (Scale | null)[], 
   return { calibrations, viewports, dirtyCalibrations, markups, undo: [...d.undo, snap], redo: [], dirty: true };
 }
 
+/** Layer names by id (for the clipboard). */
+const layerNames = (d: DocState) => Object.fromEntries(Object.values(d.layers?.layers ?? {}).map((l) => [l.id, l.name]));
+
 export const useApp = create<AppState>((set, get) => {
   /** Mutate the active document. */
   const withDoc = (fn: (d: DocState) => Partial<DocState>) => {
@@ -460,6 +467,8 @@ export const useApp = create<AppState>((set, get) => {
     status: 'Ready',
     busy: false,
     clipboard: [],
+    clipboardFrom: null,
+    clipboardLayers: {},
 
     async openBytes(bytes, name, handle) {
       set({ busy: true, status: `Opening ${name}…` });
@@ -743,7 +752,7 @@ export const useApp = create<AppState>((set, get) => {
     copy() {
       const d = activeDoc();
       if (!d) return;
-      set({ clipboard: d.markups.filter((m) => d.selection.includes(m.id)) });
+      set({ clipboard: d.markups.filter((m) => d.selection.includes(m.id)), clipboardFrom: d.id, clipboardLayers: layerNames(d) });
     },
     paste(inPlace) {
       const d = activeDoc();
@@ -751,15 +760,20 @@ export const useApp = create<AppState>((set, get) => {
       if (!d || !clip.length) return;
       const off = inPlace ? 0 : 18;
       const t = now();
-      const copies = clip.map((m) => ({
+      const raw = clip.map((m) => ({
         ...m, id: crypto.randomUUID(), page: d.page, created: t, modified: t, source: undefined,
         ...translated(m, off, off),
       }));
+      // From another file: Retain Layer information when copying Markups (the layers are created here when missing).
+      const cross = get().clipboardFrom !== d.id;
+      const pl = cross ? pasteLayers(raw, get().clipboardLayers, d.layers, get().prefs.retainLayer, () => `new:${crypto.randomUUID()}`) : { markups: raw, layers: d.layers, added: [] as string[] };
+      const copies = pl.markups;
       withDoc((doc) => ({
         markups: [...doc.markups, ...copies], selection: copies.map((c) => c.id),
         undo: [...doc.undo, doc.markups], redo: [], dirty: true,
+        ...(pl.added.length ? { layers: pl.layers, dirtyLayers: true, layerVisible: { ...doc.layerVisible, ...Object.fromEntries(pl.added.map((id) => [id, true])) } } : {}),
       }));
-      set({ clipboard: copies });
+      set({ clipboard: copies, clipboardFrom: d.id, clipboardLayers: layerNames(activeDoc()!) });
     },
 
     setCalibration(page, scale, allPages) {

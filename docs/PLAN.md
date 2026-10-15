@@ -325,6 +325,9 @@ filling, image signatures, redaction and OCR.
 - [x] Preferences: Find Hyperlinks in PDF Content, Automatically Reorder
   Bookmarks, Redirect Links on Slip Sheet, Lock Panning in Fit Width, Enable
   Single Key Shortcuts (forms), Enable Spell Check and its colour
+- [x] Multi-selection scale handles; Preferences > Markup: Scale Appearance
+  Properties for Grouped Markups, Retain Layer when copying, Print Pop-Ups;
+  Measure: Automatically Split Count Measurements by Space
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

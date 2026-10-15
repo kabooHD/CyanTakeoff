@@ -77,6 +77,18 @@ export interface Prefs {
   // Forms
   /** Enable Single Key Shortcuts: a tool's one-key shortcut works while a form field has the focus. */
   singleKeyInForms: boolean;
+  // Markup
+  /** Scale Appearance Properties for Grouped Markups: scaling a Group scales its line widths and font sizes too. */
+  scaleGroupProps: boolean;
+  /** Retain Layer information when copying Markups: a markup pasted into another file keeps its layer (created there when missing). */
+  retainLayer: boolean;
+  /** Print Pop-Ups: Note comments print in a box beside the note. */
+  printPopups: boolean;
+  /** Pop-Up Opacity (percent) for Print Pop-Ups. */
+  popupOpacity: number;
+  // Measure
+  /** Automatically Split Count Measurements by Space: a count continued in another Space starts a new count. */
+  splitCountBySpace: boolean;
   // Markups List
   /** Zoom to fit a markup when it is selected in the list. */
   zoomFitOnSelect: boolean;
@@ -110,6 +122,7 @@ export const DEFAULT_PREFS: Prefs = {
   gridSpacing: 12, snapSensitivity: 10, snapColor: '#3a7bd5',
   maxZoom: 6400, defaultLayout: 'single', openDisplay: 'fitPage', rotateAllPages: false, rememberLastPage: false,
   reorderBookmarks: true, redirectOnSlipSheet: true, findHyperlinks: true, lockPanFitWidth: true, singleKeyInForms: false,
+  scaleGroupProps: true, retainLayer: true, printPopups: false, popupOpacity: 85, splitCountBySpace: false,
   zoomFitOnSelect: false, wrapComments: false, filteredDim: 75,
   hideChildLayers: true, layersOnPageOnly: false,
   spellUpperCase: false, customWords: '', spellCheck: true, spellColor: '#ff0000',

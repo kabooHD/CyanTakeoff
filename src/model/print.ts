@@ -148,3 +148,36 @@ export function renderScale(w: number, h: number, scale: number, dpi: number, ma
   const px = w * h * s * s;
   return px > maxPixels ? Math.sqrt(maxPixels / (w * h)) : s;
 }
+
+/** Where a Note's pop-up prints (Print Pop-Ups): its box and the comment wrapped into lines. */
+export interface PopupBox { x: number; y: number; w: number; h: number; lines: string[] }
+
+/** Words wrapped to at most `chars` characters a line (a longer word gets a line of its own). */
+export function wrapWords(text: string, chars: number): string[] {
+  const out: string[] = [];
+  for (const para of text.replace(/\r/g, '').split('\n')) {
+    let line = '';
+    for (const w of para.split(/\s+/).filter(Boolean)) {
+      if (!line) line = w;
+      else if ((line + ' ' + w).length <= chars) line += ' ' + w;
+      else { out.push(line); line = w; }
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+/**
+ * The pop-up of a note at `at` (page space, points): to the right of the
+ * icon, or to its left when there is no room, kept inside the page; a
+ * header line (author and date) above the wrapped comment.
+ */
+export function popupLayout(at: { x: number; y: number }, comment: string, page: { w: number; h: number }, width = 180, lineH = 13, chars = 30): PopupBox {
+  const lines = wrapWords(comment, chars).slice(0, 40);
+  const h = lineH * (lines.length + 1) + 8;
+  let x = at.x + 22;
+  if (x + width > page.w) x = at.x - 4 - width;
+  x = Math.max(0, Math.min(x, Math.max(0, page.w - width)));
+  const y = Math.max(0, Math.min(at.y, Math.max(0, page.h - h)));
+  return { x, y, w: width, h, lines };
+}
