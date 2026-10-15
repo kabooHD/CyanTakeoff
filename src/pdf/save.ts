@@ -1,6 +1,6 @@
 import { writeLayers, type LayerSet } from './layers';
 import { writeBookmarks, type Bookmark } from './bookmarks';
-import { captionAnchor, captionLeaderLine, captionText, displayText } from '../model/measureDisplay';
+import { captionAnchor, captionLeaderLine, captionText, displayText, LEADER_EXT, drawnLine, leaderLine } from '../model/measureDisplay';
 import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTileWH, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type HatchDef } from '../model/lineStyles';
 import { flattenPath, hasCurves, pdfPath, segments } from '../model/curves';
 import { hasSignatures, incrementalUpdate, loadForUpdate } from './incremental';
@@ -267,12 +267,18 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
   switch (m.type) {
     case 'dimension': {
       const size = Math.max(7, st.width * 5);
-      o.moveTo(P[0]); o.lineTo(P[1]); o.add('S');
-      arrowHead(o, P[1], P[0], size); arrowHead(o, P[0], P[1], size);
-      const ang = Math.atan2(P[1].y - P[0].y, P[1].x - P[0].x) + Math.PI / 2;
-      for (const p of [P[0], P[1]]) {
-        o.moveTo({ x: p.x + Math.cos(ang) * 8, y: p.y + Math.sin(ang) * 8 });
-        o.lineTo({ x: p.x - Math.cos(ang) * 8, y: p.y - Math.sin(ang) * 8 }); o.add('S');
+      const L = drawnLine(m, P, true);
+      o.moveTo(L[0]); o.lineTo(L[1]); o.add('S');
+      arrowHead(o, L[1], L[0], size); arrowHead(o, L[0], L[1], size);
+      if (m.leader) {
+        const l = leaderLine(P, m.leader, true);
+        o.moveTo(P[0]); o.lineTo(l.ea); o.add('S'); o.moveTo(P[1]); o.lineTo(l.eb); o.add('S');
+      } else {
+        const ang = Math.atan2(P[1].y - P[0].y, P[1].x - P[0].x) + Math.PI / 2;
+        for (const p of [P[0], P[1]]) {
+          o.moveTo({ x: p.x + Math.cos(ang) * 8, y: p.y + Math.sin(ang) * 8 });
+          o.lineTo({ x: p.x - Math.cos(ang) * 8, y: p.y - Math.sin(ang) * 8 }); o.add('S');
+        }
       }
       break;
     }
@@ -427,10 +433,15 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
         o.add('S');
       }
       break;
-    case 'line': case 'arrow': case 'length':
-      o.moveTo(P[0]); o.lineTo(P[1]); o.add(lineOp);
+    case 'line': case 'arrow': case 'length': {
+      const L = drawnLine(m, P, true);
+      o.moveTo(L[0]); o.lineTo(L[1]); o.add(lineOp);
       if (m.type === 'arrow' || m.type === 'line') lineEnds(o, m, P, rgb);
-      if (m.type === 'length') {
+      if (m.type === 'length' && m.leader) {
+        // leader lines from the measured points past the line (PDF /LL, /LLE)
+        const l = leaderLine(P, m.leader, true);
+        o.moveTo(P[0]); o.lineTo(l.ea); o.add('S'); o.moveTo(P[1]); o.lineTo(l.eb); o.add('S');
+      } else if (m.type === 'length') {
         // end ticks
         const ang = Math.atan2(P[1].y - P[0].y, P[1].x - P[0].x) + Math.PI / 2;
         for (const p of P) {
@@ -440,6 +451,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
         }
       }
       break;
+    }
     case 'polyline': case 'polylength': case 'perimeter': case 'pen': case 'angle':
       if (hasCurves(m.handles)) curvedPath(o, P, m.handles, false); else o.poly(P, false);
       o.add(m.type === 'angle' ? 'S' : lineOp);
@@ -545,7 +557,7 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
 
   if (meas && m.type !== 'count') {
     // PDF space has y up: the page-space anchor's lift/offset flips in y.
-    const anchor = captionAnchor(m.type, P.map((p) => ({ x: p.x, y: -p.y })));
+    const anchor = captionAnchor(m.type, drawnLine(m, P, true).map((p) => ({ x: p.x, y: -p.y })));
     const off = m.display?.captionOffset;
     const pos = { x: anchor.x + (off?.x ?? 0), y: -anchor.y - (off?.y ?? 0) };
     const size = st.fontSize;
@@ -559,8 +571,9 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
     textAt(o, font, t, size, q.u - w / 2, q.v - size * 0.35, rgb, cfr);
     // A moved Length caption keeps a leader line to the middle of its line (Revu).
     if (captionLeaderLine(m, P)) {
+      const L = drawnLine(m, P, true);
       o.add(`q ${f(Math.min(st.width || 1, 1))} w`);
-      o.moveTo({ x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 });
+      o.moveTo({ x: (L[0].x + L[1].x) / 2, y: (L[0].y + L[1].y) / 2 });
       o.lineTo(pos);
       o.add('S Q');
     }
@@ -764,6 +777,7 @@ function buildAnnot(doc: PDFDocument, font: PDFFont, m: Markup, page: PageInfo, 
   switch (SUBTYPE[m.type]) {
     case 'Line':
       entries.L = flat(P);
+      if ((m.type === 'length' || m.type === 'dimension') && m.leader) { entries.LL = m.leader; entries.LLE = LEADER_EXT; }
       entries.LE = m.type === 'dimension' ? [N('OpenArrow'), N('OpenArrow')] : [N(leName(endsOf(m.type, st).start)), N(leName(endsOf(m.type, st).end))];
       break;
     case 'PolyLine':

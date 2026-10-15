@@ -1,5 +1,5 @@
 import { hasCurves, svgPath } from '../model/curves';
-import { captionLeaderLine, captionPosition, captionText, segmentValues } from '../model/measureDisplay';
+import { captionLeaderLine, captionPosition, captionText, segmentValues, drawnLine, leaderLine } from '../model/measureDisplay';
 import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTileWH, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type LineStyleDef } from '../model/lineStyles';
 import { calloutAttach } from '../pdf/save';
 import { arcPoints, arcThrough, bounds, centroid, cloudArcLength, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
@@ -118,9 +118,12 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
       const size = Math.max(7, st.width * 5);
       const ang = Math.atan2(P[1].y - P[0].y, P[1].x - P[0].x) + Math.PI / 2;
       const ext = (p: Pt) => <line key={`e${p.x},${p.y}`} {...c} x1={p.x + Math.cos(ang) * 8} y1={p.y + Math.sin(ang) * 8} x2={p.x - Math.cos(ang) * 8} y2={p.y - Math.sin(ang) * 8} />;
-      shape = <><line {...c} x1={P[0].x} y1={P[0].y} x2={P[1].x} y2={P[1].y} />
-        <polyline {...c} fill="none" points={arrowHead(P[1], P[0], size)} />
-        <polyline {...c} fill="none" points={arrowHead(P[0], P[1], size)} />{ext(P[0])}{ext(P[1])}</>;
+      const L = drawnLine(m, P);
+      const l = m.leader ? leaderLine(P, m.leader) : null;
+      shape = <><line {...c} x1={L[0].x} y1={L[0].y} x2={L[1].x} y2={L[1].y} />
+        <polyline {...c} fill="none" points={arrowHead(L[1], L[0], size)} />
+        <polyline {...c} fill="none" points={arrowHead(L[0], L[1], size)} />
+        {l ? <><line {...c} x1={P[0].x} y1={P[0].y} x2={l.ea.x} y2={l.ea.y} /><line {...c} x1={P[1].x} y1={P[1].y} x2={l.eb.x} y2={l.eb.y} /></> : <>{ext(P[0])}{ext(P[1])}</>}</>;
       break;
     }
     case 'arc':
@@ -212,16 +215,22 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
     case 'legend':
       shape = <LegendShape m={m} />;
       break;
-    case 'line': case 'length':
+    case 'line': case 'length': {
       if (P.length < 2) break;
-      shape = <line {...cm} x1={P[0].x} y1={P[0].y} x2={P[1].x} y2={P[1].y} />;
+      // A length with a leader offset is drawn beside its points, joined by leader lines (Revu's middle handle).
+      const L = drawnLine(m, P);
+      shape = <line {...cm} x1={L[0].x} y1={L[0].y} x2={L[1].x} y2={L[1].y} />;
       if (m.type === 'line') shape = <>{shape}<EndCaps m={m} P={P} c={c} /></>;
       if (m.type === 'length') {
         const ang = Math.atan2(P[1].y - P[0].y, P[1].x - P[0].x) + Math.PI / 2;
         const t = (p: Pt) => <line key={`${p.x},${p.y}`} {...c} x1={p.x + Math.cos(ang) * 5} y1={p.y + Math.sin(ang) * 5} x2={p.x - Math.cos(ang) * 5} y2={p.y - Math.sin(ang) * 5} />;
-        shape = <>{shape}{t(P[0])}{t(P[1])}</>;
+        if (m.leader) {
+          const l = leaderLine(P, m.leader);
+          shape = <>{shape}<line {...c} x1={P[0].x} y1={P[0].y} x2={l.ea.x} y2={l.ea.y} /><line {...c} x1={P[1].x} y1={P[1].y} x2={l.eb.x} y2={l.eb.y} /></>;
+        } else shape = <>{shape}{t(P[0])}{t(P[1])}</>;
       }
       break;
+    }
     case 'arrow':
       if (P.length < 2) break;
       shape = <><line {...cm} x1={P[0].x} y1={P[0].y} x2={P[1].x} y2={P[1].y} />

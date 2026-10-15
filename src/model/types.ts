@@ -215,6 +215,8 @@ export interface Markup {
   slope?: { unit: 'pitch' | 'degree' | 'grade'; value: number };
   /** Rise/Drop added to a length, in scale units (piping, conduit). */
   rise?: number;
+  /** Length / Dimension: the line sits this far (page points) beside the measured points, joined by leader lines (PDF /LL; sign = side). */
+  leader?: number;
   /** Holes cut out of an Area or Volume measurement. */
   cutouts?: Cutout[];
   /** Layer (optional content group) the markup is on: its id from src/pdf/layers.ts. */

@@ -304,6 +304,9 @@ function readAnnot(doc: PDFDocument, dict: PDFDict, ref: PDFRef, page: number): 
       const le = getArray(doc, dict, 'LE');
       const ends = le ? [0, 1].map((i) => String(lookup(doc, le.get(i)) ?? '')) : [];
       type = intent === 'LineDimension' ? (/^dimension/i.test(subj) ? 'dimension' : 'length') : ends.some((e) => /Arrow/.test(e)) ? 'arrow' : 'line';
+      // Leader lines (/LL): the line is drawn that far beside its points (Revu's Length height).
+      const ll = lookup(doc, dict.get(PDFName.of('LL')));
+      if (ll instanceof PDFNumber && ll.asNumber() && (type === 'length' || type === 'dimension')) extra = { ...extra, leader: ll.asNumber() };
       break;
     }
     case 'Redact':

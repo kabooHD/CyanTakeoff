@@ -1,9 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { captionText, convertLength, displayText, segmentValues } from '../src/model/measureDisplay';
+import { captionText, convertLength, displayText, drawnLine, leaderLine, segmentValues } from '../src/model/measureDisplay';
 import type { Markup } from '../src/model/types';
 
 const scale = { factor: 1 / 18, unit: 'ft' as const, label: '1/4" = 1\'' }; // 18 pt per foot
 const base = { id: 'a', page: 0, style: { color: '#000', width: 1, opacity: 1, fontSize: 10 } as Markup['style'], subject: '', label: '', comment: '', author: '', created: '', modified: '', status: 'None' as const, scale };
+
+describe('leader offset (PDF /LL)', () => {
+  it('moves the line beside its points, clockwise for a positive value', () => {
+    const P = [{ x: 0, y: 0 }, { x: 10, y: 0 }];
+    // PDF space (y up): clockwise from +x is -y.
+    expect(leaderLine(P, 5, true).a).toEqual({ x: 0, y: -5 });
+    expect(leaderLine(P, 5, true).ea).toEqual({ x: 0, y: -7 });
+    // Page space (y down): the same side on screen is +y.
+    expect(leaderLine(P, 5).a).toEqual({ x: 0, y: 5 });
+    expect(leaderLine(P, -5).b).toEqual({ x: 10, y: -5 });
+    expect(drawnLine({ type: 'length', leader: 5 }, P)).toEqual([{ x: 0, y: 5 }, { x: 10, y: 5 }]);
+    expect(drawnLine({ type: 'length' }, P)).toBe(P);
+    expect(drawnLine({ type: 'line', leader: 5 }, P)).toBe(P);
+  });
+});
 
 describe('measurement display', () => {
   it('converts lengths, areas and volumes between units', () => {

@@ -40,7 +40,7 @@ Clean-room notes from inspecting Revu-authored PDFs
 
 | Revu tool | Subtype | /IT | Notes |
 |---|---|---|---|
-| Length | Line | LineDimension | `/LL`, `/LLE` leader lines, `/LE` ClosedArrow |
+| Length | Line | LineDimension | `/LL`, `/LLE` leader lines (read into `leader`, written back; the line is drawn `/LL` beside its points), `/LE` ClosedArrow |
 | Area | Polygon | PolygonDimension | `/FillOpacity` |
 | Polylength | PolyLine | PolyLineDimension | |
 | Perimeter | PolyLine | PolyLineDimension | open as drawn (not auto-closed); told apart by `/Subj` |

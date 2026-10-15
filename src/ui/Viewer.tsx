@@ -18,7 +18,7 @@ import { applyCutout, ellipsePolygon } from '../model/cutouts';
 import { expandGroups } from '../model/arrange';
 import { rgbaOf, wheelZoomFactor } from '../model/prefs';
 import { cssFamily, textStyleOf } from '../model/textStyle';
-import { MOVABLE_CAPTION, captionPosition, captionText, snapCaptionAngle } from '../model/measureDisplay';
+import { MOVABLE_CAPTION, captionPosition, captionText, drawnLine, snapCaptionAngle } from '../model/measureDisplay';
 import { mergeCounts, nearestCountIndex, splitAll, splitCount } from '../model/count';
 import { autosizedBox, withBox } from '../model/textBox';
 import { textWidth } from './quickCommands';
@@ -113,6 +113,8 @@ type Drag =
   | { kind: 'pan'; sx: number; sy: number; left: number; top: number }
   | { kind: 'move'; start: Pt; snapshot: Markup[]; ids: string[]; moved: boolean }
   | { kind: 'vertex'; id: string; index: number; snapshot: Markup[]; moved: boolean }
+  /** The middle handle of a Length / Dimension: drags the line beside its points (leader offset, PDF /LL). */
+  | { kind: 'leader'; id: string; snapshot: Markup[]; moved: boolean }
   /** Shift+drag a measurement caption (offset), or drag its anchor to turn it. */
   | { kind: 'caption'; id: string; start: Pt; orig: Pt; snapshot: Markup[]; moved: boolean }
   | { kind: 'captionRotate'; id: string; center: Pt; snapshot: Markup[]; moved: boolean }
@@ -907,6 +909,13 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
             const k = sh.findIndex((h) => dist(h, raw) <= 6 / zoom);
             if (k >= 0) { setDrag({ kind: 'scale', id: m.id, fixed: oppositeCorner(corners, k), corner: corners[k], grab: { x: raw.x - corners[k].x, y: raw.y - corners[k].y }, orig: m, snapshot: doc.markups, moved: false }); capture(e); return; }
           }
+          if ((m.type === 'length' || m.type === 'dimension') && m.points.length > 1 && !m.locked && !e.shiftKey) {
+            // The middle handle (Shift+drag there moves the caption instead) (Revu: "adjust the height"): the line moves beside its points, joined by leader lines.
+            const L = drawnLine(m, m.points);
+            if (dist({ x: (L[0].x + L[1].x) / 2, y: (L[0].y + L[1].y) / 2 }, raw) <= 6 / zoom) {
+              setDrag({ kind: 'leader', id: m.id, snapshot: doc.markups, moved: false }); capture(e); return;
+            }
+          }
           const hs = handlePoints(m);
           const i = hs.findIndex((h) => dist(h, raw) <= 6 / zoom);
           if (i >= 0 && curvable && (e.ctrlKey || e.metaKey)) {
@@ -1200,6 +1209,15 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         const orig = new Map(drag.snapshot.map((m) => [m.id, m]));
         s.updateMarkups(drag.ids, (m) => translated(orig.get(m.id)!, dx, dy), { history: false });
         if (!drag.moved) setDrag({ ...drag, moved: true });
+      } else if (drag.kind === 'leader') {
+        // Signed distance of the pointer from the measured line, along the page-space normal (see leaderLine).
+        s.updateMarkups([drag.id], (m) => {
+          const [a, b] = m.points;
+          const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+          const d = ((raw.x - a.x) * -dy + (raw.y - a.y) * dx) / len;
+          return { leader: Math.abs(d) < 2 ? undefined : Math.round(d * 100) / 100 };
+        }, { history: false });
+        setDrag({ ...drag, moved: true });
       } else if (drag.kind === 'vertex') {
         const p = snap(raw, drag.id);
         s.updateMarkups([drag.id], (m) => {
@@ -1319,7 +1337,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     }
     if (s.tool === 'dynamic-fill') fillUp();
     if (drag) {
-      if ((drag.kind === 'move' || drag.kind === 'vertex' || drag.kind === 'caption' || drag.kind === 'captionRotate' || drag.kind === 'rotate' || drag.kind === 'scale') && drag.moved) s.pushUndo(drag.snapshot);
+      if ((drag.kind === 'move' || drag.kind === 'vertex' || drag.kind === 'leader' || drag.kind === 'caption' || drag.kind === 'captionRotate' || drag.kind === 'rotate' || drag.kind === 'scale') && drag.moved) s.pushUndo(drag.snapshot);
       if (drag.kind === 'bezier') s.pushUndo(drag.snapshot);
       if (drag.kind === 'band') selectInBand(drag);
       if (drag.kind === 'viewport' && drag.rect !== drag.orig) {
@@ -1773,6 +1791,10 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
                     <rect key={i} x={h.x - 3.5 / zoom} y={h.y - 3.5 / zoom} width={7 / zoom} height={7 / zoom}
                       fill="#fff" stroke="#1a73e8" strokeWidth={1 / zoom} />
                   ))}
+                  {doc.selection.length === 1 && (m.type === 'length' || m.type === 'dimension') && m.points.length > 1 && (() => {
+                    const L = drawnLine(m, m.points), c = { x: (L[0].x + L[1].x) / 2, y: (L[0].y + L[1].y) / 2 };
+                    return <rect className="leader-handle" x={c.x - 3.5 / zoom} y={c.y - 3.5 / zoom} width={7 / zoom} height={7 / zoom} fill="#ffd400" stroke="#1a73e8" strokeWidth={1 / zoom}><title>Drag to move the line beside its points</title></rect>;
+                  })()}
                 </g>
               );
             })}

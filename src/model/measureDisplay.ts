@@ -5,6 +5,30 @@ import type { LengthUnit, Markup, Pt } from './types';
 import { areaLabel, formatLength, formatNumber, measure, resolveFormat, volumeLabel, type Measurement } from './measure';
 import { flatPoints } from './curves';
 
+/** Extension of the leader lines past the measured line (PDF /LLE). */
+export const LEADER_EXT = 2;
+
+/**
+ * Where a Length / Dimension line is drawn when it has a leader offset
+ * (Revu: drag the middle handle): the two points moved sideways by
+ * `leader`, with leader lines from the measured points. PDF /LL: positive
+ * is clockwise from the line's direction; page space has y down, so the
+ * normal flips.
+ */
+export function leaderLine(P: Pt[], leader: number, yUp = false): { a: Pt; b: Pt; ea: Pt; eb: Pt } {
+  const dx = P[1].x - P[0].x, dy = P[1].y - P[0].y, len = Math.hypot(dx, dy) || 1;
+  const n = yUp ? { x: dy / len, y: -dx / len } : { x: -dy / len, y: dx / len };
+  const at = (p: Pt, d: number) => ({ x: p.x + n.x * d, y: p.y + n.y * d });
+  const ext = leader + Math.sign(leader) * LEADER_EXT;
+  return { a: at(P[0], leader), b: at(P[1], leader), ea: at(P[0], ext), eb: at(P[1], ext) };
+}
+
+/** The points a Length / Dimension is drawn through: its leader line when it has one. */
+export function drawnLine(m: Pick<Markup, 'type' | 'leader'>, P: Pt[], yUp = false): Pt[] {
+  if ((m.type === 'length' || m.type === 'dimension') && m.leader && P.length >= 2) { const l = leaderLine(P, m.leader, yUp); return [l.a, l.b]; }
+  return P;
+}
+
 export interface MeasureDisplay {
   /** Which caption shows on the drawing: the value (default), the label, both, or none. */
   caption?: 'value' | 'label' | 'both' | 'none';
@@ -101,15 +125,16 @@ export function captionAnchor(type: Markup['type'], P: Pt[]): Pt {
 }
 
 /** The caption's place: its anchor moved by the offset the user dragged it to. */
-export function captionPosition(m: Pick<Markup, 'type' | 'display'>, P: Pt[]): Pt {
-  const a = captionAnchor(m.type, P), o = m.display?.captionOffset;
+export function captionPosition(m: Pick<Markup, 'type' | 'display' | 'leader'>, P: Pt[]): Pt {
+  const a = captionAnchor(m.type, drawnLine(m, P)), o = m.display?.captionOffset;
   return o ? { x: a.x + o.x, y: a.y + o.y } : a;
 }
 
 /** The leader joining a moved Length caption to the middle of its line (Revu), or null when there is none. */
-export function captionLeaderLine(m: Pick<Markup, 'type' | 'display'>, P: Pt[]): { from: Pt; to: Pt } | null {
+export function captionLeaderLine(m: Pick<Markup, 'type' | 'display' | 'leader'>, P: Pt[]): { from: Pt; to: Pt } | null {
   if (m.type !== 'length' || !m.display?.captionOffset || m.display.captionLeader === false || P.length < 2) return null;
-  return { from: { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 }, to: captionPosition(m, P) };
+  const L = drawnLine(m, P);
+  return { from: { x: (L[0].x + L[1].x) / 2, y: (L[0].y + L[1].y) / 2 }, to: captionPosition(m, P) };
 }
 
 /** Caption rotation while dragging its anchor: 15° steps, 1° with `fine` (Shift), in degrees counter-clockwise. */

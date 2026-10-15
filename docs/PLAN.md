@@ -310,6 +310,8 @@ filling, image signatures, redaction and OCR.
   Tools (Recent Tools), My Tools hot keys 1-9
 - [x] Sets: New / Open / Save / Close Set (.ctset.json, src/model/setFile.ts),
   Publish: Combine / Package, Stack Multi-Page Documents
+- [x] Length / Dimension leader offset: the middle handle moves the line
+  beside its points (PDF /LL, /LLE; Revu files render in place)
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

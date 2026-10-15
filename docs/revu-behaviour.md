@@ -56,6 +56,9 @@ resizes the markup), and Add to My Tools / Set as Default (the markup's
 appearance becomes the tool's default).
 
 ## Measurement display (Properties)
+A Length or Dimension has a middle handle: dragging it moves the line
+beside the measured points, joined by leader lines (Revu's "height";
+PDF /LL and /LLE, so Revu shows it the same); the value is unchanged.
 Captions can be moved (Shift+drag; not Radius, Diameter and Angle),
 turned by dragging the orange anchor beside them (15° steps, Shift for
 1°), and put back with right-click > Reset Caption Position; the offset

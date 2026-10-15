@@ -147,7 +147,7 @@ Signatures panel Alt+4), redaction (mark area/text; apply removes the
 content under the marks: src/pdf/redactContent.ts), OCR (tesseract.js,
 18 languages incl. Cyrillic, Greek, Arabic, Hebrew, CJK; invisible text in a
 glyphless Unicode font, src/pdf/glyphless.ts; assets served from /ocr/);
-length, polylength, area, perimeter, volume, count, angle, radius, diameter;
+length (with leader offset /LL: middle handle), polylength, area, perimeter, volume, count, angle, radius, diameter;
 cutouts (polygon/ellipse, Revu fuse/trim rules); curved segments
 (src/model/curves.ts: Ctrl+drag, Ctrl/Shift+click, Convert to Arc; PDF 2.0
 /Path); Dynamic Fill;

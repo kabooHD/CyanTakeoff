@@ -3,6 +3,7 @@ import { arcPoints, arcThrough, bounds, distToSegment, pointInPolygon, rectCorne
 import type { Markup, Pt } from '../model/types';
 import { CURVABLE, flatPoints, flattenPath, hasCurves } from '../model/curves';
 import { drawnPoints } from '../model/rotate';
+import { drawnLine } from '../model/measureDisplay';
 
 /** Outline used for hit-testing and rubber-band selection (a turned box shape: its corners as drawn). */
 export function outline(m: Markup): { pts: Pt[]; closed: boolean } {
@@ -34,6 +35,8 @@ function outlineRaw(m: Markup): { pts: Pt[]; closed: boolean } {
       return { pts: P.length > 1 ? rectCorners(P[0], P[1]) : P, closed: true };
     case 'callout':
       return { pts: P.length > 2 ? rectCorners(P[1], P[2]) : P, closed: true };
+    case 'length': case 'dimension':
+      return { pts: drawnLine(m, P), closed: false };
     case 'radius': case 'diameter': {
       if (P.length < 2) return { pts: P, closed: false };
       if (m.type === 'radius' && P.length > 2) return { pts: [P[0], ...arcPoints(P[0], P[1], P[2], -1)], closed: false };

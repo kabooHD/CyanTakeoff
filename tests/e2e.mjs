@@ -104,6 +104,23 @@ let a = await toScreen(0, 40), b = await toScreen(60, 40);
 await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up();
 list = await page.locator('.ml-table tbody').innerText();
 assert(list.includes(`60'-0"`), `length measurement 60'-0"`);
+{
+  // Length "height" (Revu): the middle handle drags the line beside its points (PDF /LL); the value stays.
+  await page.keyboard.press('Escape');
+  const mid = await toScreen(30, 40);
+  await page.mouse.click(mid.x, mid.y);
+  await page.locator('.leader-handle').waitFor({ timeout: 5000 });
+  const g = page.locator('.markup-layer g[data-id]', { hasText: `60'-0"` }).first();
+  const y0 = Number(await g.locator('line').first().getAttribute('y1'));
+  await page.mouse.move(mid.x, mid.y); await page.mouse.down(); await page.mouse.move(mid.x, mid.y + 30, { steps: 5 }); await page.mouse.up();
+  await page.waitForTimeout(200);
+  const y1 = Number(await g.locator('line').first().getAttribute('y1'));
+  assert(y1 > y0 + 5 && (await page.locator('.ml-table tbody').innerText()).includes(`60'-0"`) && await g.locator('line').count() === 3, `dragging the middle handle moves the line beside its points with leader lines (${y0.toFixed(1)} -> ${y1.toFixed(1)})`);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(200);
+  assert(Math.abs(Number(await g.locator('line').first().getAttribute('y1')) - y0) < 0.5, 'undo puts the line back on its points');
+  await page.keyboard.press('Escape');
+}
 
 // Angle, radius and diameter via their Revu shortcuts (snapping off for exact clicks).
 const toggleSnaps = async () => { await page.keyboard.press('Control+Shift+F8'); await page.keyboard.press('Control+Shift+F7'); };
