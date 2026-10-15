@@ -800,6 +800,18 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Shift+E'); await drag([50, 18], [50, 15]);
   await page.keyboard.press('Escape');
   assert(await pens() === pen0 + 2, `the eraser splits a pen stroke in two (${pen0} -> ${await pens()})`);
+  {
+    // Pen strokes made within a second are one grouped markup (Revu); the list shows one Group item.
+    const groups = () => page.locator('.ml-table tbody tr.ml-group-row').count();
+    const g0 = await groups();
+    await page.keyboard.press('p'); await drag([44, 19.5], [56, 19.5]); await drag([44, 20.5], [56, 20.5]);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
+    assert(await groups() === g0 + 1, `two quick pen strokes make one grouped markup (${g0} -> ${await groups()})`);
+    await page.keyboard.press('Control+z'); await page.keyboard.press('Control+z');
+    await page.waitForTimeout(200);
+    assert(await groups() === g0, 'undo takes the grouped strokes away');
+  }
 
   // Snapshot of a region, pasted as an image; then an Image from a file.
   const imgs = async () => (await page.locator('.ml-table tbody').innerText()).split('Snapshot').length - 1;
@@ -838,7 +850,15 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Control+G');
   await page.keyboard.press('Escape');
   await click(52, 14);
-  assert(await page.locator('.ml-table tbody tr.selected').count() === 2, 'clicking one grouped markup selects the group');
+  assert(await page.locator('.ml-table tbody tr.ml-group-row.selected').count() === 1, 'clicking one grouped markup selects the group (its Group row)');
+  {
+    // The Group item lists its members under a toggle, collapsed at first (Revu).
+    const grp = page.locator('.ml-table tbody tr.ml-group-row.selected').first();
+    assert((await grp.innerText()).includes('Group (2)') && await page.locator('.ml-table tbody tr.ml-member').count() === 0, 'the Group row counts its members and hides them until expanded');
+    await grp.getByRole('button', { name: 'Expand group' }).click();
+    assert(await page.locator('.ml-table tbody tr.ml-member.selected').count() === 2, 'expanding the Group row lists its two members');
+    await grp.getByRole('button', { name: 'Collapse group' }).click();
+  }
   await page.keyboard.press('Control+Shift+L');
   const n0 = await page.locator('.ml-table tbody tr').count();
   await page.keyboard.press('Delete');
@@ -851,7 +871,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   const rts = gd.getPage(0).node.lookup(PDFName.of('Annots'), PDFArray).asArray().map((r) => gd.context.lookup(r, PDFDict).get(PDFName.of('RT'))?.toString());
   assert(rts.includes('/Group'), 'group saved with /IRT + /RT /Group');
   await click(52, 14);
-  assert(await page.locator('.ml-table tbody tr.selected').count() === 2, 'group survives save and reload');
+  assert(await page.locator('.ml-table tbody tr.ml-group-row.selected').count() === 1, 'group survives save and reload');
   await page.keyboard.press('Escape');
 
   // Tool Chest: save the stamp to My Tools, switch it to Drawing mode, place a copy.
@@ -899,6 +919,9 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await sd.getByLabel('Space name').fill('Conference 104');
   await sd.getByRole('button', { name: 'OK' }).click();
   assert(await page.locator('.space-row').filter({ hasText: 'Conference 104' }).count() === 1, 'Space listed in the Spaces panel');
+  // Group items fold their members away: expand them so every markup's Space cell is counted.
+  const expandGroups = async () => { for (const b of await page.getByRole('button', { name: 'Expand group' }).all()) await b.click(); };
+  await expandGroups();
   const spaceCells = async () => (await page.locator('.ml-table tbody').innerText()).split('Conference 104').length - 1;
   assert(await spaceCells() === 6, `the six markups inside report their Space (${await spaceCells()})`);
   const [sdl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+S')]);
@@ -2996,7 +3019,8 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.keyboard.press('Escape');
   await page.keyboard.press('Control+Shift+A');
   await page.locator('.text-sel').first().waitFor();
-  const rrows = await page.locator('.ml-table tbody tr:not(.reply-row)').count();
+  for (const b of await page.getByRole('button', { name: 'Expand group' }).all()) await b.click();
+  const rrows = await page.locator('.ml-table tbody tr:not(.reply-row):not(.ml-group-row)').count();
   const tsb = await page.locator('.text-sel').first().boundingBox();
   await page.mouse.click(tsb.x + tsb.width / 2, tsb.y + tsb.height / 2, { button: 'right' });
   await page.getByRole('menuitem', { name: 'Replace Selected Text…' }).click();
@@ -3005,7 +3029,8 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await rd.locator('textarea').fill('SITE PLAN');
   await rd.getByRole('button', { name: 'OK' }).click();
   await page.waitForTimeout(300);
-  assert(await page.locator('.ml-table tbody tr:not(.reply-row)').count() === rrows + 2, 'Replace Selected Text adds a strikethrough and an insertion caret');
+  for (const b of await page.getByRole('button', { name: 'Expand group' }).all()) await b.click(); // the pair is grouped: list its members
+  assert(await page.locator('.ml-table tbody tr:not(.reply-row):not(.ml-group-row)').count() === rrows + 2, 'Replace Selected Text adds a strikethrough and an insertion caret (grouped)');
   const subjects = await page.locator('.ml-table tbody tr td:first-child').allInnerTexts();
   assert(subjects.filter((t) => t.includes('Replace Text')).length >= 2, 'both carry the Replace Text subject');
   await page.keyboard.press('Control+z');

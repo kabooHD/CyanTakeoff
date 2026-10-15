@@ -27,6 +27,9 @@ const storeSaved = (l: SavedFilter[]) => { try { localStorage.setItem(SF_LS, JSO
 const GROUPED = new Set(['subject', 'author', 'status', 'layer', 'space', 'label', 'color', 'units']);
 
 const NO_TOTAL = new Set(['depth', 'angle', 'slope']);
+/** Measurement columns a Group row sums over its members (Revu). */
+const SUM_KEYS = new Set(['length', 'area', 'volume', 'count', 'wallArea', 'rise']);
+interface Row { m: Markup; v: Record<string, string | number>; /** A Group item: the members' ids. */ head?: { gid: string; ids: string[] }; /** Member of a group (its id). */ member?: string }
 /** Columns that sort by creation date when values tie (Revu does this for Subject and page). */
 const TIE_BY_DATE = new Set(['subject', 'page']);
 const DEFAULT_HIDDEN = ['label', 'angle', 'depth', 'wallArea', 'rise', 'sequence', 'units', 'slope', 'created', 'lock', 'pageIndex', 'x', 'y', 'xCenter', 'yCenter', 'docWidth', 'docHeight', 'width', 'height'];
@@ -59,6 +62,9 @@ export function MarkupsList() {
   const [editing, setEditing] = useState<string | null>(null);
   /** The saved filter set applied last (Revu shows it checked, starred once changed). */
   const [engaged, setEngaged] = useState<string | null>(null);
+  /** Groups whose members are listed under their Group item (collapsed by default, as in Revu). */
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const toggleGroup = (gid: string) => setExpandedGroups((c) => { const n = new Set(c); if (n.has(gid)) n.delete(gid); else n.add(gid); return n; });
   /** Row clicked last: Shift+click selects the rows between it and the clicked one (Revu). */
   const anchorRow = useRef<string | null>(null);
   const [saved, setSaved] = useState<SavedFilter[]>(loadSaved);
@@ -84,12 +90,12 @@ export function MarkupsList() {
     ? doc.markups.map((m) => ({ m, v: Object.fromEntries(defs.map((c) => [c.key, c.value(m, doc)])) as Record<string, string | number> }))
     : [], [doc, defs]);
 
-  const rows = useMemo(() => {
+  const rows = useMemo((): Row[] => {
     const q = search.trim().toLowerCase();
     const active = Object.entries(filters).filter(([, v]) => v !== '');
     const conds = Object.entries(custom).map(([k, f]) => [k, kindOf(k), f] as const);
     const col = sort.key;
-    return all
+    const sorted: Row[] = all
       .filter((r) => !q || Object.values(r.v).some((x) => String(x).toLowerCase().includes(q)))
       .filter((r) => active.every(([k, v]) => String(r.v[k]) === v))
       .filter((r) => conds.every(([k, kind, f]) => matchesCustom(r.v[k], kind, f)))
@@ -102,6 +108,22 @@ export function MarkupsList() {
         if (d === 0 && TIE_BY_DATE.has(col)) return a.m.created.localeCompare(b.m.created);
         return d * sort.dir;
       });
+    // Grouped markups sit under a Group item (Revu): measurement columns summed, the rest from the first member.
+    const out: Row[] = [], seen = new Set<string>();
+    const num = (x: string | number) => Number(String(x).replace(/[^0-9.eE+-]/g, '')) || 0;
+    for (const r of sorted) {
+      const gid = r.m.groupId;
+      if (!gid) { out.push(r); continue; }
+      if (seen.has(gid)) continue;
+      seen.add(gid);
+      const members = sorted.filter((x) => x.m.groupId === gid);
+      if (members.length < 2) { out.push(r); continue; } // a group of one is just a markup
+      const v: Record<string, string | number> = { ...r.v, subject: `Group (${members.length})` };
+      for (const c of defs) if (c.numeric && SUM_KEYS.has(c.key)) { const t = members.reduce((a, x) => a + num(x.v[c.key]), 0); v[c.key] = t ? Math.round(t * 100) / 100 : ''; }
+      out.push({ m: r.m, v, head: { gid, ids: members.map((x) => x.m.id) } });
+      out.push(...members.map((x) => ({ ...x, member: gid })));
+    }
+    return out;
   }, [all, sort, search, filters, custom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The page dims markups the filtered list leaves out (Revu).
@@ -271,18 +293,32 @@ export function MarkupsList() {
             )}
           </thead>
           <tbody>
-            {rows.map(({ m, v }, ri) => {
+            {rows.map(({ m, v, head, member }, ri) => {
+              const memberHidden = !!member && !expandedGroups.has(member);
               const group = GROUPED.has(sort.key) ? String(v[sort.key] || '(none)') : null;
               const newGroup = group !== null && (ri === 0 || String(rows[ri - 1].v[sort.key] || '(none)') !== group);
               const hiddenInGroup = group !== null && collapsed.has(group);
               return (
-              <Fragment key={m.id}>
+              <Fragment key={head ? `g:${head.gid}` : m.id}>
               {newGroup && (
                 <tr className="ml-section" onClick={() => setCollapsed((c) => { const n = new Set(c); if (n.has(group!)) n.delete(group!); else n.add(group!); return n; })}>
                   <td colSpan={columns.length}><span className="bm-toggle">{collapsed.has(group!) ? '▸' : '▾'}</span> {group} <span className="muted small">({rows.filter((r) => String(r.v[sort.key] || '(none)') === group).length})</span></td>
                 </tr>
               )}
-              {!hiddenInGroup && <tr className={`${sel.has(m.id) ? 'selected' : ''} ${m.hidden ? 'hidden-markup' : ''}`} title={m.hidden ? 'Hidden (Edit > Show)' : undefined}
+              {head && !hiddenInGroup && (
+                <tr className={`ml-group-row ${head.ids.every((id) => sel.has(id)) ? 'selected' : ''}`} title="Group: click to select its markups"
+                  onClick={() => { anchorRow.current = m.id; s.select(head.ids, false, true); }}
+                  onContextMenu={(e) => { e.preventDefault(); if (!doc) return; s.select(head.ids, false, true); setMenu({ x: e.clientX, y: e.clientY, items: markupMenuItems(doc, m, head.ids) }); }}>
+                  {columns.map((c, i) => (
+                    <td key={c.key} className={c.numeric ? 'num' : ''}>
+                      {i === 0 ? <><button className="bm-toggle" aria-label={`${expandedGroups.has(head.gid) ? 'Collapse' : 'Expand'} group`} onClick={(e) => { e.stopPropagation(); toggleGroup(head.gid); }}>{expandedGroups.has(head.gid) ? '▾' : '▸'}</button> {String(v[c.key])}</>
+                        : c.key === 'color' ? <span className="color-chip" style={{ background: m.style.color }} />
+                        : ['checkmark', 'lock', 'status', 'capture'].includes(c.key) || (c.custom && c.custom.type !== 'formula') ? '' : v[c.key]}
+                    </td>
+                  ))}
+                </tr>
+              )}
+              {!head && !hiddenInGroup && !memberHidden && <tr className={`${sel.has(m.id) ? 'selected' : ''} ${m.hidden ? 'hidden-markup' : ''} ${member ? 'ml-member' : ''}`} title={m.hidden ? 'Hidden (Edit > Show)' : undefined}
                 onClick={(e) => {
                   if (e.shiftKey && anchorRow.current) {
                     const i = rows.findIndex((r) => r.m.id === anchorRow.current), j = ri;
@@ -318,7 +354,7 @@ export function MarkupsList() {
                   </td>
                 ))}
               </tr>}
-              {!hiddenInGroup && (m.replies ?? []).map((r) => (
+              {!head && !hiddenInGroup && !memberHidden && (m.replies ?? []).map((r) => (
                 <tr key={r.id} className="reply-row">
                   {columns.map((c, i) => (
                     <td key={c.key}>
@@ -329,7 +365,7 @@ export function MarkupsList() {
                   ))}
                 </tr>
               ))}
-              {s.replyTo === m.id && (
+              {!head && s.replyTo === m.id && (
                 <tr className="reply-row">
                   <td colSpan={columns.length}>
                     <span className="reply-mark">↳ Reply</span>
@@ -353,7 +389,7 @@ export function MarkupsList() {
             <tfoot>
               <tr>
                 {columns.map((c, i) => {
-                  const total = c.numeric && !NO_TOTAL.has(c.key) && !c.noTotal ? rows.reduce((t, r) => t + (Number(String(r.v[c.key]).replace(/[^0-9.eE+-]/g, '')) || 0), 0) : 0;
+                  const total = c.numeric && !NO_TOTAL.has(c.key) && !c.noTotal ? rows.filter((r) => !r.head).reduce((t, r) => t + (Number(String(r.v[c.key]).replace(/[^0-9.eE+-]/g, '')) || 0), 0) : 0;
                   return (
                     <td key={c.key} className={c.numeric ? 'num' : ''}>
                       {i === 0 ? 'Total' : total ? Math.round(total * 100) / 100 : ''}

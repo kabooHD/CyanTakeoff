@@ -430,6 +430,12 @@ displayed value (in the markup's own unit when set), as Revu writes it.
 - CyanTakeoff: saved as /BM in the appearance's graphics state and read back
   from it; drawn with CSS mix-blend-mode on screen.
 
+## Pen (P)
+- Drag draws a free-form line; Shift keeps it horizontal or vertical.
+  Strokes made within about a second of each other are one grouped
+  markup (one Group item in the Markups List); press Enter before the
+  next stroke to start a new markup.
+
 ## Highlight (H)
 - Drag over page text: the text lines are highlighted (one markup, text
   copied into the comment when the preference says so). Elsewhere a free
@@ -978,6 +984,11 @@ folders, manual correlation and saved .bcx batches).
 ## Markups List
 - Columns menu to show/hide; drag headers to reorder; custom columns and
   statuses.
+- Grouped markups appear under a Group item with a toggle (collapsed at
+  first); its measurement columns (Length, Area, Wall Area, Volume,
+  Count) sum the members, the rest comes from the first member; clicking
+  the Group row selects the whole group. (Revu can instead show the
+  dominant markup's values: not offered.)
 - Filter List adds an "All" filter row above the columns; Clear All.
   Each column's filter also offers Custom…: up to two conditions on the
   column joined with AND or OR (numbers: equal / not equal / greater /

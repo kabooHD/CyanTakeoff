@@ -528,6 +528,10 @@ button.active { background: #d6e4fa; }
 
 /* Markups List section headings (sorted by a grouping column) and the Hide Markups button */
 .ml-table tr.ml-section td { background: var(--chrome-2); font-weight: 600; cursor: pointer; }
+.ml-table tr.ml-group-row td { background: var(--row-alt); font-weight: 600; cursor: pointer; }
+.ml-table tr.ml-group-row.selected td { background: var(--accent-soft); }
+.ml-table tr.ml-group-row .bm-toggle { border: 0; background: none; cursor: pointer; padding: 0 2px; }
+.ml-table tr.ml-member td:first-child { padding-left: 22px; }
 .ml-toolbar button.on, .markups-list button.on { background: var(--accent-soft); border-color: var(--accent); }
 
 /* Tool Chest: Symbol view and the size slider */

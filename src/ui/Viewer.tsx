@@ -557,6 +557,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (isEditable(e.target)) return;
+      if (e.key === 'Enter' && s.tool === 'pen' && !draft) penGroup.current = null; // the next stroke starts a new pen markup
       if (e.code === 'Space') { spaceDown.current = true; force((n) => n + 1); e.preventDefault(); }
       if (align && e.key === 'Escape') { cancelPicking(); e.stopImmediatePropagation(); return; }
       if (s.tool === 'dynamic-fill' && useFill.getState().draftBoundary.length) {
@@ -643,6 +644,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
     return { seq: { id: p.id, run: p.sequence.run, n }, ...(textual ? { text: v } : { label: v }) };
   };
 
+  /** Pen strokes made within a second of each other are one grouped markup (Revu); Enter starts a new one. */
+  const penGroup = useRef<{ id: string; at: number; last: string; applied: boolean } | null>(null);
   const finish = (type: MarkupType, points: Pt[], extra: Partial<Markup> = {}) => {
     const preset = s.preset;
     const style = preset?.style ?? s.toolDefaults[type];
@@ -1375,8 +1378,16 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         s.setTool('select');
         return;
       }
-      if (draft.points.length > 1) finish('pen', draft.points);
-      else setDraft(null);
+      if (draft.points.length > 1) {
+        const now = Date.now(), g = penGroup.current;
+        const extra: Partial<Markup> = {};
+        if (g && now - g.at < 1000) {
+          extra.groupId = g.id;
+          if (!g.applied) { s.updateMarkups([g.last], () => ({ groupId: g.id }), { history: false }); g.applied = true; }
+        }
+        const m = finish('pen', draft.points, extra);
+        penGroup.current = { id: extra.groupId ?? crypto.randomUUID(), at: now, last: m.id, applied: !!extra.groupId };
+      } else setDraft(null);
       return;
     }
     // Drag-to-draw for two-point and box tools; click-click otherwise.
