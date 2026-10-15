@@ -1075,7 +1075,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     const tabs = await page.locator('.doc-tab').count();
     await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
     assert(await page.getByRole('menuitem', { name: /^Open Recent › / }).count() >= 1, 'File > Open Recent lists the files opened before');
-    const [cfc] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('menuitem', { name: 'Create Layered PDF…' }).click()]);
+    const [cfc] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('menuitem', { name: 'Create › Layered PDF…' }).click()]);
     await cfc.setFiles(['tests/fixtures/form.pdf', 'tests/fixtures/revu/measure.pdf']);
     await page.getByText(/Layered PDF: 2 files as layers/).waitFor({ timeout: 20000 });
     await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs);
@@ -2106,7 +2106,8 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await page.mouse.up();
   await page.locator('img[alt="Symbol to find"]').waitFor();
   await page.locator('[aria-label="Sensitivity"]').fill('70');
-  await page.locator('.visual-search').getByRole('button', { name: 'Search', exact: true }).click();
+  await page.locator('.visual-search button.primary:enabled', { hasText: 'Search' }).waitFor({ timeout: 20000 });
+  await page.locator('.visual-search').getByRole('button', { name: 'Search', exact: true }).click({ timeout: 20000 });
   await page.waitForFunction(() => /\d+ results?$/.test(document.querySelector('.visual-search .muted.small:last-of-type')?.textContent ?? '') || document.querySelectorAll('.vs-result').length > 0, null, { timeout: 60000 });
   await page.waitForFunction(() => !document.querySelector('.visual-search')?.textContent?.includes('Searching'), null, { timeout: 60000 });
   const n = await page.locator('.vs-result').count();
@@ -3496,6 +3497,24 @@ for (const [file, expected] of [
   await so.getByLabel('Previous Revisions').selectOption('gray');
   await so.getByLabel('Show', { exact: true }).selectOption('label');
   await so.getByRole('button', { name: 'Close' }).click();
+}
+
+// File > Create > From File: an image becomes a one-page PDF; Window > Hide/Show Panels puts every panel away and back.
+{
+  const tabs = await page.locator('.doc-tab').count();
+  await page.locator('.menubar-item > button', { hasText: /^File$/ }).click();
+  const [ifc] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('menuitem', { name: 'Create › From File…' }).click()]);
+  await ifc.setFiles(`${OUT}/11-legend.png`);
+  await page.waitForFunction((n) => document.querySelectorAll('.doc-tab').length === n + 1, tabs, { timeout: 20000 });
+  await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent?.includes('Created 1 PDF from 1 file'));
+  assert((await page.locator('.doc-tab.active').innerText()).startsWith('11-legend.pdf') && (await page.locator('.statusbar').innerText()).includes('(1 of 1)'), 'Create From File turns the image into a one-page PDF');
+  const panelsBefore = await page.locator('.panel').count();
+  assert(panelsBefore >= 1, `some panels are open before Hide/Show Panels (${panelsBefore})`);
+  const windowMenu = async (item) => { await page.locator('.menubar-item > button', { hasText: /^Window$/ }).click(); await page.getByRole('menuitem', { name: item }).click(); };
+  await windowMenu('Hide/Show Panels');
+  assert(await page.locator('.panel').count() === 0 && await page.locator('.ml-table').count() === 0, 'Hide/Show Panels hides every panel');
+  await windowMenu('Hide/Show Panels');
+  assert(await page.locator('.panel').count() === panelsBefore, 'Hide/Show Panels brings the panels back as they were');
 }
 
 assert(errors.length === 0, `no page errors (${errors.join(' | ')})`);

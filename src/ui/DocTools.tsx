@@ -11,6 +11,7 @@ import { activeDoc, serialize, useApp, type DocState } from '../model/store';
 import { parsePageRange } from '../model/measure';
 import { estimateSkew } from '../model/deskew';
 import { PAPER, blankPdf, cropPages, imagesToPdf, rotateContent } from '../pdf/docTools';
+import { pickFiles } from './toolActions';
 import { hasSignatures } from '../pdf/incremental';
 import { DEFAULT_REDUCE } from '../pdf/reduce';
 import { reduceLib } from './ReduceSize';
@@ -63,7 +64,33 @@ export function DocToolsDialogs() {
 
 // ---------- New PDF ----------
 
-async function readImage(f: File): Promise<{ bytes: Uint8Array; type: 'jpg' | 'png'; w: number; h: number } | null> {
+export const IMAGE_ACCEPT = '.png,.jpg,.jpeg,.webp,.gif,.bmp,image/png,image/jpeg,image/webp,image/gif,image/bmp';
+export const isImageFile = (f: File) => /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name);
+
+/**
+ * File > Create > From File / From Multiple Files (Revu): each chosen file
+ * becomes a PDF of its own; images become one page at `dpi` (PDFs open as
+ * they are). Returns how many documents were made.
+ */
+export async function createFromFiles(picked?: File[], dpi = 150): Promise<number> {
+  const s = useApp.getState();
+  const files = picked ?? await pickFiles(`.pdf,application/pdf,${IMAGE_ACCEPT}`, true);
+  let n = 0;
+  for (const f of files) {
+    if (isImageFile(f)) {
+      const im = await readImage(f);
+      if (!im) { s.setStatus(`${f.name}: the image could not be read.`); continue; }
+      await s.openBytes(await imagesToPdf([im], dpi), `${f.name.replace(/\.[^.]+$/, '')}.pdf`);
+      const d = activeDoc();
+      if (d) useApp.setState((st) => ({ docs: st.docs.map((x) => (x.id === d.id ? { ...x, dirty: true } : x)) }));
+    } else await s.openBytes(new Uint8Array(await f.arrayBuffer()), f.name);
+    n++;
+  }
+  if (files.length) s.setStatus(`Created ${n} PDF${n === 1 ? '' : 's'} from ${files.length} file${files.length === 1 ? '' : 's'}.`);
+  return n;
+}
+
+export async function readImage(f: File): Promise<{ bytes: Uint8Array; type: 'jpg' | 'png'; w: number; h: number } | null> {
   try {
     const bmp = await createImageBitmap(f);
     const w = bmp.width, h = bmp.height;

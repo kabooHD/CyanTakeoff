@@ -496,6 +496,16 @@ Revu creates a PDF from a template file and manages templates. Ours keeps
 templates in the browser: add a PDF file or the current document, rename,
 delete; Create opens an Untitled copy.
 
+## File menu: Create, Open
+- File > Create: From File (one file, an image or a PDF, becomes a PDF),
+  From Multiple Files (one PDF per file), From Scanner or Camera, Layered
+  PDF, PDF Package. Open also converts supported image files. Ours: images
+  (PNG, JPEG, WebP, GIF, BMP) become one page at 150 dpi; no scanner or
+  package.
+- Window > Hide/Show Panels puts the left, right and bottom panels away
+  and brings them back (Hide Panel: Shift+F4); Auto-Hide Panel Access / Tabs and
+  Always On Top are desktop-window features.
+
 ## File exports, Undo History, Crop Image, Certify
 File > Export: ours exports PNG or JPEG (one file per page, resolution,
 with or without markups) and plain text (reading order, pages separated);

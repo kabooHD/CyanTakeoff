@@ -65,6 +65,16 @@ export async function snapshot(page: PDFPageProxy, a: Pt, b: Pt, scale = 3, mark
 }
 
 /** Ask the user for a file. */
+/** Several files from a file picker (none when cancelled). */
+export function pickFiles(accept?: string, multiple = true): Promise<File[]> {
+  return new Promise((resolve) => {
+    const input = Object.assign(document.createElement('input'), { type: 'file', accept: accept ?? '', multiple });
+    input.onchange = () => resolve(Array.from(input.files ?? []));
+    input.oncancel = () => resolve([]);
+    input.click();
+  });
+}
+
 export function pickFile(accept?: string): Promise<File | null> {
   return new Promise((resolve) => {
     const input = Object.assign(document.createElement('input'), { type: 'file', accept: accept ?? '' });

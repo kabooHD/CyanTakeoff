@@ -124,7 +124,7 @@ F4 navigation bar, Shift+F10 context menu); Select Text / Select All Text
 (src/ui/markupRaster.tsx), Snapshot Content, Copy Page to Snapshot;
 Links panel with Places (src/ui/LinksPanel.tsx, src/pdf/places.ts) and
 File Access recent files (src/model/recent.ts, src/ui/FileAccess.tsx);
-New PDF, Crop Pages, Deskew, Email, Publish as Compressed (src/ui/DocTools.tsx,
+New PDF, Create From File(s) (images to PDF), Crop Pages, Deskew, Email, Publish as Compressed (src/ui/DocTools.tsx,
 src/pdf/docTools.ts, src/model/deskew.ts); Unflatten (flattenPage recovery,
 unflattenPage in src/pdf/pages.ts); custom stamps (src/model/stamps.ts,
 src/ui/Stamps.tsx), status models (src/model/statusModels.ts,

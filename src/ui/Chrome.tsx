@@ -38,12 +38,12 @@ import { runApplyRedactions } from './redactUi';
 import { effectiveCombo } from './commands';
 import { arrangeItems } from './arrangeMenu';
 import { useCursor } from './cursor';
-import { balanceSplit, refreshDocument, saveAll, toggleFullScreen } from './quickCommands';
+import { balanceSplit, hideShowPanels, refreshDocument, saveAll, toggleFullScreen } from './quickCommands';
 import { useDocProps } from './DocProperties';
 import { useCamera } from './Camera';
 import { useStampManager } from './Stamps';
 import { useManageStatus } from './StatusModels';
-import { createLayeredPdf, emailDocument, insertLayeredPages, publishCompressed, useDocTools } from './DocTools';
+import { createFromFiles, createLayeredPdf, emailDocument, insertLayeredPages, publishCompressed, useDocTools } from './DocTools';
 import { useRecent } from '../model/recent';
 import { reopen } from './FileAccess';
 import { copyPageToSnapshot, copyText, selectAllText } from './textCommands';
@@ -85,7 +85,9 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Open…', shortcut: 'Ctrl+O', action: openFile },
       { label: 'Open Sample Drawing', action: openSample },
       ...recent.slice(0, 8).map((r) => ({ label: `Open Recent › ${r.name}`, action: () => reopen(r) })),
-      { label: 'Create Layered PDF…', action: () => createLayeredPdf() },
+      { label: 'Create › From File…', action: () => void createFromFiles() },
+      { label: 'Create › From Multiple Files…', action: () => void createFromFiles() },
+      { label: 'Create › Layered PDF…', action: () => createLayeredPdf() },
       { label: 'Combine Files…', action: combineFiles },
       { label: 'Close', shortcut: 'Ctrl+F4', disabled: noDoc, action: () => doc && s.closeDoc(doc.id) },
       { sep: true },
@@ -296,6 +298,7 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Presentation', shortcut: 'Ctrl+Enter', disabled: noDoc, action: () => useApp.setState({ presentation: true }) },
       { label: 'Balance', shortcut: 'Shift+F12', disabled: !s.split, action: balanceSplit },
       { sep: true },
+      { label: 'Hide/Show Panels', shortcut: 'Shift+F4', action: hideShowPanels },
       { label: 'Reset Layout', action: () => s.setPanels({ left: 'thumbnails', right: 'properties', markupsList: true }) },
     ],
     Help: [

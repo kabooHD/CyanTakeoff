@@ -1,6 +1,6 @@
 // Small Revu commands: Autosize Text Box (Alt+Z), Remove Selected from Group,
 // Save All, Refresh (F5), Full Screen (F11), Balance (Shift+F12).
-import { activeDoc, useApp } from '../model/store';
+import { activeDoc, useApp, type LeftPanel, type RightPanel } from '../model/store';
 import { autosizedBox, withBox } from '../model/textBox';
 import { removeFromGroup } from '../model/arrange';
 
@@ -91,4 +91,13 @@ export function showHiddenMarkups() {
   if (!ids.length) { s.setStatus('No hidden markups in this document'); return; }
   s.updateMarkups(ids, () => ({ hidden: undefined }));
   s.setStatus(`${ids.length} hidden markup${ids.length === 1 ? '' : 's'} shown`);
+}
+
+/** The panels put away by Hide/Show Panels (Shift+F4), restored by the next call. */
+let hiddenPanels: { left: LeftPanel; right: RightPanel; markupsList: boolean } | null = null;
+/** Window > Hide/Show Panels (Revu): every panel away, then back as they were. */
+export function hideShowPanels() {
+  const st = useApp.getState();
+  if (st.left || st.right || st.markupsList) { hiddenPanels = { left: st.left, right: st.right, markupsList: st.markupsList }; st.setPanels({ left: null, right: null, markupsList: false }); }
+  else st.setPanels(hiddenPanels ?? { left: 'thumbnails', right: 'properties', markupsList: true });
 }

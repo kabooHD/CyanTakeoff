@@ -59,7 +59,7 @@ import { CameraDialog, useCamera } from './ui/Camera';
 import { ManageStatusDialog } from './ui/StatusModels';
 import { DocToolsDialogs, emailDocument, publishCompressed, useDocTools } from './ui/DocTools';
 import { copyPageToSnapshot, copyText, selectAllText } from './ui/textCommands';
-import { autosizeTextBoxes, balanceSplit, editAction, refreshDocument, removeSelectedFromGroup, saveAll, toggleFullScreen } from './ui/quickCommands';
+import { autosizeTextBoxes, balanceSplit, editAction, hideShowPanels, refreshDocument, removeSelectedFromGroup, saveAll, toggleFullScreen } from './ui/quickCommands';
 
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
@@ -221,7 +221,7 @@ export function App() {
         case 'Alt+P': return right('properties');
         case 'Alt+X': return right('toolchest');
         case 'Alt+U': return right('measurements');
-        case 'Shift+F4': return run(() => s.setPanels({ left: null, right: null }));
+        case 'Shift+F4': return run(hideShowPanels);
         case 'F1': return run(() => setDialog('shortcuts'));
       }
       const arrows: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };

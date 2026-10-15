@@ -1,3 +1,4 @@
+import { IMAGE_ACCEPT, createFromFiles, isImageFile } from './DocTools';
 import { legendsOf } from '../model/captureExport';
 import { statusLabel } from '../model/statusModels';
 import { anchorOf, spaceAt } from '../model/spaces';
@@ -25,16 +26,17 @@ export async function openFile() {
     try {
       handles = await w.showOpenFilePicker({
         multiple: true,
-        types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }],
+        types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }, { description: 'Images', accept: { 'image/png': ['.png'], 'image/jpeg': ['.jpg', '.jpeg'], 'image/webp': ['.webp'], 'image/gif': ['.gif'], 'image/bmp': ['.bmp'] } }],
       });
     } catch { return; }
     for (const h of handles) {
       const f = await h.getFile();
+      if (isImageFile(f)) { await createFromFiles([f]); continue; } // an image opens as a one-page PDF (Revu converts it)
       await useApp.getState().openBytes(new Uint8Array(await f.arrayBuffer()), f.name, h);
     }
     return;
   }
-  const input = Object.assign(document.createElement('input'), { type: 'file', accept: '.pdf,application/pdf', multiple: true });
+  const input = Object.assign(document.createElement('input'), { type: 'file', accept: `.pdf,application/pdf,${IMAGE_ACCEPT}`, multiple: true });
   input.onchange = async () => {
     for (const f of Array.from(input.files ?? [])) await openFileObject(f);
   };
@@ -42,6 +44,7 @@ export async function openFile() {
 }
 
 export async function openFileObject(f: File, handle?: FileSystemFileHandle) {
+  if (isImageFile(f)) { await createFromFiles([f]); return; }
   await useApp.getState().openBytes(new Uint8Array(await f.arrayBuffer()), f.name, handle);
 }
 

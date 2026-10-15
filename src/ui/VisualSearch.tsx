@@ -82,6 +82,8 @@ export async function runVisualSearch() {
   if (!tMask) { app.setStatus('VisualSearch: none of the chosen colours is in the symbol.'); return; }
   useVisual.setState({ running: true, results: [], progress: '' });
   const results: VResult[] = [];
+  // A page that fails to render (a closed document, a broken page) ends the search but never leaves it "running".
+  try {
   for (const d of docs) {
     const pages = st.scope === 'page' ? [d.page] : d.loaded.pages.map((p) => p.index);
     for (const p of pages) {
@@ -114,6 +116,11 @@ export async function runVisualSearch() {
       c.width = c.height = 0;
       useVisual.setState({ results: [...results] });
     }
+  }
+  } catch (e) {
+    app.setStatus(`VisualSearch stopped: ${(e as Error).message}`);
+    useVisual.setState({ running: false, progress: '' });
+    return;
   }
   useVisual.setState({ running: false, progress: '' });
   if (results.length) showVisual(0);
