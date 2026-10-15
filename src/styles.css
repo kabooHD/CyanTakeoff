@@ -613,3 +613,4 @@ label.button, a.button { display: inline-block; padding: 2px 8px; border: 1px so
 .link-btn { background: none; border: none; color: #1a56c4; cursor: pointer; font-size: 11px; padding: 0 4px; }
 .rotate-handle circle { pointer-events: none; }
 .rotate-readout { pointer-events: none; font-weight: bold; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+.caption-leader { pointer-events: none; }

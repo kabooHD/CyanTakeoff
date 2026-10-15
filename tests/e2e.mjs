@@ -70,6 +70,20 @@ await page.keyboard.press('Enter');
 await page.waitForTimeout(200);
 let list = await page.locator('.ml-table tbody').innerText();
 assert(list.includes('432 sf'), 'area measurement 432 sf in Markups List');
+// Select tool: a band dragged right to left picks what it touches; left to right only what it encloses (Revu).
+{
+  await page.keyboard.press('v');
+  const band = async (x0, y0, x1, y1) => { const a = await toScreen(x0, y0), b = await toScreen(x1, y1); await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 4 }); await page.mouse.up(); await page.waitForTimeout(150); };
+  const selectedRows = () => page.locator('.ml-table tbody tr.selected').count();
+  await band(30, 45, 12, 30);
+  assert(await selectedRows() === 1, 'a right-to-left band selects the markup it touches');
+  await page.keyboard.press('Escape');
+  await band(-5, 15, 12, 30);
+  assert(await selectedRows() === 0, 'a left-to-right band skips a markup it only touches');
+  await band(-5, 15, 30, 45);
+  assert(await selectedRows() === 1, 'a left-to-right band selects the markup it encloses');
+  await page.keyboard.press('Escape');
+}
 
 // Content snap: click ~5px off each wall corner; snapping must land exactly.
 await page.keyboard.press('Shift+Alt+A');
@@ -503,6 +517,7 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.keyboard.up('Shift');
     await page.waitForTimeout(200);
     assert(Number(await cap.getAttribute('x')) > x0 + 5, 'Shift+drag moves the measurement caption');
+    assert(await page.locator('.caption-leader').count() === 1, 'a moved Length caption gets a leader line');
     const anchor = page.locator('.caption-anchor');
     assert(await anchor.count() === 1, 'a selected measurement shows the caption anchor');
     const ab = await anchor.boundingBox(); const cb2 = await cap.boundingBox();
@@ -1010,6 +1025,16 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.getByRole('button', { name: 'Labels menu' }).click();
     await page.getByRole('menuitem', { name: 'Page Scale' }).click();
     assert(await page.locator('.thumb-scale').count() === n1 + 1, 'Labels > Page Scale shows the scale under every thumbnail');
+    // Set Scale on several selected thumbnails opens the dialog with them as its Selected pages.
+    await page.locator('.thumb').first().click();
+    await page.locator('.thumb').nth(1).click({ modifiers: ['Shift'] });
+    await page.locator('.thumb').nth(1).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Set Scale…' }).click();
+    const sd = page.getByRole('dialog', { name: 'Apply Scale to Pages' });
+    assert((await sd.locator('select').first().locator('option:checked').innerText()).startsWith('Selected (2 pages)'), 'Set Scale from two selected thumbnails offers Selected (2 pages)');
+    await sd.getByRole('button', { name: 'Cancel' }).click();
+    await sd.waitFor({ state: 'hidden' });
+    await page.locator('.thumb').nth(1).click(); // back to the pasted page, as before
     await page.getByRole('button', { name: 'Labels menu' }).click();
     await page.getByRole('menuitem', { name: 'Page Scale' }).click();
     page.once('dialog', (d) => d.accept('X-1'));
@@ -1030,6 +1055,20 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     for (let i = 0; i < 3; i++) { await page.keyboard.press('Control+z'); await page.waitForTimeout(400); }
     await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n})`), n1);
     assert(!(await page.locator('.thumb-label').allInnerTexts()).some((t) => t.startsWith('X-1')), 'undo reverts the thumbnail page commands');
+    // Cut Pages on the first page (the one with the legend) and Undo must bring its markups back.
+    const rowsBefore = await page.locator('.ml-table tbody tr').count();
+    await page.locator('.thumb').first().click();
+    await page.getByRole('button', { name: 'Thumbnails menu' }).click();
+    await page.getByRole('menuitem', { name: /^Cut Pages/ }).click();
+    await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n - 1})`), n1);
+    await page.evaluate(() => document.activeElement?.blur?.());
+    await page.keyboard.press('Control+z');
+    await page.waitForFunction((n) => document.querySelector('.statusbar')?.textContent?.includes(`of ${n})`), n1);
+    await page.waitForTimeout(500);
+    assert(await page.locator('.ml-table tbody tr').count() === rowsBefore, `undoing Cut Pages brings the page's markups back (${rowsBefore} rows)`);
+    await page.locator('.markup-layer g.legend > rect').first().waitFor({ timeout: 10000 });
+    assert(true, 'the legend is drawn again after undoing the cut');
+    await page.locator('.thumb').nth(1).click(); // the later page checks work on the current page: back to page 2, as before
   }
   // File > Create Layered PDF: each chosen file becomes a layer of a new document; File > Open Recent lists recent files.
   {
@@ -1169,17 +1208,24 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
     await page.waitForTimeout(300);
   };
   // Each click is confirmed by the prompt moving on (the second sheet is shown after the first pair).
-  const prompt = (n, sheet) => page.waitForFunction(([n, sheet]) => document.body.textContent?.includes(`Align: click point ${n} of 2 on the ${sheet} sheet`), [n, sheet], { timeout: 10000 });
+  // A click only counts on the active pane, so each one is retried until the prompt moves on.
+  const prompt = (n, sheet, timeout = 10000) => page.waitForFunction(([n, sheet]) => document.body.textContent?.includes(`Align: click point ${n} of 2 on the ${sheet} sheet`), [n, sheet], { timeout });
+  const pick = async (x, y, next) => {
+    for (let t = 0; t < 4; t++) {
+      await click(x, y);
+      try { await next(); return; } catch { /* the click was not taken: try again */ }
+    }
+    throw new Error(`align point at ${x},${y} was not taken`);
+  };
   await prompt(1, 'first');
-  await click(300, 1328); await prompt(2, 'first');
-  await click(1380, 608); await prompt(1, 'second');
+  await pick(300, 1328, () => prompt(2, 'first', 3000));
+  await pick(1380, 608, () => prompt(1, 'second', 3000));
   await page.waitForTimeout(500);
   await page.keyboard.press('Control+9');
   await page.waitForTimeout(500);
-  await click(336, 1352); await prompt(2, 'second');
-  await click(1416, 632);
+  await pick(336, 1352, () => prompt(2, 'second', 3000));
   cd = page.getByRole('dialog', { name: 'Compare Documents' });
-  await cd.getByText('By 2 point pairs').waitFor({ timeout: 10000 });
+  await pick(1416, 632, () => cd.getByText('By 2 point pairs').waitFor({ timeout: 3000 }));
   assert(await cd.getByText('By 2 point pairs').count() === 1, 'alignment set from two pairs of points');
   await cd.getByRole('button', { name: 'OK' }).click();
   await page.waitForFunction(() => /Compare: (\d+ difference|no diff)/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 30000 });

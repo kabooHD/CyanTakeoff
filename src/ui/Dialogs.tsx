@@ -132,7 +132,7 @@ function ScaleDialogForm() {
   const current = vpd ? existingVp?.scale ?? null : doc ? doc.calibrations[dlg.page] : null;
   const [name, setName] = useState(vpd?.name ?? existingVp?.name ?? '');
   const [separateY, setSeparateY] = useState(!!dlg.calibrateY || !!dlg.xScale || !!current?.yFactor);
-  const [pagesMode, setPagesMode] = useState<'current' | 'all' | 'custom'>(dlg.reuse ? 'all' : 'current');
+  const [pagesMode, setPagesMode] = useState<'current' | 'all' | 'selected' | 'custom'>(dlg.pages && dlg.pages.length > 1 ? 'selected' : dlg.reuse ? 'all' : 'current');
   const [range, setRange] = useState('');
   const [precision, setPrecision] = useState<number | null>(null);
   // After calibrating the Y scale, the X scale chosen before comes back as dlg.xScale.
@@ -150,6 +150,7 @@ function ScaleDialogForm() {
   if (scale && separateY) scale = Y.scale ? withYScale(scale, Y.scale) : null;
 
   const pages = pagesMode === 'current' ? [dlg.page]
+    : pagesMode === 'selected' ? dlg.pages ?? [dlg.page]
     : pagesMode === 'all' ? doc.loaded.pages.map((p) => p.index)
       : parsePageRange(range, n);
 
@@ -180,6 +181,7 @@ function ScaleDialogForm() {
           <select value={pagesMode} onChange={(e) => setPagesMode(e.target.value as typeof pagesMode)}>
             <option value="current">Current ({doc.loaded.pages[dlg.page]?.label ?? dlg.page + 1})</option>
             <option value="all">All Pages</option>
+            {dlg.pages && dlg.pages.length > 1 && <option value="selected">Selected ({dlg.pages.length} pages)</option>}
             <option value="custom">Custom</option>
           </select>
           {pagesMode === 'custom' && <input placeholder="1-3, 5, 9" value={range} onChange={(e) => setRange(e.target.value)} style={{ width: 110 }} />}

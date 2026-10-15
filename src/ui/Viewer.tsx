@@ -33,6 +33,7 @@ import { CURVABLE, arcSegment, bezierAt, closedType, flatPoints, hasCurves, inse
 import { MarkupShape, handlePoints } from './renderMarkup';
 import { cutoutAt, hitTest, markupBounds, outline } from './hit';
 import { ROTATION_FIELD, angleAbout, canRotate, normDeg, rotateHandle, rotated, rotationCenter, snapRotation, unrotatePt } from '../model/rotate';
+import { bandOf, inBand } from '../model/select';
 import { selectText } from '../model/textSelect';
 import { copyText, searchFor } from './textCommands';
 import { followPlace } from './LinksPanel';
@@ -1319,12 +1320,10 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   };
 
   const selectInBand = (band: Extract<Drag, { kind: 'band' }>) => {
-    const b = { minX: Math.min(band.start.x, band.cur.x), maxX: Math.max(band.start.x, band.cur.x), minY: Math.min(band.start.y, band.cur.y), maxY: Math.max(band.start.y, band.cur.y) };
+    // Revu: left to right picks markups entirely inside the band, right to left those it touches.
+    const { box: b, touch } = bandOf(band.start, band.cur);
     if (b.maxX - b.minX <= 1 / zoom) return;
-    const ids = markups.filter((m) => {
-      const mb = markupBounds(m);
-      return mb.minX >= b.minX && mb.maxX <= b.maxX && mb.minY >= b.minY && mb.maxY <= b.maxY;
-    }).map((m) => m.id);
+    const ids = markups.filter((m) => inBand(markupBounds(m), b, touch)).map((m) => m.id);
     s.select(ids, band.add);
   };
 

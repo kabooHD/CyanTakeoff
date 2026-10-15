@@ -124,6 +124,8 @@ export interface DocState {
  */
 export interface ScaleDialogState {
   page: number;
+  /** Pages selected in the Thumbnails panel when the dialog was opened (its Selected option). */
+  pages?: number[];
   pagePts?: number;
   then?: ToolId;
   reuse?: boolean;

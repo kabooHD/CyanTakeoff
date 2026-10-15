@@ -17,6 +17,8 @@ export interface MeasureDisplay {
   /** Caption moved from its default place (page units) and turned (degrees counter-clockwise). */
   captionOffset?: Pt;
   captionAngle?: number;
+  /** Length captions moved off the line get a leader line (Revu: Show Caption Leader Line); false hides it. */
+  captionLeader?: boolean;
 }
 
 const INCHES: Record<LengthUnit, number> = { in: 1, ft: 12, 'ft-in': 12, yd: 36, mm: 1 / 25.4, cm: 1 / 2.54, m: 1000 / 25.4 };
@@ -102,6 +104,12 @@ export function captionAnchor(type: Markup['type'], P: Pt[]): Pt {
 export function captionPosition(m: Pick<Markup, 'type' | 'display'>, P: Pt[]): Pt {
   const a = captionAnchor(m.type, P), o = m.display?.captionOffset;
   return o ? { x: a.x + o.x, y: a.y + o.y } : a;
+}
+
+/** The leader joining a moved Length caption to the middle of its line (Revu), or null when there is none. */
+export function captionLeaderLine(m: Pick<Markup, 'type' | 'display'>, P: Pt[]): { from: Pt; to: Pt } | null {
+  if (m.type !== 'length' || !m.display?.captionOffset || m.display.captionLeader === false || P.length < 2) return null;
+  return { from: { x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 }, to: captionPosition(m, P) };
 }
 
 /** Caption rotation while dragging its anchor: 15° steps, 1° with `fine` (Shift), in degrees counter-clockwise. */

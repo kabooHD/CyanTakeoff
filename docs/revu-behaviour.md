@@ -38,6 +38,10 @@ CyanTakeoff's carbon-copy UX. Fetch the pages again with
 - Precision dropdown: decimal or fractional depending on the scale.
 - Revu prompts for a scale before placing a measurement on an unscaled page.
 
+- Pages: Current (default), All Pages, Selected (offered when pages were
+  selected in Thumbnails before Set Scale, e.g. right-click on a
+  multi-selection), Custom (ranges like 1-3, 5, 9).
+
 ## Measurements panel menu
 Show Measurement Tools (the tool buttons in the panel), Snap Orthogonal
 (measurements kept to 45° steps; Shift does it for one point), Snap to
@@ -63,6 +67,10 @@ that measurement; Width / Height read-only. Ours keeps them in CTData so
 they round-trip; the drawing shows segment values and the centroid on
 screen, the saved appearance carries the caption; /Contents is the
 displayed value (in the markup's own unit when set), as Revu writes it.
+
+- Moving a Length caption (Shift+drag) draws a leader line from the line to
+  the caption; Show Caption Leader Line (Properties) hides it. Radius,
+  Diameter and Angle captions cannot be moved.
 
 ## Viewports
 - Regions of a sheet with their own scale (e.g. a detail drawn at a larger
@@ -322,8 +330,9 @@ displayed value (in the markup's own unit when set), as Revu writes it.
 
 ## Editing markups (move, resize, rotate)
 - Drag a markup to move it; drag a control point to resize. Polygons and
-  polylines keep their proportions when resized; Shift resizes length and
-  width independently.
+  polylines keep their proportions when resized with the purple resize
+  points; Shift resizes length and width independently (ours: vertex
+  points only, no separate resize points yet).
 - Rotate: drag the orange control point outside the bounding box; the
   angle shows while dragging and the shape turns in 15° steps (Shift: any
   angle). Lines (two control points) cannot rotate. Stamps also take an

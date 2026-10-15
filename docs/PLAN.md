@@ -264,6 +264,9 @@ filling, image signatures, redaction and OCR.
   Rotation in Properties > Layout for box shapes (src/model/rotate.ts)
 - [x] Blend Mode (Properties > Appearance; /BM; highlights Multiply, stamps
   Darken by default)
+- [x] Select tool band direction (left-to-right inside, right-to-left
+  touching); Set Scale > Pages > Selected from Thumbnails; Length caption
+  leader line (Show Caption Leader Line)
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

@@ -226,7 +226,8 @@ function Thumbnails({ doc }: { doc: DocState }) {
       { label: 'Number Pages…', action: () => usePageSetup.setState({ open: 'number' }) },
       { label: 'Create Page Labels from Bookmarks…', action: () => usePageSetup.setState({ open: 'bookmarks' }) },
       { label: 'Re-Label…', action: relabel },
-      { label: 'Set Scale…', action: () => s.openScaleDialog({ page: index }) },
+      // Several selected thumbnails: the dialog opens with them as its Selected pages (Revu).
+      { label: 'Set Scale…', action: () => s.openScaleDialog({ page: index, pages: sel.length > 1 && sel.includes(index) ? [...sel].sort((a, b) => a - b) : undefined }) },
       { sep: true },
       { label: `Export Pages${some}`, action: exportPages },
       { label: `Email Pages${some}`, action: emailPages },
@@ -551,6 +552,9 @@ function Properties() {
               <option value="value">Value</option><option value="label">Label</option><option value="both">Label and value</option><option value="none">None</option>
             </select>
           </Row>
+          {m.type === 'length' && m.display?.captionOffset && (
+            <Row label="Caption Leader"><label className="inline"><input type="checkbox" aria-label="Show caption leader line" checked={m.display.captionLeader !== false} onChange={(e) => upd((x) => ({ display: { ...x.display, captionLeader: e.target.checked ? undefined : false } }))} /> Show Caption Leader Line</label></Row>
+          )}
           {SEGMENT_TYPES.has(m.type) && (
             <Row label="Segment Values">
               <label className="inline"><input type="checkbox" aria-label="Show segment values" checked={!!m.display?.segments} onChange={(e) => upd((x) => ({ display: { ...x.display, segments: e.target.checked || undefined } }))} /> Show</label>

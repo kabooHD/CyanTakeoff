@@ -1,5 +1,5 @@
 import { hasCurves, svgPath } from '../model/curves';
-import { captionPosition, captionText, segmentValues } from '../model/measureDisplay';
+import { captionLeaderLine, captionPosition, captionText, segmentValues } from '../model/measureDisplay';
 import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTileWH, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type LineStyleDef } from '../model/lineStyles';
 import { calloutAttach } from '../pdf/save';
 import { arcPoints, arcThrough, bounds, centroid, cloudSegments, measure, rectCorners, rectPairs } from '../model/measure';
@@ -338,6 +338,7 @@ export function MarkupShape({ m, ghost }: { m: Markup; ghost?: boolean }) {
         return <text x={b.minX + b.w / 2} y={b.minY + b.h / 2} fontSize={st.fontSize} fill={st.color} textAnchor="middle" dominantBaseline="central"
           fontFamily="Helvetica, Arial, sans-serif" className="seq-label">{m.label}</text>;
       })()}
+      {label && (() => { const ld = captionLeaderLine(m, P); return ld ? <line className="caption-leader" x1={ld.from.x} y1={ld.from.y} x2={ld.to.x} y2={ld.to.y} stroke={st.color} strokeWidth={Math.min(st.width || 1, 1)} strokeOpacity={st.opacity} /> : null; })()}
       {label && (
         <text x={label.at.x} y={label.at.y} fontSize={m.style.fontSize} fill={st.color} transform={m.display?.captionAngle ? `rotate(${-m.display.captionAngle} ${label.at.x} ${label.at.y})` : undefined}
           textAnchor="middle" dominantBaseline="middle" className="measure-label">{label.text}</text>

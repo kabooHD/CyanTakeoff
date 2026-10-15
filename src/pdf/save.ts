@@ -1,6 +1,6 @@
 import { writeLayers, type LayerSet } from './layers';
 import { writeBookmarks, type Bookmark } from './bookmarks';
-import { captionAnchor, captionText, displayText } from '../model/measureDisplay';
+import { captionAnchor, captionLeaderLine, captionText, displayText } from '../model/measureDisplay';
 import { HATCH_TYPES, fillOutline, hatchLineWidth, hatchTileWH, isSimpleStyle, lineDash, lineStyleOf, strokeOutline, styledStroke, type HatchDef } from '../model/lineStyles';
 import { flattenPath, hasCurves, pdfPath, segments } from '../model/curves';
 import { hasSignatures, incrementalUpdate, loadForUpdate } from './incremental';
@@ -557,6 +557,13 @@ function buildAppearance(m: Markup, P: Pt[], font: PDFFont, cutouts?: Cutout[], 
     const cfr = deg ? { right: rot(fr.right), up: rot(fr.up) } : fr;
     const q = proj(cfr, pos);
     textAt(o, font, t, size, q.u - w / 2, q.v - size * 0.35, rgb, cfr);
+    // A moved Length caption keeps a leader line to the middle of its line (Revu).
+    if (captionLeaderLine(m, P)) {
+      o.add(`q ${f(Math.min(st.width || 1, 1))} w`);
+      o.moveTo({ x: (P[0].x + P[1].x) / 2, y: (P[0].y + P[1].y) / 2 });
+      o.lineTo(pos);
+      o.add('S Q');
+    }
   }
   o.add('Q');
   let ops = o.out.join('\n');
