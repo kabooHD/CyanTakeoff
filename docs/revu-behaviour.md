@@ -430,6 +430,11 @@ displayed value (in the markup's own unit when set), as Revu writes it.
 - CyanTakeoff: saved as /BM in the appearance's graphics state and read back
   from it; drawn with CSS mix-blend-mode on screen.
 
+## Image (I)
+- Click places the picture at its own size (ours: at most 300 pt on the
+  longer side); drag a rectangle to fit the picture into it. From Camera
+  and the Capture commands embed media in a markup instead.
+
 ## Pen (P)
 - Drag draws a free-form line; Shift keeps it horizontal or vertical.
   Strokes made within about a second of each other are one grouped

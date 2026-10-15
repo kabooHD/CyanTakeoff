@@ -824,6 +824,22 @@ assert((await page.locator('.sb-scale').innerText()) === 'Scale Not Set', 'sheet
   await chooser.setFiles(`${OUT}/02-opened.png`);
   await page.waitForFunction(() => document.querySelector('.ml-table tbody')?.textContent?.includes('Image'));
   assert(await page.locator('.markup-layer image').count() >= 2, 'image markups are drawn');
+  {
+    // Dragging with the Image tool fits the picture into the rectangle (Revu).
+    const a = await toScreen(30, 16), b = await toScreen(42, 12);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('i');
+    const fitChooserP = page.waitForEvent('filechooser');
+    await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up();
+    const fitChooser = await fitChooserP;
+    await fitChooser.setFiles(`${OUT}/02-opened.png`);
+    await page.waitForFunction((n) => document.querySelectorAll('.markup-layer image').length === n, await page.locator('.markup-layer image').count() + 1);
+    const ib = await page.locator('.markup-layer image').last().boundingBox();
+    // Snap to content may nudge a corner by a few px.
+    assert(Math.abs(ib.width - Math.abs(b.x - a.x)) < 12 && Math.abs(ib.height - Math.abs(b.y - a.y)) < 12, `the picture fits the dragged rectangle (${ib.width.toFixed(0)}x${ib.height.toFixed(0)} vs ${Math.abs(b.x - a.x).toFixed(0)}x${Math.abs(b.y - a.y).toFixed(0)})`);
+    await page.keyboard.press('Control+z');
+    await page.keyboard.press('Escape');
+  }
   // Mask Color (Properties): the white of the placed picture becomes transparent (a new PNG); off again restores the picture.
   {
     const imgRow = page.locator('.ml-table tbody tr', { has: page.locator('td', { hasText: /^Image$/ }) }).first();

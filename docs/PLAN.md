@@ -317,6 +317,7 @@ filling, image signatures, redaction and OCR.
 - [x] Window menu: every panel listed; Auto-Hide Tabs, Auto-Hide Panel Access
 - [x] Markups List Group items (toggle, summed measurements); pen strokes
   within a second grouped (Enter separates)
+- [x] Image tool: drag a rectangle to fit the picture
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

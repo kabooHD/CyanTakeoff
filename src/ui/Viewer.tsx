@@ -123,6 +123,8 @@ type Drag =
   /** A purple corner handle scales the markup about the opposite corner (Shift: each axis on its own). */
   | { kind: 'scale'; id: string; fixed: Pt; corner: Pt; grab: Pt; orig: Markup; snapshot: Markup[]; moved: boolean }
   | { kind: 'band'; start: Pt; cur: Pt; add: boolean; right?: { x: number; y: number } }
+  /** Image tool: a dragged rectangle the picture is fitted into (a click places it at its own size). */
+  | { kind: 'imageBox'; start: Pt; cur: Pt }
   /** Move (corner -1) or resize (corner 0..3) the highlighted viewport. */
   | { kind: 'viewport'; id: string; corner: number; start: Pt; orig: [Pt, Pt]; rect: [Pt, Pt] }
   /** Drag a curve handlebar of vertex `index` (Ctrl: the two sides move independently). */
@@ -707,18 +709,21 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
   };
 
   // ----- tools that need text, files or a rendered snapshot -----
-  const placeImage = async (p: Pt) => {
+  /** Place a picture at `p` (its own size, at most 300 pt) or fitted into the rectangle p-q (Revu: drag with the Image tool). */
+  const placeImage = async (p: Pt, q?: Pt) => {
+    const box = q ? bounds([p, q]) : null;
+    const at = (w: number, h: number) => (box ? [{ x: box.minX, y: box.minY }, { x: box.maxX, y: box.maxY }] : [p, { x: p.x + w, y: p.y + h }]);
     const pending = s.pendingImage;
     if (pending) {
       useApp.setState({ pendingImage: null });
-      finish('image', [p, { x: p.x + pending.w, y: p.y + pending.h }], { image: pending.url, subject: pending.subject });
+      finish('image', at(pending.w, pending.h), { image: pending.url, subject: pending.subject });
       return;
     }
     const f = await pickFile('image/*');
     if (!f) return;
     const img = await loadImage(f);
     const k = Math.min(1, 300 / Math.max(img.w, img.h));
-    finish('image', [p, { x: p.x + img.w * k, y: p.y + img.h * k }], { image: img.url });
+    finish('image', at(img.w * k, img.h * k), { image: img.url });
   };
   const placeCustomStamp = (p: Pt) => {
     const c = customStampFields(s.stampName.slice(7), s.author);
@@ -1082,7 +1087,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         break;
       case 'point':
         if (s.tool === 'legend') placeLegend(p);
-        else if (s.tool === 'image') placeImage(p);
+        else if (s.tool === 'image') { setDrag({ kind: 'imageBox', start: p, cur: p }); capture(e); }
         else if (s.tool === 'attachment') placeAttachment(p);
         else if (s.tool === 'stamp' && s.stampName.startsWith('custom:')) placeCustomStamp(p);
         else finish(s.tool as MarkupType, [p]);
@@ -1292,6 +1297,8 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
         }
       } else if (drag.kind === 'band') {
         setDrag({ ...drag, cur: raw });
+      } else if (drag.kind === 'imageBox') {
+        setDrag({ ...drag, cur: snap(raw) });
       } else if (drag.kind === 'viewport') {
         const [a, b] = drag.orig;
         const dx = raw.x - drag.start.x, dy = raw.y - drag.start.y;
@@ -1360,6 +1367,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
       if ((drag.kind === 'move' || drag.kind === 'vertex' || drag.kind === 'leader' || drag.kind === 'caption' || drag.kind === 'captionRotate' || drag.kind === 'rotate' || drag.kind === 'scale') && drag.moved) s.pushUndo(drag.snapshot);
       if (drag.kind === 'bezier') s.pushUndo(drag.snapshot);
       if (drag.kind === 'band') selectInBand(drag);
+      if (drag.kind === 'imageBox') { const moved = dist(drag.start, drag.cur) * zoom > 4; void placeImage(drag.start, moved ? drag.cur : undefined); }
       if (drag.kind === 'viewport' && drag.rect !== drag.orig) {
         const v = viewports.find((x) => x.id === drag.id);
         const [a, b] = drag.rect;
@@ -1848,7 +1856,7 @@ export function Viewer({ doc, pane = 0 }: { doc: DocState; pane?: 0 | 1 }) {
                 </g>
               );
             })}
-            {drag?.kind === 'band' && (
+            {(drag?.kind === 'band' || drag?.kind === 'imageBox') && (
               <rect x={Math.min(drag.start.x, drag.cur.x)} y={Math.min(drag.start.y, drag.cur.y)}
                 width={Math.abs(drag.cur.x - drag.start.x)} height={Math.abs(drag.cur.y - drag.start.y)}
                 fill="#1a73e8" fillOpacity={0.08} stroke="#1a73e8" strokeWidth={1 / zoom} pointerEvents="none" />
