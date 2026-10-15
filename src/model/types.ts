@@ -321,6 +321,10 @@ export interface Toggles {
   replyIndicators?: boolean;
   /** Form > Highlight Fields off: form fields drawn without their blue tint. */
   noFieldHighlight?: boolean;
+  /** Window > Auto-Hide Tabs: the document tabs fold away until the pointer reaches the top of the workspace. */
+  autoHideTabs?: boolean;
+  /** Window > Auto-Hide Panel Access: a side bar folds away while its panel is hidden; hover brings it back. */
+  autoHidePanelAccess?: boolean;
   /** View > Synchronize Document: both panes of a split view show the same page index. */
   syncDoc?: boolean;
   /** Markups List > Hide Markups: every markup off the drawing and the printout, until turned off. */

@@ -3931,6 +3931,33 @@ for (const [file, expected] of [
   assert(await page.locator('.panel').count() === 0 && await page.locator('.ml-table').count() === 0, 'Hide/Show Panels hides every panel');
   await windowMenu('Hide/Show Panels');
   assert(await page.locator('.panel').count() === panelsBefore, 'Hide/Show Panels brings the panels back as they were');
+  // Window > Sets opens the panel; Auto-Hide Tabs folds the tab bar until hovered; Auto-Hide Panel Access folds an empty side bar.
+  const setsOpen = async () => (await page.locator('.sets-panel').count()) === 1;
+  const wasOpen = await setsOpen();
+  await windowMenu('Sets');
+  assert((await setsOpen()) !== wasOpen, `Window > Sets toggles the Sets panel (${wasOpen} -> ${await setsOpen()})`);
+  await windowMenu('Sets');
+  await windowMenu('Auto-Hide Tabs');
+  const tabBar = page.locator('.doc-tabs.auto-hide');
+  await page.mouse.move(400, 400);
+  await page.waitForTimeout(300);
+  const folded = (await tabBar.boundingBox()).height;
+  await tabBar.hover();
+  await page.waitForTimeout(300);
+  const unfolded = (await tabBar.boundingBox()).height;
+  assert(folded < 10 && unfolded >= 20, `Auto-Hide Tabs folds the tab bar until the pointer reaches it (${folded.toFixed(0)} -> ${unfolded.toFixed(0)} px)`);
+  await windowMenu('Auto-Hide Tabs');
+  assert(await page.locator('.doc-tabs.auto-hide').count() === 0, 'Auto-Hide Tabs off shows the tab bar again');
+  await windowMenu('Auto-Hide Panel Access');
+  const activeLeft = page.locator('.side-tabs.side-left button.active');
+  const leftTitle = (await activeLeft.count()) ? await activeLeft.getAttribute('title') : null;
+  if (leftTitle) await activeLeft.click(); // closes the left panel
+  await page.mouse.move(600, 400); // off the bar, so it is not hovered
+  await page.waitForTimeout(400);
+  assert(await page.locator('.side-tabs.side-left.auto-hide').count() === 1 && (await page.locator('.side-tabs.side-left').boundingBox()).width < 10, `Auto-Hide Panel Access folds the empty left bar (${(await page.locator('.side-tabs.side-left').boundingBox()).width.toFixed(0)} px)`);
+  await windowMenu('Auto-Hide Panel Access');
+  assert(await page.locator('.side-tabs.auto-hide').count() === 0, 'Auto-Hide Panel Access off unfolds the bar');
+  if (leftTitle) await windowMenu(leftTitle);
 }
 
 assert(errors.length === 0, `no page errors (${errors.join(' | ')})`);

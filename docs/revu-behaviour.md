@@ -584,8 +584,13 @@ delete; Create opens an Untitled copy.
   (PNG, JPEG, WebP, GIF, BMP) become one page at 150 dpi; no scanner or
   package.
 - Window > Hide/Show Panels puts the left, right and bottom panels away
-  and brings them back (Hide Panel: Shift+F4); Auto-Hide Panel Access / Tabs and
-  Always On Top are desktop-window features.
+  and brings them back (Hide Panel: Shift+F4). Auto-Hide Tabs folds the
+  document tabs to a sliver at the top of the workspace until the pointer
+  reaches it; Auto-Hide Panel Access folds a side bar whose panel is hidden
+  (hover unfolds it). The Window menu lists every panel (Thumbnails,
+  Bookmarks, Spaces, Search, Sets, Signatures, Layers, Links, Flags, File
+  Access, Properties, Tool Chest, Measurements, Markups List). Always On
+  Top is a desktop-window feature.
 
 ## File exports, Undo History, Crop Image, Certify
 File > Export: ours exports PNG or JPEG (one file per page, resolution,

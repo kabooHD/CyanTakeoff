@@ -62,7 +62,7 @@ export function SideTabs({ side }: { side: 'left' | 'right' }) {
     : [{ id: 'properties', label: 'Properties' }, { id: 'toolchest', label: 'Tool Chest' }, { id: 'measurements', label: 'Measurements' }] as const;
   const cur = side === 'left' ? s.left : s.right;
   return (
-    <div className={`side-tabs side-${side}`}>
+    <div className={`side-tabs side-${side} ${s.toggles.autoHidePanelAccess && !cur ? 'auto-hide' : ''}`}>
       {tabs.map((t) => (
         <button key={t.id} className={cur === t.id ? 'active' : ''} title={t.label}
           onClick={() => s.setPanels(side === 'left'

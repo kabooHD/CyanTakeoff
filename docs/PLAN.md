@@ -314,6 +314,7 @@ filling, image signatures, redaction and OCR.
   beside its points (PDF /LL, /LLE; Revu files render in place)
 - [x] Callout: box-only drag (Alt+drag: all), Shift+click a tip deletes the
   leader; Polylength / Perimeter segment Split / Split All
+- [x] Window menu: every panel listed; Auto-Hide Tabs, Auto-Hide Panel Access
 - [x] Capture: photos attached to a markup (Properties > Capture, right-click
   Capture > From Camera / From File, drop an image on a markup; media icon on
   the drawing, Capture column, viewer with Delete/Export), kept in CTData

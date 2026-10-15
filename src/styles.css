@@ -99,6 +99,9 @@ input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); bo
 .side-tabs { width: 30px; background: var(--chrome); display: flex; flex-direction: column; gap: 2px; padding-top: 4px; }
 .side-left { border-right: 1px solid var(--border); }
 .side-right { border-left: 1px solid var(--border); }
+/* Auto-Hide Panel Access: a side bar without an open panel folds to a sliver; hover unfolds it. */
+.side-tabs.auto-hide { width: 5px; overflow: hidden; transition: width .15s; }
+.side-tabs.auto-hide:hover { width: 30px; }
 .side-tabs button { width: 28px; height: 30px; margin: 0 1px; border: 0; background: none; border-radius: 2px; display: grid; place-items: center; color: #444; }
 .side-tabs button:hover { background: var(--hover); }
 .side-tabs button.active { background: #fff; color: var(--accent); box-shadow: inset 2px 0 0 var(--accent); }
@@ -157,6 +160,9 @@ button.primary { background: var(--accent) !important; color: #fff; border-color
 
 /* ---------- document tabs ---------- */
 .doc-tabs { display: flex; background: var(--chrome-2); border-bottom: 1px solid var(--border); overflow-x: auto; min-height: 26px; }
+/* Auto-Hide Tabs: the tab bar folds to a sliver at the top of the workspace; hover unfolds it. */
+.doc-tabs.auto-hide { min-height: 5px; height: 5px; overflow: hidden; transition: height .15s; }
+.doc-tabs.auto-hide:hover { height: 26px; min-height: 26px; overflow-x: auto; }
 .doc-tab {
   display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; max-width: 220px; cursor: pointer;
   border-right: 1px solid var(--border); color: #444;

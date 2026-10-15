@@ -293,6 +293,10 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Links', shortcut: 'Alt+N', checked: s.left === 'links', action: () => s.setPanels({ left: s.left === 'links' ? null : 'links' }) },
       { label: 'Flags', checked: s.left === 'flags', action: () => s.setPanels({ left: s.left === 'flags' ? null : 'flags' }) },
       { label: 'Layers', shortcut: 'Alt+Y', checked: s.left === 'layers', action: () => s.setPanels({ left: s.left === 'layers' ? null : 'layers' }) },
+      { label: 'Search', shortcut: 'Alt+1', checked: s.left === 'search', action: () => s.setPanels({ left: s.left === 'search' ? null : 'search' }) },
+      { label: 'Sets', shortcut: 'Alt+2', checked: s.left === 'sets', action: () => s.setPanels({ left: s.left === 'sets' ? null : 'sets' }) },
+      { label: 'Spaces', shortcut: 'Alt+S', checked: s.left === 'spaces', action: () => s.setPanels({ left: s.left === 'spaces' ? null : 'spaces' }) },
+      { label: 'Signatures', shortcut: 'Alt+4', checked: s.left === 'signatures', action: () => s.setPanels({ left: s.left === 'signatures' ? null : 'signatures' }) },
       { label: 'Markups List', shortcut: 'Alt+L', checked: s.markupsList, action: () => s.setPanels({ markupsList: !s.markupsList }) },
       { sep: true },
       { label: 'Navigation Bar', shortcut: 'F4', checked: s.toggles.navBar, action: () => s.toggle('navBar') },
@@ -301,6 +305,8 @@ export function MenuBar({ onShortcuts, onAbout }: { onShortcuts: () => void; onA
       { label: 'Balance', shortcut: 'Shift+F12', disabled: !s.split, action: balanceSplit },
       { sep: true },
       { label: 'Hide/Show Panels', shortcut: 'Shift+F4', action: hideShowPanels },
+      { label: 'Auto-Hide Panel Access', checked: !!s.toggles.autoHidePanelAccess, action: () => s.toggle('autoHidePanelAccess') },
+      { label: 'Auto-Hide Tabs', checked: !!s.toggles.autoHideTabs, action: () => s.toggle('autoHideTabs') },
       { label: 'Reset Layout', action: () => s.setPanels({ left: 'thumbnails', right: 'properties', markupsList: true }) },
     ],
     Help: [
@@ -382,7 +388,7 @@ export function DocTabs() {
   const s = useApp();
   if (!s.docs.length) return null;
   return (
-    <div className="doc-tabs">
+    <div className={`doc-tabs ${s.toggles.autoHideTabs ? 'auto-hide' : ''}`}>
       {s.docs.map((d) => (
         <div key={d.id} className={`doc-tab ${d.id === s.activeId ? 'active' : ''}`} onClick={() => s.setActive(d.id)}
           onAuxClick={(e) => e.button === 1 && s.closeDoc(d.id)} title={d.name}>
